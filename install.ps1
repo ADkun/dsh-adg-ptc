@@ -1,4 +1,4 @@
-# 安装 Adg PTC 模式 preset + 配套技能到本机 dsh 用户根。
+﻿# 安装 Adg PTC 模式 preset + 配套技能到本机 dsh 用户根。
 # 用法： powershell -ExecutionPolicy Bypass -File .\install.ps1
 #        powershell -ExecutionPolicy Bypass -File .\install.ps1 -Profiles web,desktop
 #        powershell -ExecutionPolicy Bypass -File .\install.ps1 -BillionContext on -SaveToken on -Profiles web
