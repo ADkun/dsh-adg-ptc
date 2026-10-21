@@ -28,7 +28,7 @@ last_reviewed: 2026-10-15
 
 **依赖（组合层）**：dsh 的 agent preset 机制 —— Loader 声明 `@deepseek-ai/dsh-agent-preset`、persona 段 `@deepseek-ai/dsh-persona`、子代理与工具面 `@deepseek-ai/dsh-subagent` / `@deepseek-ai/dsh-tool-subagent`、system prompt 按名合并 `@deepseek-ai/dsh-system-prompt` 与作用域 `@deepseek-ai/dsh-scope`。**引用的版本字面量只在根 `AGENTS.md` 的「外部依赖与 ref 解析」一节出现**，本文件不写版本号。
 
-**挂载方式**：本 preset 是一个 **bundle** —— `preset/bundle.package.json` 声明包清单与 `dsh.bundle.patch`，生成物的 patch 里只有一行 `- insert:`，内含一条 Loader 声明（`id: preset-adg-ptc`、`name: '@deepseek-ai/dsh-agent-preset'`、`config: {id: adg, name, description, order: 20, plugins: [...源文件原样...]}`）。**同一个 profile 里 `preset-adg-ptc` 只能有一个"家"**（bundle 或 profile 补丁二者之一）：两份同 id 的 `insert:` 行是危险形状，不要制造。
+**挂载方式**：本 preset 是一个 **bundle** —— `preset/bundle.package.json` 声明包清单与 `dsh.bundle.patch`，生成物的 patch 里只有一行 `- insert:`，内含一条 Loader 声明（`id: preset-adg-ptc`、`name: '@deepseek-ai/dsh-agent-preset'`、`config: {id: adg-ptc, name, description, order: 20, plugins: [...源文件原样...]}`）。**同一个 profile 里 `preset-adg-ptc` 只能有一个"家"**（bundle 或 profile 补丁二者之一）：两份同 id 的 `insert:` 行是危险形状，不要制造。
 
 **依赖（同仓库）**：`tools/check-preset.mjs`（静态判据）、`tools/gen-preset-bundle.mjs` 与 `tools/flavors.mjs`（味道与注入清单的唯一来源）、`tools/check-bundle-flavor.mjs`（产物侧断言）、`delegate/`（全局工具 `delegate` 的注册方，**唯一委派入口**）、`browser/`（命令行契约）、`notify/`（`notify_user` 的注册方）、`permission/`（`set_child_permission` 的注册方）。
 
@@ -57,7 +57,7 @@ stateDiagram-v2
     drafted --> validated: node tools/check-preset.mjs 退出 0
     validated --> deployed: install.* 生成 + 落到该 profile 的稳定落点 + link + 写进 dsh.profile.bundles
     deployed --> mounted: 声明行被 registry 注册且挂载成功
-    mounted --> live: 在新对话里选中 Adg 模式
+    mounted --> live: 在新对话里选中 Adg PTC 模式
     live --> [*]
 ```
 
@@ -65,7 +65,7 @@ stateDiagram-v2
 - `validated` —— `node tools/check-preset.mjs` 退出 0。**它不是什么**：不是 YAML 可解析性的证明（它是逐行文本扫描器）、不是"已重新生成"、更不是 `mounted`。
 - `deployed` —— `install.*` 跑完：生成该 profile 该拿的那份味道、落到对应稳定落点（`${DSH_HOME:-~/.dsh}/bundles/` 下四个稳定目录之一，目录名由 `tools/flavors.mjs` 的 `dirNameFor(key)` 推导）、`link:` 进 `node_modules`、包名写进该 profile 的 `dsh.profile.bundles`，并按 2b-2 / 4c-4 / 4c-5 步把 `adg-delegate` 装进同一个 profile。**它不是什么**：不是"已挂载"；只看"包在不在"证明不了落点是哪个味道。
 - `mounted` —— 声明行被 registry 注册且真的挂载。**唯一判据**：`agentPresets.resolve('adg-ptc')` 的 `.broken` 为空。**它不是什么**：不是"已有会话也跟着换"。
-- `live` —— 在**新对话**里选中 Adg 模式。**它不是什么**：不是"已经开着的会话会跟着换" —— 预设选择在会话起步时就锁定了。
+- `live` —— 在**新对话**里选中 Adg PTC 模式。**它不是什么**：不是"已经开着的会话会跟着换" —— 预设选择在会话起步时就锁定了。
 
 **迁移唯一入口**：`install.ps1` / `install.sh`，其后由 registry 接续。**禁止绕过**：手工往 `${DSH_HOME:-~/.dsh}/bundles/` 贴文件、手改 `bundle/` 生成物、直接改 profile 的补丁都算绕过，都会让状态与"真相源"脱钩。
 **`deployed → mounted` 的触发条件**：profile 补丁或 profile 清单变动会让整份补丁栈重读（`dsh-hmr` 的 `refresh()` 走 `readProfilePatches`）；但"已挂载的会话不会中途换组合"不变 ⇒ 验收口径仍是**重启 + 新对话**。`delegate` 在**全局层**注册（不在本 preset 的 composition 里），所以"bundle 装上了但 `adg-delegate` 没装"的 profile 里调度者手上没有任何委派工具 —— 这条不变量只有 `install.*` 在守。

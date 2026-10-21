@@ -10,7 +10,7 @@
 - **`notify/`** —— 仓库内部第一方子插件 `adg-notify`，注册工具 `notify_user`（Windows 桌面提醒，**单向不阻塞**；默认存活时间 **0 ＝ 常驻**，toast 走 `scenario="reminder"`，不再自己消失）；
 - **`permission/`** —— 仓库内部第一方子插件 `adg-permission`，注册工具 `set_child_permission`：让调度者把**在权限切换之前**派出去、还停在旧文件权限的子代理改到新权限（只有调度者能用；两条守卫 —— 只能改自己派出去的、且**不得超过调用方自己** —— 写在代码里，不是提示）；
 - **`settings/`** —— 仓库内部第一方子插件 `adg-settings`：在「设置」里注册一页 **Adg 设置**，把 `adg-notify` 的**三项行为**（**通知默认标题** / **响提示音** / **通知常驻**）与 `adg-skill-inject` 的**两项行为**（**注入思考框架** 开关 / **自定义注入正文**）做成可配置项，改动写进 `${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`（优先当前 profile 目录；本机实际就是 `<profile>\adg-settings.json`），**保存后立即生效、不用重启**（没有这项设置时通知走出厂默认）。它同时是一套**登记表驱动的框架**：加一项配置只需在 `settings/lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `settings/client.js` 的 DICT 补两条文案（zh/en），宿主与客户端逻辑都不用改 —— 详见下方「设置页（Adg 设置）」一节；
-- **`skill-inject/`** —— 仓库内部第一方子插件 `adg-skill-inject`：把思考框架正文注入 **Adg 调度智能体**的系统提示词 —— 不依赖模型自觉去 read（persona 级的"先读技能"指令已被证过不可靠），系统提示词不参与折叠，"不许压缩"由机制天然满足。正文默认取 `skills/thinking-framework/SKILL.md`，也可在「设置 → Adg 设置」里换成自定义正文；**输入框左侧那颗「超思」开关**控制开关（与设置页同一个值，点一下即写盘、下一轮请求生效）。**只在 Adg PTC 模式注入**：按会话头 `origin`（非 `subagent`）与 preset 身份（`adg`）逐 agent 判定，子代理与其他 preset 的会话一律不注入。不注册任何工具；
+- **`skill-inject/`** —— 仓库内部第一方子插件 `adg-skill-inject`：把思考框架正文注入 **Adg 调度智能体**的系统提示词 —— 不依赖模型自觉去 read（persona 级的"先读技能"指令已被证过不可靠），系统提示词不参与折叠，"不许压缩"由机制天然满足。正文默认取 `skills/thinking-framework/SKILL.md`，也可在「设置 → Adg 设置」里换成自定义正文；**输入框左侧那颗「超思」开关**控制开关（与设置页同一个值，点一下即写盘、下一轮请求生效）。**只在 Adg PTC 模式注入**：按会话头 `origin`（非 `subagent`）与 preset 身份（`adg-ptc`）逐 agent 判定，子代理与其他 preset 的会话一律不注入。不注册任何工具；
 - **`skills/`** —— 七份技能，装到 `${DSH_HOME:-~/.dsh}/skills/`，按**渐进式披露**承载可复用经验（用法：调度者把技能文件的**绝对路径**写进委派 prompt，要子代理先 `read` 再动手）：
   - `adg-delegation` —— 给**调度智能体**看：能力带 → 建议工具面 / 建议 persona 要点 / 边界的映射表，以及怎么给 `tools` 与 `persona`、一跳可达、材料中转、验收判定；
   - `adg-browser-use` —— 给**拿到浏览器工具链的子代理**看：`cli.mjs` 用法、默认无头与换模式的不变量、登录墙人工协议、profile 是资产、标签页纪律、**必须完全权限**与三家浏览器的失败签名去哪看；
@@ -55,7 +55,7 @@ powershell -ExecutionPolicy Bypass -File $HOME\dsh-adg-ptc\install.ps1   # Windo
 
 ### 装完必须重启 dsh
 
-**preset 的改动按"重启 + 新会话"验收，别赌热重载。** 装完重启 dsh，然后在**新建对话**里选「Adg PTC 模式」。重启之前 Adg 模式仍在用旧组合运行，不要拿它做验证。
+**preset 的改动按"重启 + 新会话"验收，别赌热重载。** 装完重启 dsh，然后在**新建对话**里选「Adg PTC 模式」。重启之前 Adg PTC 模式仍在用旧组合运行，不要拿它做验证。
 
 （`browser/` 与 `desktop/` 是例外：重跑一次安装脚本即生效，**不用重启**。但 `desktop/` 还有一层前提 —— 要真正驱动普通用户窗口，**调用它的那一次会话必须是完全权限**，否则受限令牌的 Low 完整性级别会被 UIPI 拦下、且是静默丢事件。）
 
