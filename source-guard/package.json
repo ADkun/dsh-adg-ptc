@@ -1,0 +1,41 @@
+{
+  "name": "adg-source-guard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 源码守卫插件：PTC 模式下顶层 run_code 成功时，结果侧不把程序源码再带回上下文一次；失败路径原样保留（零运行时依赖）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/policy.mjs": "./lib/policy.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/policy.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "ptc",
+    "run-code"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

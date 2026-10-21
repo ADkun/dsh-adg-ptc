@@ -1,4 +1,4 @@
-﻿# 安装 Adg PTC 模式 preset + 配套技能到本机 dsh 用户根。
+# 安装 Adg PTC 模式 preset + 配套技能到本机 dsh 用户根。
 # 用法： powershell -ExecutionPolicy Bypass -File .\install.ps1
 #        powershell -ExecutionPolicy Bypass -File .\install.ps1 -Profiles web,desktop
 #        powershell -ExecutionPolicy Bypass -File .\install.ps1 -BillionContext on -SaveToken on -Profiles web
@@ -490,6 +490,51 @@ if ($SkipPackages) {
   }
 }
 
+# ── 2b-5. source-guard/ 插件（run_code 源码守卫）──────────────────────────────
+# 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
+# 它不注册任何工具：在 tools/post-execute（prepend）上监听，对**顶层 run_code** 的结果做
+# 成败分流 —— 成功时在最前面补一行当次执行意图（`意图：<description>`；那句「源码未随本结果重复」
+# 的说明句默认关闭，源码不进结果本来就是平台默认行为），失败时原样返回。
+# 漏装的症状是 run_code 的成功结果里没有多出那行「意图：」（不报错、不崩）。
+# 注意：它**不改** tool/call 的 arguments 那份源码 —— 平台没有那个挂载点（design.md 第 1 节）。
+$guardSrc = Join-Path $here 'source-guard'
+$guardDest = Join-Path $root 'plugins\adg-source-guard'
+$guardNote = ''
+$guardSkipped = $false
+# 4c-10 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
+$guardInProfile = ''
+if ($SkipPackages) {
+  $guardNote = '跳过（-SkipPackages）'
+  $guardSkipped = $true
+} elseif (-not (Test-Path -LiteralPath (Join-Path $guardSrc 'package.json'))) {
+  $guardNote = "未找到 $guardSrc，跳过 source-guard/ 插件部署"
+  $guardSkipped = $true
+} else {
+  # 本清单与 source-guard/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
+  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。有子目录 lib\，先建出来。
+  New-Item -ItemType Directory -Force -Path (Join-Path $guardDest 'lib') | Out-Null
+  $guardFiles = @('index.mjs', 'lib\policy.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
+  $guardCopied = 0
+  $guardMissing = @()
+  foreach ($rel in $guardFiles) {
+    $from = Join-Path $guardSrc $rel
+    if (-not (Test-Path -LiteralPath $from)) { $guardMissing += $rel; continue }
+    $to = Join-Path $guardDest $rel
+    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
+    if ($same) { continue }
+    Copy-Item -Force -LiteralPath $from -Destination $to
+    $guardCopied += 1
+  }
+  if ($guardMissing.Count -gt 0) {
+    $guardNote = "source-guard/ 部署不完整：源里缺 $($guardMissing -join ', ')"
+    $guardSkipped = $true
+  } elseif ($guardCopied -gt 0) {
+    $guardNote = "source-guard/ 插件 -> $guardDest（本次更新 $guardCopied 个文件）"
+  } else {
+    $guardNote = "source-guard/ 插件 -> $guardDest（已是最新，无需拷贝）"
+  }
+}
+
 # ── 3. preset bundle：四种味道全部生成 → 各自落到自己的稳定位置（每 profile 只 link 一份）──
 # preset 是一个 **bundle**：仓库里的 preset\ 是唯一文本真相源，本脚本每次安装都重跑生成器
 # 把它编译成 bundle\adg-*\cordis.patch.yml，再拷进 $DSH_HOME\bundles\ 下的四个稳定目录。
@@ -894,12 +939,67 @@ foreach ($name in $Profiles) {
     if (Test-Path -LiteralPath $injectInProfile) {
       $injectPkgName = (Get-Content -LiteralPath $injectInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
     }
-    if ($injectPkgName -ne 'adg-skill-inject') { $injectNeedInstall = $true }
-    if ($injectDepLine -and $injectListedLine -and ($injectPkgName -eq 'adg-skill-inject')) {
-      $installNotes += "$name : adg-skill-inject 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
-    } elseif ($injectPkgName -eq 'adg-skill-inject') {
-      $installNotes += "$name : adg-skill-inject 包在位，但 manifest 缺一格（dependencies=$injectDepLine / dsh.profile.bundles=$injectListedLine）—— 手工补上再重启"
+  }
+
+  # 4c-10. adg-source-guard 插件（run_code 源码守卫）也装进这个 profile。
+  # 与 4c-8 同形（file: 依赖 + reconcile）。漏装的后果：run_code 的成功结果里不会多出那行
+  # 「意图：<当次 description>」（不报错、不崩 —— 静默回到平台默认），所以同样要如实报告。
+  if ($guardSkipped) {
+    $installNotes += "$name : adg-source-guard 未部署（$guardNote）—— run_code 的成功结果里不会多出「意图：」那行"
+  } else {
+    $guardInProfile = Join-Path $profileDir "node_modules\adg-source-guard\package.json"
+    $guardNeedInstall = -not (Test-Path -LiteralPath $guardInProfile)
+    if (-not $guardNeedInstall) {
+      $installNotes += "$name : adg-source-guard 已经在 node_modules 里"
+    } elseif (-not $dshCmd) {
+      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-source-guard 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$guardDest`""
+    } else {
+      Push-Location $profileDir
+      try {
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        $guardLog = Join-Path $profileDir 'pnpm-adg-source-guard.log'
+        cmd /c "dsh plugin --profile $name add `"file:$guardDest`" > `"$guardLog`" 2>&1"
+        $guardExit = $LASTEXITCODE
+      } finally { Pop-Location }
+      if (Test-Path -LiteralPath $guardInProfile) {
+        Remove-Item -LiteralPath $guardLog -Force -ErrorAction SilentlyContinue
+        $installNotes += "$name : 已装 adg-source-guard（dsh plugin add exit $guardExit）"
+      } else {
+        $installNotes += "$name : adg-source-guard 没装进 $profileDir（dsh plugin add exit $guardExit）—— 关掉 dsh 后重跑本脚本（日志 $guardLog）"
+        if (Test-Path -LiteralPath $guardLog) { Write-Host (Get-Content -LiteralPath $guardLog -Raw -Encoding UTF8) }
+      }
     }
+  }
+
+  # 4c-11. 读回来断言 adg-source-guard 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 一样）。
+  if (-not $guardSkipped) {
+    $guardReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    $guardDepLine = @($guardReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-source-guard' }).Count -gt 0
+    $guardListedLine = @($guardReread.dsh.profile.bundles) -contains 'adg-source-guard'
+    $guardPkgName = ''
+    if (Test-Path -LiteralPath $guardInProfile) {
+      $guardPkgName = (Get-Content -LiteralPath $guardInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
+    }
+    if ($guardPkgName -ne 'adg-source-guard') { $guardNeedInstall = $true }
+    if ($guardDepLine -and $guardListedLine -and ($guardPkgName -eq 'adg-source-guard')) {
+      $installNotes += "$name : adg-source-guard 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
+    } elseif ($guardPkgName -eq 'adg-source-guard') {
+      $installNotes += "$name : adg-source-guard 包在位，但 manifest 缺一格（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— 手工补上再重启"
+    }
+  }
+}
+
+# 第 6 步：把脚本拷到用户根下的稳定副本。
+$installSrc = Join-Path $here 'install.ps1'
+$installDest = Join-Path $root 'install.ps1'
+$installNote = ''
+if (Test-Path -LiteralPath $installSrc) {
+  $same = (Test-Path -LiteralPath $installDest) -and ((Get-FileHash -LiteralPath $installSrc -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $installDest -Algorithm SHA256).Hash)
+  if ($same) {
+    $installNote = "install.ps1 -> $installDest（已是最新，无需拷贝）"
+  } else {
+    Copy-Item -Force -LiteralPath $installSrc -Destination $installDest
+    $installNote = "install.ps1 -> $installDest（本次更新）"
   }
 }
 
@@ -913,7 +1013,8 @@ foreach ($spec in @(
     @{ Pkg = 'adg-permission'; Dest = $permDest },
     @{ Pkg = 'adg-delegate'; Dest = $delegateDest },
     @{ Pkg = 'adg-settings'; Dest = $settingsDest },
-    @{ Pkg = 'adg-skill-inject'; Dest = $injectDest })) {
+    @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
+    @{ Pkg = 'adg-source-guard'; Dest = $guardDest })) {
   if (-not (Test-Path -LiteralPath $spec.Dest)) { continue }
   $expected = @()
   foreach ($f in Get-ChildItem -LiteralPath $spec.Dest -Recurse -File) {
@@ -937,11 +1038,13 @@ foreach ($gen in $genFlavors) {
 }
 Write-Host "  browser -> $browserNote"
 Write-Host "  desktop -> $desktopNote"
+Write-Host "  install -> $installNote（安装脚本自己的稳定副本；repo 里改完 install.ps1 记得一起带过去）"
 Write-Host "  notify  -> $notifyNote（notify_user 工具；每个 profile 的安装结果见下面 profile 行）"
 Write-Host "  permission -> $permNote（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
 Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / set_child_permission / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
 Write-Host "  skill-inject -> $injectNote（思考框架注入：把 skills\thinking-framework\SKILL.md 正文注入 Adg 调度者的系统提示词，子代理不注入）"
+Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「意图：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
 Write-Host ""
 Write-Host "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
@@ -953,6 +1056,7 @@ Write-Host "（adg-permission 插件：同样要重启 dsh 才注册；它不进
 Write-Host "（adg-delegate 插件：同样要重启 dsh 才注册；它是唯一的委派入口 —— 没它调度者开不了子代理。）"
 Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有思考框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
+Write-Host "（adg-source-guard 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话里，顶层 run_code 的成功结果才会多出一行「意图：<当次 description>」（那句「源码未随本结果重复」说明句默认不出现）；失败结果永远逐字不变。注意它只改结果侧，tool/call 里那份入参源码平台没有挂载点可改。）"
 if ($packageFailed) {
   Write-Host ""
   Write-Host "注意：至少有一步 pnpm 没成功，$bundleName 可能还没装进 profile（上面的 profile 行里写明了）。" -ForegroundColor Yellow
