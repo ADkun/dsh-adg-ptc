@@ -29,7 +29,7 @@ whenToUse: 用户要压测一个方案或决策、要你「一直问到没有含
 
 本 preset 是 PTC 呈现：你的目录里**只有 `run_code`**，直呼 `ask_user_question` / `read` / `web_search` 会解析成 `UNKNOWN_TOOL`。两件事的写法变了，判据没变：
 
-- **问用户**：`const ans = await tools.ask_user_question({ questions: [...] })` —— 一次把整个前沿问完、相关的几问一次问齐。**这一问等回答时占着那段 `run_code`**（默认 120s、上限 600s，计时含等待），所以：①单独成段，别和查证调用挤在一段程序里；②一次问全，不要一问一段程序；③万一程序在答复到达前结束，那个问题可能收不回来 —— 重新问一次，别当成用户已答。
+- **问用户**：`const ans = await tools.ask_user_question({ questions: [...] })` —— 一次把整个前沿问完、相关的几问一次问齐。**这一问等回答时占着那段 `run_code`**（时限含等待，当前值见 `run_code` 的 `timeoutMs` 说明），所以：①单独成段，别和查证调用挤在一段程序里；②一次问全，不要一问一段程序；③万一程序在答复到达前结束，那个问题可能收不回来 —— 重新问一次，别当成用户已答。
 - **查事实**：`await tools.read(...)` / `tools.glob(...)` / `tools.grep(...)` / `tools.pwsh(...)` / `tools.web_search(...)` / `tools.web_fetch(...)`，无依赖的用 `Promise.all` 并发；**只 `return` 结论与位置锚**，不要把整份文件、整页搜索回灌进上下文。
 - **派子代理**：`await tools.delegate({ description, prompt, tools })`（见下节）。
 

@@ -184,7 +184,7 @@ return [a.subagent_id, a.tools_note, b.subagent_id, b.tools_note]
 | 子代理说「我看不了图」 | `read_image` 的两条条件之一没满足 | 要么改用可查询的状态量，要么就不要求视觉判据 |
 | 子代理报「我不能问用户 / 我拿不到答复」，或它的报错里出现 `DELEGATED_CALLER` | 你这次没给 `ask_user`，它撞上必须问人的岔路（登录墙 / 验证码 / 要人拍板）只能停手 | 把 `ask_user` 写进 `tools`，连同「撞上就用它问用户」一起重派；`send_message` **补不了工具面** |
 | 子代理报「工具不存在 / `UNKNOWN_TOOL`」 | 它在本会话里只能直呼 `run_code` —— 直接写 `tools.read(...)` 这类原生调用会被当成未知工具 | 委派里要它「在 `run_code` 里用 `tools.read({...})`」；`tools:sdk` 段已经在它上下文里，通常只需提醒一句 |
-| 子代理报「程序超时 / `code run failed (timeout)`」 | 那段 `run_code` 跑过了 120s（上限 600s），计时**含**程序里等待的嵌套工具与审批 | 拆成多段程序；长命令（编译、批量转换、`Start-Sleep`）改成后台作业再收，或把整件事交给另一个子代理 |
+| 子代理报「程序超时 / `code run failed (timeout)`」 | 那段 `run_code` 跑过了它的时限（见 `timeoutMs` 说明），计时**含**程序里等待的嵌套工具与审批 | 拆成多段程序；长命令（编译、批量转换、`Start-Sleep`）改成后台作业再收，或把整件事交给另一个子代理 |
 
 ## 未观测
 

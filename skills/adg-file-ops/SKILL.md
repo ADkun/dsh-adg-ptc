@@ -23,7 +23,7 @@ return files.slice(0, 10).map(f => f.path)   // 只回你要的那一点
 - **无依赖的只读调用并发发**：`await Promise.all([tools.glob({...}), tools.grep({...})])`；有依赖的（先定位再读）必须 `await` 串行。
 - **单个失败别连坐**：`tools.read` 对不存在的路径会 reject 成 `ToolCallError`（`.toolName === 'read'`），用 `try/catch` 接住继续跑其余文件 —— 一次读失败不该让整段程序白跑。
 - **批量改文件要一次程序做完**：循环里 `await tools.write(...)` 全写在一段程序里，中途结果留变量；分多段程序来回对话，每一步都要重新交代上下文。
-- **PTC 程序的 `process.env` 是空字典**：Node 侧读不到 `DSH_HOME` 之类；要环境变量就用 `await tools.pwsh({ command: '$env:DSH_HOME' })` 取（PowerShell 侧完整）。`run_code` 的 `timeoutMs` 默认 120s、上限 600s，长转换任务交给子代理或拆段。
+- **PTC 程序的 `process.env` 是空字典**：Node 侧读不到 `DSH_HOME` 之类；要环境变量就用 `await tools.pwsh({ command: '$env:DSH_HOME' })` 取（PowerShell 侧完整）。`run_code` 的时限含嵌套调用（当前值见它的 `timeoutMs` 说明），长转换任务交给子代理或拆段。
 
 你拿到的是文件与文档这条能力带的工具面：`read` `read_image` `write` `edit` `glob` `grep` `pwsh` `job_list` `job_output` `job_kill` `notify_user`（都在 `run_code` 里）。
 

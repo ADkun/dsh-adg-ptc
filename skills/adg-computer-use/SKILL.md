@@ -17,7 +17,7 @@ console.log(r.stdout)   // 只有 print / return 的进对话
 
 - 路径要么由委派给你，要么先用 `await tools.pwsh({ command: '$env:DSH_HOME' })` 取回 —— **PTC 程序的 `process.env` 是空字典**，Node 侧读不到环境变量（PowerShell 侧是完整的）。
 - 一条操作链（`screen` → `uia` 找元素 → `invoke`/`click` → `verify`）写进**同一段** `run_code`，中间结果留局部变量，只 `return` 最后的判据行（`CHANGED=` / `WARN=` / `ERROR=`）。别把整页元素表 `return` 出来。
-- **`run_code` 默认 120s、上限 600s**，计时含每次嵌套调用；桌面操作里等窗口出现之类的等待要用 CLI 自己的等待参数，不要 `Start-Sleep` 长睡。
+- **`run_code` 的时限计时含每次嵌套调用**；桌面操作里等窗口出现之类的等待要用 CLI 自己的等待参数，不要 `Start-Sleep` 长睡。
 - 下面那条「完全权限」前提在 PTC 下照样成立：它是**会话令牌**的属性，不因你写程序而改变。
 
 ## 入口与硬前提

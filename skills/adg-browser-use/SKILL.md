@@ -19,7 +19,7 @@ console.log(r.stdout)   // 只有 print / return 出来的东西进对话
 - 组合命令就拼字符串：`await tools.pwsh({ command: `node "${cli}" click --selector "#submit"` })`；要读文件用 `await tools.read({ file_path })`。**不要**在回复里写「我调用 pwsh」然后指望它被执行。
 - **只 `return` 你要判的那几行**：CLI 的输出常常很长（页面快照、元素表），`return r.stdout` 会把整页灌进上下文 —— 先在程序里挑（`r.stdout.split('\n').filter(...)`、正则取 `CHANGED=` / `WARN=` / `ERROR=` 行），只回判据。
 - **一次程序做完整条链**：launch → 导航 → 一串动作 → verify，全写在一段 `run_code` 里，中间状态留在局部变量。分多段程序来回对话，等于每一步都把输出重灌一遍。
-- **别在程序里等长事**：`run_code` 默认 120s（上限 600s），计时**含**每次嵌套调用。等页面条件用 CLI 自己的 `wait-for`，不要写 `Start-Sleep` 长循环；真需要长跑（批量抓几十页）就交给子代理分段做。
+- **别在程序里等长事**：`run_code` 的时限计时**含**每次嵌套调用。等页面条件用 CLI 自己的 `wait-for`，不要写 `Start-Sleep` 长循环；真需要长跑（批量抓几十页）就交给子代理分段做。
 - **`process.env` 在 PTC 程序里是空字典**（平台替换掉了）：Node 侧读不到 `DSH_HOME`，所以路径要么在委派里给你、要么先用一次 `tools.pwsh({ command: '$env:DSH_HOME' })` 取回来（PowerShell 侧环境变量是完整的）。
 - **动作成败只认可观测差异**：CLI 报成功不算数，仍按下面的 `CHANGED=true|false|unknown` 三态判。这条在 PTC 下更重要 —— 程序里一个 `console.log` 漏了，你就看不到那次动作到底有没有生效。
 
