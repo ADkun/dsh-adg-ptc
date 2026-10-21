@@ -1,0 +1,50 @@
+{
+  "name": "adg-permission",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 权限插件：注册 set_child_permission 工具，让调度智能体把已派出去的子代理改到指定文件权限（只能改自己的子代理，且不得高于调用方自己；零运行时依赖）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/permission.mjs": "./lib/permission.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/permission.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "permission",
+    "sandbox",
+    "subagent"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  }
+}

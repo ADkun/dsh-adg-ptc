@@ -1,0 +1,6 @@
+# 任何平台 clone 出来的文本文件都保持 LF：
+#   1. 安装结果与作者机器逐字节一致（CRLF 会让 SHA256 变化，实测出现过）；
+#   2. 避免 CRLF 的 install.sh 在 macOS/Linux 上执行失败。
+# 注意 *.ps1 也走 LF —— Windows PowerShell 5.1 能正常执行 LF 脚本；
+# 它真正必须的是 UTF-8 BOM（见 install.ps1 与 README）。
+* text=auto eol=lf

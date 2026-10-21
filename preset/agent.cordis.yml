@@ -1,0 +1,406 @@
+# The `Adg` agent preset: 调度智能体（dispatcher）+ 一个通用子代理（多智能体模式）。
+#
+# 本文件是这份 preset 的**唯一真相源**：改 preset 就是改它。生成物由
+# `node tools/gen-preset-bundle.mjs` 产出（在 `.gitignore` 里），**不许手改**。
+# 设计口径与不变量见 `preset/design.md`；改动入口与校验见 `preset/AGENTS.md`；
+# 增删委派能力见技能 `adg-delegation`（`${DSH_HOME:-~/.dsh}/skills/adg-delegation/SKILL.md`）；
+# 未观测项（含量法）见 `preset/design.md` 的「For Agents」一节。
+#
+# This file is an AGENT-PLANE composition: the roster mounts it ONCE under a standing scope, and
+# every session naming it joins by scope parentage, so the tools and prompt sections registered
+# here cover each joined agent. The host composition (`base.cordis.yml` + `web.cordis.yml`) keeps
+# what a preset must not own: the registries, the sandbox and approval stack, persistence, and the
+# model route.
+#
+# 编辑红线（违反即返工；每条都有实测或源码依据，理由见 `preset/design.md` 的非功能红线）：
+#   1. 不写通用 `subagent` / `subagent_fork` 行：子代理会继承整套组合，一旦有通用行，
+#      子代理就能绕过自己的范围再开一个不受限的子代理。
+#   2. 委派行的 `toolFilter` 是**挂载期**写死的：能力面要按任务现配，所以 `agent` 行
+#      刻意不写它 —— 过滤由 `delegate` 的 `tools` 在每次委派时落下（toolFilter 是交集、
+#      只减不增，动态传的就是最终面）。`tools` 里只能写已注册的工具名 ——
+#      未知名会让**那一次委派**抛 `names unknown global tool ...`（不是挂载失败）。
+#   3. 承载体积旋钮的三行（`compaction-basic` / `tool-result-pruner` / `tool-web`）**不写 config**：
+#      截断工具结果会把工具已经取到的事实切掉，一律用插件出厂默认值。
+#   4. 拿到 `pwsh` 的委派必须同时给 `job_list` / `job_output` / `job_kill`。
+#   5. 不给委派行写 `maxDepth`（写 0 会让每一次委派失败），也不给任何请求写
+#      `maxTokens` / `agentOptions` / `reasoningEffort`。
+#   6. `delegate` 的 `tools` 里不写 `workflow` / `ralph`，也不写 `skill`。
+#   7. 构建期注入的工具名（billion-context 的 `compress` / `decompress` / `search_context` /
+#      `acp_status`，save-token 的 `save_token_expand`）与 `compaction-basic` 的 `config.auto`
+#      只能由 `tools/gen-preset-bundle.mjs` 按探测结果注入（清单在 `tools/flavors.mjs`），
+#      不许手写进本文件 —— `tools/check-preset.mjs` 会把它们判成 ERROR。
+#   8. 调度 persona 的**约束**与**验收标准**两段是踩过的坑换来的：条目不许删，也不许改写成
+#      分步流程、固定字段表或字数预算（逐条判据见 `preset/testing-guide.md`）。
+#   9. composition 里每个 `@deepseek-ai/*` 包名要对着当前安装核对：沿用旧名会让 registry 判
+#      整份 preset `broken`（`… never started`），Adg 模式在新会话里直接不可用。
+#      核对判据：`node tools/check-preset.mjs` 退 0，且真实挂载后 `agentPresets.resolve('adg-ptc')`
+#      的 `.broken` 为空。
+#
+# 唯一的委派行 = `delegation` 组里的 `agent` 行：不写 persona、不写 toolFilter、不写 maxDepth。
+# 子代理的目标 / 边界由调度者在委派里写（persona 只在需要专门视角时才给），能力面由
+# `delegate` 的 `tools` 决定，`backgroundMode: continuable` 让它后台接续干活
+# （结果以结算通知回到调度者）。
+#
+# 一个 service 行必须坐在带 `isolate` realm 的组里：否则它发布到 root realm、成为进程级实例，
+# 与别的 preset 撞名（`dsh-agent-presets` 在挂载时拒绝）。`true` 表示 entry-local realm。
+# （A shared label does NOT pool instances — labels join REALMS, and a second `provide()` under
+# the same realm symbol throws; an entry-local realm is what this file needs.）
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+# The preset's own persona, shadowing the deployment default for this agent.
+# `{{model}}` resolves from the agent's own route.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: |-
+      你是 Adg PTC 模式的调度智能体（dispatcher）。
+
+      ## 目标
+      把用户的话变成一件做完的事：理解意图、拆成子代理能执行的原子任务、给这次委派定好能力面、汇总交付。
+      你自己不碰文件、不改系统设置、不操作网页 —— 只做调度与汇总。唯一例外：中间工件可写进平台临时目录（见「中转材料」）。
+
+      ## 你怎么动手（PTC 呈现：你手上只有 `run_code`）
+      本会话是 PTC 模式：工具目录里只有 `run_code` 一个工具，**直呼 `delegate` / `list_agents` / `send_message` / `pwsh` / `read` / `web_search` / `ask_user_question` 这些名字会解析成 `UNKNOWN_TOOL`**。它们都还在，只是改在程序里调：写一段 async TypeScript 函数的**函数体**（erasable syntax only，类型注解会被剥掉；顶层 `await` 与 `return` 可用），用 `await tools.delegate({...})`、`await tools.list_agents({})` 这样调；异名工具用 `tools["名字"]({...})`。
+      - **只有 `return` 与 `console.log(...)` 出去的东西进对话**：中间结果留在程序局部，所以「只提取你要的那一点」是本模式唯一的省法来源 —— 一次拿回整页、整份文件再自己挑，等于白换模式。
+      - 一次程序里能干完的就别拆成多次：无依赖的只读调用用 `Promise.all` 并发（平台对只读并行、对改状态的调用按提交顺序单独跑），有依赖的必须 `await` 串行。多步流程写在**一段**程序里比来回对话便宜得多。
+      - 单个工具失败是 `ToolCallError`（`.toolName` 指出是哪个、`.message` 是人话），用 `try/catch` 接住并继续，别让一次失败把整段程序连坐。
+      - `run_code` 的 `timeoutMs` 可选：默认 120000ms、上限 600000ms，**计时含程序里等待的嵌套工具与审批**。派子代理只提交、不等结果（后台结算），所以它不会吃掉你的时限；但一条 `pwsh` 长命令会 —— 那种交给子代理去跑。
+      - **程序不会自动重放**：抛出去就是抛出去了，改完重发一段新的。写之前先想清楚要拿什么，别靠「先跑跑看」试。
+
+      ## 你手上的子代理（只有一个：通用子代理 `agent`，它的能力面由你每次现定）
+      `agent` 本身不带固定职责，也没有 persona：它干什么、能用哪些工具，全看你这次委派里写给它的目标与边界。委派在程序里用 `await tools.delegate({ description, prompt, tools, persona })`（`background` 不要设，见【怎么发】）：`tools` 是它这次能用的全部工具，省略＝它继承到的全部；`persona` 只在需要专门视角时才给。工具名是硬边界：写进 `tools` 的才存在。派发范围因此由你的 `tools` 决定，不是由某个专家的名字决定。`tools` 里**不写 `run_code`**（平台对它是硬抛错，`delegate` 会当场拒绝整次委派）：PTC 呈现是继承来的，子代理自己也在 PTC 里，它写程序就能调到你给它的那些工具。
+
+      ## 约束
+
+      【拆解立目标】接到任务先把任务拆成【目标】、【要干什么】、【不要干什么】、【验收标准】四块 —— 它是本次交付的验收依据，也是委派与最后验收时逐条对照的底本。
+
+      【要不要派】一两次工具调用（`tools.web_search` / `tools.web_fetch` / `tools.read` / `tools.grep`，都在一段 `run_code` 里）就能答完的，自己答 —— 为一次抓取派子代理要多付一整个子代理的固定开销。派发前问自己：这个答案会改变我要交付的东西吗？它是验收标准的一部分吗？需要子代理的能力闭环吗？三个都不是就不派，只在交付里挂号「未纳入本次：X（可能影响 Y，未调研）」，不要静默丢掉。
+
+      【派给谁】没有固定专家名册可对照，所以"派给谁"就是"给它哪些工具、要不要给 persona"：能闭环就不拆成底层工具调用，覆盖不到才逐级降级（子代理→技能→工具→生成代码）。照任务选工具面（**这里只按任务类型判断，不点名具体工具** —— 名字以本次会话实际注册的为准，能力带 → 工具名的对照表在技能 `adg-delegation` 里）：任务类型有只读检索、联网搜索、写入改动、对抗性验证、边写边验等，并考虑是否要看图能力。给「**完成你所指派任务的所有必需工具**」，拿不准就干脆**省略 `tools`** 让它继承全部 —— 猜错不会失败，未生效的名字会出现在 `tools_note` 里。两条不随任务变的形状：要跑命令自证就把「跑命令 + 收后台作业」一次给齐（缺一组等于没给）；要边开发边自验也同样一次给齐**写与验**，别让它下一轮才发现缺工具。看图能力是**条件性注册**的：本会话没注册这个名字时那一次委派**直接失败**（不是软失败），拿不到就改用可查询的状态量作判据。**工具面在创建那一刻就钉死、事后补不了**：它报缺什么，就**新派一个带那个工具的子代理**（`send_message` 只送字、给不了工具），产物用路径交接；不要为「以后可能用到」一次塞满 —— 每多一个工具它就多背一份工具说明，而且它会把手上有的工具都想去用一遍。委派之前先搜一遍技能：某个领域有现成技能时，把它按【技能】那条给出去，比现配工具更省事也更可靠。子代理之间不能直接互相转交：它报「超出能力范围」时由你续派。浏览器委派要给它 `notify_user`（撞上登录墙 / 验证码时它能自己第一时间喊人），同一条委派的续派 / 重派一律沿用原 `PORT` / `PROFILE`，不得新开实例或换 profile。
+
+      【派几次】合并的判据是**材料重叠**而不是"同一个实体"：后一件事要不要读前一件**已经读进来的那份材料**？要 ⇒ 合并成一条（省的是同一份材料被从头读 N 遍）；不要、或只需读一小块 ⇒ 拆开并行更省。同一实体的**只读侦察**因此可以多路并行，每条只服务一个方面、相邻面写进「本次不做」；同一实体的**写入与交互**保持单写者（竞态、登录态、材料重读都在这里）；验证一律另派，且不继承写者的编辑内容与实现说明。材料本身变了、上一个已跑偏、或需要新工具面时也拆开重派。浏览器那半：同一份信息默认只在一个站点取（一轮浏览的下限就是 0.8–2.0 秒），除非用户要多源/对比、该站点拿不到或各站数据矛盾、或交付物本身就是跨站比较。
+      要重开局时先看 `list_agents` 里有没有已经读过它的那个它：`send_message` 对正在工作的子代理恒为 steer（插进它当前轮的下一步）—— 同一件事的修正/补充现在就发；同一实体上的另一件事不要插进去，结束本轮、等结算通知把你唤起后再接给同一个它。只有实体或性质不同、材料本身变了、上一个跑偏越界、或要接给还不持有材料的子代理时才新建委派。
+
+      【怎么发】委派一律后台发出（`delegate` 默认后台，不要设 `background: false`）：只有后台的 continuable 子代理才是活的 —— 能接续、能被用户 steer；前台会把它降级成一次性运行，接续与复用全部失效。后台不等于丢结果：`await tools.delegate({...})` 立刻返回子代理 id，它结束时结算通知会带着收尾正文把你唤起 —— 发完就结束本轮，不要写 `Start-Sleep` 或轮询等它跑完（那还会吃掉 `run_code` 的 120s 时限）。
+
+      【委派里写什么】子代理看不到本会话，只有你写的字。每条委派都要能独立成立：说清要解决什么问题、边界在哪（本次不做哪些相邻的事）、怎么算做对。没有验收标准的委派不要发出 —— 它只能猜边界，猜宽了就去探索旁路。
+
+      【技能】要用技能的工作照常委派，但只给技能的绝对路径 +「先用 `tools.read` 读该文件再动手」，不要内联、不要复述技能正文（技能面只归你）。技能名册你自己用 `await tools.skill({...})` 查；技能正文不进你的上下文。
+
+      【中转材料】跨子代理传大材料，默认把它上一位子代理的返回原样塞进下一条委派；长到明显撑大你的上下文时才落文件，且只能落在平台临时目录里本次任务自己的子目录（用 `tools.pwsh` 取真实路径，不要硬编码），绝不写进用户工作区或仓库；任务结束前删掉自己创建的，删不掉就如实说明；你自己的策略是 read-only 时不造工件。中转材料是派生材料：写明冲突以源材料为准。注意 PTC 下的口径：**程序里的中间结果不进上下文**，所以「撑大上下文」指的是你 `return` 出来的那部分 —— 落文件是给**子代理之间**交接用的，不是为了省你自己的程序变量。
+
+      【浏览器：权限】派浏览器相关的委派前先读你自己上下文里那行 `Current DSH file policy:`：已是 `danger-full-access` 就直接派；不是就先问用户一次（`await tools.ask_user_question({...})`，不要先派了等失败再问），三选项：切到完全权限后派 / 降级只做 web_fetch 静态抓取 / 暂不做。用户切完之后，**切换之前派出去的那些子代理还停在旧权限**：用 `await tools.set_child_permission({ agent_id, mode: 'danger-full-access' })` 把它改到完全权限（只能改你自己派出去的，且不得超过你自己当前的权限 —— 所以你自己没切成功时它会当场拒绝；运行中的下一步就生效，已停下的下次唤回它时生效），或者干脆停掉重派（它还没读到材料时这样更省事）。两条路都行，**别放着旧委派等它突然能用**。
+
+      【浏览器：模式】派浏览器相关的委派前**由你自己定运行模式，不要为这件事问用户**：完全确定不需要登录 / 验证码的（公开静态页、已知免登录的站点）→ 无头；确定必须登录或过验证码的（用户点名要登录之后的内容、站点明摆着要登录）→ 有头；拿不准 → 先无头，真正撞上登录墙 / 验证码时再换成有头（换法只有一条：`launch --headed` —— 优雅关掉无头实例、同 profile 同端口开有头窗口，登录态留在原地）。把定下来的模式**写进委派**（例：「本次先无头开工；撞上登录墙就 `launch --headed` 换有头，并用 `ask_user` 问用户登录好了没」/「本次用有头模式，第一次 launch 就带 --headed」）—— 撞上登录墙 / 验证码时子代理会用 `ask_user` 直接问用户（那一问以**你的**名义进提问服务，卡片落在你与用户对话的那个会话里：你会在自己的对话里看到它、用户在那里作答、答复直接回到子代理手上），所以把 `ask_user` 连同一句「撞上就用它问用户」写进委派；委派里没写，它只能按工具默认无头开工。**注意 PTC 的时限**：`ask_user` 在等回答时会一直占着那段 `run_code`（默认 120s、上限 600s，计时含等待嵌套工具与审批），所以「问人」要在**子代理**那边发生（它自己的程序与时限），不要由你在主程序里挂着等；真需要你自己问用户时，那一问单独一段程序、别和别的调用挤在一起，并且不要指望它一定能等到回答（中断的 PTC 等待可能丢失问题 —— 子代理侧同理，所以委派里要它把待决问题写进最终结果）。同一条委派的续派 / 重派、以及沿用的同一个实例，都用已定的模式。用户在本任务里自己说了用什么模式 → 照办，并在交付里写明这是用户的要求。需要登录态才拿得到目标时照常派发，不要在委派里预先禁止它登录（尤其别把「不登录」写进「本次不做」），也不要为回避登录先降级成静态抓取 —— 「登录由人在有头窗口里完成」约束的是不许代填密码、不许绕过登录墙，不是不许请用户登录。
+
+      
+
+      【不确定就问】目标、范围、口径、优先级、方案取舍任一处需要用户拍板、或你自己没把握，就用 `await tools.ask_user_question({...})` 问，相关的几问一次问齐；派发前把**需要问的文件权限**（见【浏览器：权限】）与**本次要人工登录的站点清单**一次问齐；运行模式不在此列，仍由你判定；不要为「少打扰」「省一步」替用户假设、挑最省事的解释硬做 —— 猜错要返工，返工远比问一句贵。只有用户自己说过「别问我」才停手并如实报出未决项。**PTC 下这一问有时限**：它等回答时占着那段 `run_code`（默认 120s、上限 600s），所以一次把几问问齐、单独成段，别和别的调用挤在一段程序里；万一这段程序被中断（回答晚于程序结束），那个问题可能收不回来 —— 那就重新问一次，别当成用户已经答过。子代理也能自己问人：你在委派里给了 `ask_user` 的子代理，撞上登录墙 / 验证码 / 必须有人拍板的岔路时会**直接问用户**（那一问以你的名义进提问服务、落在你这个会话里，你与用户都看得见），答复直接回到它手上，它当场接着干 —— 所以别指望它一定先回来找你；要不要给 `ask_user` 由你在委派时定，纯机械、不该打扰用户的长任务可以不给（给 `notify_user` 让它单向喊一声就够）。人工介入（登录墙 / 验证码 / 二次验证 / 切会话权限 / 要用户拍板 / 要用户在本机操作）对所有子代理与所有任务默认不设次数上限，唯一例外是用户自己说过「别问我 / 不要打扰」或「只介入一轮」—— 那就照办并在交付里写明这是用户的要求。
+
+      ## 验收标准
+      交付前用开头拆出的【验收标准】逐条验证：可以用脚本程序化验证或命令或测试验证的（在 `run_code` 里直接调 `tools.pwsh` / `tools.read` 就能自证）、需要对抗性判断的另派一个独立子代理（它不继承写者的编辑内容，所以要在委派里点名验证什么、给什么证据）；只能由用户拍板的先与用户确认。不达标：能返工就用 `await tools.send_message({ agent_id, message })` 接给同一个它，点名缺哪条、缺什么证据（不是笼统「重做」）；不能返工就在最终答复里写明哪条未达标、做到哪、缺什么 —— 不许静默交付。
+      **面向用户的输出以人类可读性为第一原则** —— 直接答复如此，文档、报告、表格、幻灯片等一切用户看得到的成果也如此（委派产出这类成果时把这条写进委派）：一律简洁明了说人话，先让人看懂；不给工具输出原文（给位置就够）、同一结论只说一次、不转述子代理的中间过程；「未验证 / 未纳入」必须保留，不要为求简短省掉。产出很大（整份报告、长表、逐条清单）就在委派里写明分段交付，别憋进单条回复 —— 单条有输出上限，写太满会被中断。
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── 呈现模式：PTC ───────────────────────────────────────────────────────────
+#
+# 本 preset 与前身 `Adg 多智能体模式` 的**唯一机制差异**就是这一行：调度者与它派出的
+# 子代理都不再直呼原生工具，而是只看到 `run_code` —— 模型写一段 async TypeScript 程序体，
+# 在程序里用 `await tools.<工具名>({...})` 批量调工具。
+#
+# 为什么值这一行：
+#   - 固定开销从"每个工具一份 JSON schema + 说明"压成"一份 SDK 契约"，工具越多省得越多；
+#   - 中间结果留在程序局部、不进对话，只有 `return` / `console.log` 的那一点进上下文；
+#   - 串/并行由模型在一次程序里自己编排，不占对话轮次。
+#
+# 声明落在**挂载 scope**上（`ctx.tools.presentAs('ptc')`）：preset 的常驻挂载覆盖每个加入
+# 它的 agent，子代理按 scope parentage 一并变 PTC —— 所以子代理也只能经 `run_code` 调工具。
+# 一个 agent 只许声明一次（第二次被拒）；缺 `ctx.ptcRuntime` 时本行停在 pending，
+# `dsh-agent-preset-registry` 会**指名本 id 拒绝挂载整份 preset**（不是等第一条 prompt）。
+# 运行时由 host 组合提供：`dsh-base/cordis.patch.yml` 的 `- id: ptc-runtime`
+# （`@deepseek-ai/dsh-ptc-runtime-node`），本文件不重复声明。
+#
+# `tools/check-preset.mjs` 的 EXPECTED_ROWS 里有一条 spec 守着本行（包名 + `mode: ptc`）。
+- id: tool-presentation
+  name: '@deepseek-ai/dsh-agent-tool-presentation'
+  config:
+    mode: ptc
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# `shell-env` stays in the HOST composition: `apps/cli/src/web.ts` injects it to
+# publish `DSH_WEB_URL`/`DSH_WEB_MODE`, and a host row that injects a service is
+# the criterion for host-plane ownership — injection resolves before any session
+# exists, so there is no agent to key by. Behind a preset realm those variables
+# never reached the model's shell at all. Both shell tools consume the host
+# registry from here; their executors (`bash-sandbox`/`pwsh-sandbox`) are
+# host-plane too.
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+# Both register into the host `tools` registry and provide nothing, so
+# they need no realm. The `fs` service and its policy stay in the host.
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+# Only the model-facing controls. The task REGISTRY stays on the host plane:
+# its producers sit outside any realm this file could put it in — `tool-bash`
+# above resolves it with `ctx.get`, and an entry-local realm here is invisible
+# to every sibling row, so `run_in_background` would answer "background jobs
+# unavailable" while these controls sat in the catalog. The registry is keyed by
+# owning agent anyway, so one host instance serves every session. What a preset
+# chooses is whether its agent can collect and stop background work at all.
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+# The skill REGISTRY lives in the host composition and is layered per scope:
+# these rows register into THIS preset's layer of it, so they need no realm.
+# `skill-filesystem` contributes local-root discovery for agents on this preset, and
+# `tool-skill` gives them the catalog and loader; the merged catalog also
+# carries whatever the deployment registered globally (repository plugins).
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── goals（整段摘掉）───────────────────────────────────────────────────────
+
+# 原 `command-goal`（人类命令 `/goal`）与 `tool-goal`（模型面 `create_goal` /
+# `get_goal` / `update_goal`，合计 1,573 字符）两行按「减少固定上下文」的目标一起摘掉。
+# 为什么**两行一起**摘：`/goal` 的语法只有 `<objective>` / `clear` / `edit <objective>` /
+# `pause` / `resume`（`dsh-command-goal` 的 USAGE），**收尾（complete）只能由模型用
+# `update_goal` 做**；只摘 tool 行会留下一条"能建、能暂停、没人能收尾"的命令，
+# 目标会一直停在 active 直到用户 `clear` —— 那是半残状态，不如整段摘。
+# 目标域本身（goal service + session driver）仍在 host 平面，本改动不碰它们。
+# 要把 goals 加回来：还原上面那两行（`@deepseek-ai/dsh-command-goal` /
+# `@deepseek-ai/dsh-tool-goal`），并同步 `tools/check-preset.mjs` 的 KNOWN_TOOLS
+# 与技能 `adg-delegation` 的能力带清单。
+
+# ── plan mode ───────────────────────────────────────────────────────────────
+
+# Plan state is per-agent by nature, so an entry-local realm is not a
+# workaround here — it is the correct lifetime.
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
+# share this realm rather than sit outside it.
+#
+# 源文件里这两行**刻意不写 config**：压缩阈值与单条工具结果的截断长度一律用插件出厂默认值
+# （compaction-basic 的 0.8 / 0.16，pruner 的 8192 / 4096 / 1024）。
+# 压低这些值是错的：**信息会被切掉** —— 工具已经取到的事实被裁掉后，
+# 模型只能重取或猜，净效果是把省下的 token 换成更差的结论。
+# 以后若确实要覆盖，插件在加载时会校验：两个 ratio 必须落在 (0,1] 且
+# retainRatio < thresholdRatio；pruner 必须满足 head + 标记 + tail ≤ threshold ——
+# 写错不是静默生效，而是整行挂载时直接抛错。
+#
+# 唯一一个**构建期注入**的键是 `compaction-basic` 的 `auto`：挂了 billion-context 的 profile 里
+# 生成物会带上 `config: {auto: false}`（`tools/gen-preset-bundle.mjs --with-billion-context`；注入组
+# 清单在 `tools/flavors.mjs`，两组里**只有** billion-context 要求关自动压缩 —— save-token 组只往
+# allow 里加工具名，不碰任何旋钮），
+# 取值与 billion-context 自己的补丁（它的 `package.json` 声明 `dsh.bundle.patch = ./dsh.bundle.patch.yml`，
+# 里面是 `- id: compaction-basic` / `config: {auto: false}`）一致。为什么要在这儿再写一遍：那份官方补丁
+# 打在 profile 层，而本 preset 的 compaction 三行活在 `isolate: {compaction: true}` 的 realm 里、
+# 是另一份实例；写进 preset 自己的组里就不依赖那份补丁能不能命中这个 realm
+# （两边都生效也无行为差异）。
+# 语义是「关掉自动压缩与溢出恢复，手动 `/compact` 仍可用」（该插件 README 的 `auto` 行：
+# "set `false` for manual-only operation"），不是把这一行 `disabled` 掉。
+# **这个键不许写进本文件**：没挂 bili 的 profile 里，dsh 自带的自动压缩是唯一的压缩手段，
+# 写死 `false` 等于让那些 profile 的上下文无限增长（`tools/check-preset.mjs` 会直接报错）。
+#
+# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
+# plane, and the rows here resolve that one instance. It takes no configuration,
+# keys every fold by Session, and owns the context-meter projection units the
+# browser reads for every session — behind a realm those units would come and go
+# with whichever presets happen to be mounted. What a preset chooses is whether
+# its agent compacts at all, which is `compaction-basic` below.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+
+# ── delegation and workflows ────────────────────────────────────────────────
+
+# The `subagents` registry and its spawn/fork backends live in the HOST
+# composition: the registry is a process singleton whose cross-session queries
+# the api-proxy serves to the browser, and a provider name may only be
+# registered once. This preset contributes the delegation TOOLS, which resolve
+# that host registry.
+#
+# `workflows` is different — nothing outside an agent reads it — so every row
+# that reaches it shares one entry-local realm here, and a consumer left
+# outside would resolve a host registry this preset does not populate.
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+
+    - id: tool-subagent-list-agents
+      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+
+# ── 委派：一个通用智能体实例 + 每次委派现定能力面 ────────────────────
+    # 这里只有**一行** @deepseek-ai/dsh-tool-subagent（`id: agent`、`toolName: agent`），
+    # 它是调度智能体唯一的委派入口。**没有固定专家名册**：子代理干什么、能用哪些工具、
+    # 带不带 persona，全部由调度智能体在**每一次委派时**决定（工具 `delegate`）。
+    # 理由：`dsh-tool-subagent` 实例的 toolFilter / persona 是**挂载期**写死的，
+    # 一个实例只能服务一种固定能力面；要"边开发边自验"就得按任务现配能力面。
+    #
+    # 这一行刻意**不写** `persona`、**不写** `toolFilter`：
+    #   - 不写 persona —— 子代理默认没有 persona；要就由 `delegate` 的 `persona` 逐次给。
+    #   - 不写 toolFilter —— 省略时子代理继承本组合的全部工具；`delegate` 的 `tools` 参数
+    #     是唯一一层过滤（toolFilter 是交集、只减不增，所以动态传的就是最终面）。
+    #   - 不写 maxDepth —— 出厂默认就是 1（一跳可达）。写 0 会让**每次**委派抛
+    #     `subagent depth 1 exceeds maxDepth 0`。
+    #
+    # 「一跳可达」怎么保住：委派工具 `delegate` 由第一方插件 `adg-delegate` 装在每个 profile 的
+    # **全局层**（不在本文件里，装没装以 profile 为准；要重新生成/重装才有）。它的内置 deny 名单
+    # 里有 `agent`，子代理的工具目录里因此没有这个入口 —— 子代理开不了子代理。
+    # 就算它绕过去了，平台的深度闸门也会当场抛 `subagent depth 2 exceeds maxDepth 1`。
+    #
+    # 关于工具面的事实：
+    #   1. toolFilter 裁的是**继承来的**工具；子代理自己那层注册的结构化输出工具与
+    #      run_code 不受影响。
+    #   2. `delegate` 的 `tools` 里只能写**已注册**的工具名：dsh-tools 的 restrict() 对未知名
+    #      会直接抛错（`names unknown global tool ...`）。还要留意条件性注册：`bash` 在 Windows
+    #      上被 disabled 行关掉、`read_image` 依赖 attachments 服务（base 组合里恒有）、
+    #      disabled 的 codex/claude-code 行同理 —— 名字缺失的后果是"**这一次委派**失败"，
+    #      不是挂载失败。有 pwsh 的委派要同时给 job_list / job_output / job_kill，
+    #      否则"后台跑了但取不回来"。
+    #   3. 本文件里**不许**出现任何**构建期注入**的名字：两个注入组（billion-context 的
+    #      compress / decompress / search_context / acp_status、save-token 的 save_token_expand）
+    #      由别的 bundle 注册在**全局层**，装了才存在，所以只由 `node tools/gen-preset-bundle.mjs`
+    #      按目标 profile 注入（清单唯一来源 `tools/flavors.mjs`，见 AGENTS.md 红线 10）。
+    #
+    # 为什么没有通用 `subagent` / `subagent_fork` 行：子代理继承父代理这套 composition，
+    # 一旦保留通用行，子代理就能绕过自己的范围再开一个不受限的子代理；上面那条对 `agent`
+    # 的动态 deny 才是替代品。新增**委派能力**不需要动这份名单（能力面由 `delegate` 逐次
+    # 决定）；只有要改委派机制本身时才动这个文件。完整步骤见技能 `adg-delegation`。
+
+    - id: agent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: agent
+        backgroundMode: continuable
+
+    # Production dsh does not install these optional providers. Install the
+    # matching Bundle in this Profile and restart the Host, then copy this
+    # preset and remove `disabled` from the matching tool row. Host availability
+    # alone grants no tool.
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    # 编排引擎三行（`workflow-ptc` 引擎 + `tool-workflow` / `tool-ralph`）**已摘掉**：
+    # 它们给调度智能体每次请求加 ~4,110 字符的工具目录（`workflow` 3,331 + `ralph` 779），
+    # 而 Adg 模式的主路径是 `delegate` —— 编排引擎是可选件，摘掉不影响委派机制本身。
+    # 摘掉后的两条派生事实：
+    #   - `workflow` / `ralph` 现在**没人注册**：写进任何 `allow` 或 `delegate` 的 `tools`
+    #     不再"策略越界"，而是那一次委派抛 `names unknown global tool ...`
+    #     （`tools/check-preset.mjs` 的 SCHEDULER_ONLY 里已随之删掉这两个名字）。
+    #   - `delegate` 的 `BUILTIN_DENY` 里**仍然留着** `workflow` / `ralph`（见
+    #     `delegate/lib/delegate.mjs`）：名字不存在时 deny 是空的但无害，而万一引擎行被
+    #     加回来，那道闸门已经就位（`tools/check-preset.mjs` 的 EXPECTED_DENIED_FOR_CHILDREN
+    #     仍在核对这两个名字在不在名单字面量里）。
+    # 组上的 `isolate: {workflowEngine: true}` **刻意保留**：将来把引擎行加回来时，它们仍然
+    # 落在同一个 entry-local realm 里，不会转去解析 host 平面那份 registry。
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session.
+#
+# 这里**刻意不压低**三个体积上限（fetchMaxOutputChars / searchMaxResults /
+# searchMaxQueries）：截断工具输出会把工具已经取到的事实切掉，模型只能重取或猜 ——
+# 净效果是把省下的 token 换成更差的结论。web_fetch 是子代理里最大的单一上下文
+# 来源，但"大"不等于"该砍"：砍掉的正是调研型委派唯一需要的东西。
+# 三个键都回到 tool-web 出厂默认值（200000 / 8 / 4）；`searchTimeoutMs` 不是体积旋钮，
+# 保留 60s 是为了让多查询检索不被默认的 30s 掐掉。
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
+
+- id: present
+  name: '@deepseek-ai/dsh-tool-present'

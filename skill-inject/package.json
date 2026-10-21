@@ -1,0 +1,50 @@
+{
+  "name": "adg-skill-inject",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 思考框架注入插件：把思考框架正文（设置页可自定义，默认取 thinking-framework 技能）注入 Adg 调度智能体的系统提示词（不依赖模型自觉 read；子代理不注入；输入框里有开关）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./lib/section.mjs": "./lib/section.mjs",
+    "./lib/user-settings.mjs": "./lib/user-settings.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "client.js",
+    "lib/section.mjs",
+    "lib/user-settings.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "system-prompt",
+    "thinking-framework"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

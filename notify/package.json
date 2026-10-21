@@ -1,0 +1,53 @@
+{
+  "name": "adg-notify",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 通知插件：注册 notify_user 工具，把「该你动手了」以 Windows 桌面通知推给用户（零运行时依赖）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/toast.mjs": "./lib/toast.mjs",
+    "./lib/user-settings.mjs": "./lib/user-settings.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/toast.mjs",
+    "lib/user-settings.mjs",
+    "scripts/toast.ps1",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test",
+    "toast": "node cli.mjs send --title \"DSH 通知\" --message \"adg-notify 自测\""
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "toast",
+    "notify"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  }
+}

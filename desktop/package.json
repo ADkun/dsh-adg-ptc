@@ -1,0 +1,13 @@
+{
+  "name": "adg-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg PTC 模式的桌面操控工具链：零依赖 CLI —— 枚举顶层窗口、读 UIA 树、截屏、经 SendInput 合成输入并复核可观测变化，装到 ${DSH_HOME}/desktop/",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  }
+}

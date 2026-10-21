@@ -1,0 +1,12 @@
+# adg-skill-inject 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层）：它注册的不是工具、而是一段系统提示词 section，
+# 由插件自己在 agent/created 时逐 agent 挂（只挂到 Adg 调度者，不挂到子代理）。
+# 不写进 preset/agent.cordis.yml 的理由：preset composition 里的 scoped section 会经
+# composeFrom 一并落到子代理（agent-preset-registry 的 join 把子代理 scope 直接绑到
+# generation scope），而这份框架只给调度者 —— 所以它必须在全局层、由插件自己判定目标。
+#
+# 行 `id` 必须等于 index.mjs 的 `export const name`；`name` 是包名（无版本）。
+- insert:
+    - id: adg-skill-inject
+      name: adg-skill-inject

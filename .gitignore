@@ -1,0 +1,21 @@
+Thumbs.db
+.DS_Store
+*.log
+
+# 唯一的 node_modules 是仓库根的解析桥：把 @deepseek-ai/* 链到本机 dsh 安装处，
+# 好让 notify/ 的自测能像运行时那样解析 peer 依赖 @deepseek-ai/dsh-tools。
+# 它是本机产物（不是依赖清单），不入库；缺了它 notify/ 的测试会直接 import 失败。
+node_modules/
+
+# 构建产物不入库。现在这里有两类：
+# 1) bundle/adg-<味道>/（含 bundle/adg-preset/）—— tools/gen-preset-bundle.mjs 从 preset/ 源文件
+#    生成的 preset bundle（cordis.patch.yml + package.json）。要改就改 preset/ 源文件再重跑生成，
+#    别手改生成物 —— 生成物是脚本的输出，手改的差异下一次生成就没了。
+# 2) bundle/dist/*.tgz —— 插件的打包产物，需要时由插件源码重新打包。
+# 部署不经过这些产物：install.ps1 / install.sh 每次都会重新生成并拷到 $DSH_HOME 下的稳定目录。
+bundle/
+
+# 临时工作目录：过程件（changelog / handoff / pending / 工作稿 / 证据快照）只住在这里，不进版本控制
+# —— 版本区只留最终真相（一批 AGENTS.md / design.md / testing-guide.md）。指针只登记在根 AGENTS.md
+# 的「版本区」一节（唯一的登记点）；目录名改了只改那一处，别在别处抄第二份清单。
+docs-work/

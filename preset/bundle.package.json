@@ -1,0 +1,26 @@
+{
+  "name": "dsh-adg-ptc",
+  "version": "1.2.0",
+  "description": "Adg PTC 模式：一个 @deepseek-ai/dsh-agent-preset 声明行（一个调度智能体 + 它按需派出的通用子代理；子代理的目标与工具面由调度者在每次委派时现定；全链路 PTC 呈现，工具目录里只有 run_code）。cordis.patch.yml 由 tools/gen-preset-bundle.mjs 从 preset/agent.cordis.yml 生成，不要手改。",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "agent-preset",
+    "adg",
+    "ptc"
+  ],
+  "type": "module",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "cordis.patch.yml"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

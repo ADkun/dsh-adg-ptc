@@ -1,0 +1,11 @@
+# adg-notify 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层，无 scope 的 ctx）：所以 profile 装了
+# 本 bundle 的 dsh 里，`notify_user` 是一个全局工具名，调度者在 `delegate` 的 `tools`
+# 里点名它就能交到子代理手上，不需要把行写进 preset composition。
+#
+# 行 `id` 必须等于 index.mjs 的 `export const name`；`name` 是包名（无版本）。
+# 注意：**global 层同名重复注册会失败**，所以别在 preset 里再插一行同名工具。
+- insert:
+    - id: adg-notify
+      name: adg-notify

@@ -1,0 +1,47 @@
+{
+  "name": "adg-settings",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 设置框架：一张用户可配项的登记表 + 一页设置界面 + 一个落在用户根的设置文件（零运行时依赖）",
+  "license": "MIT",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./lib/schema.mjs": "./lib/schema.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/schema.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "settings"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

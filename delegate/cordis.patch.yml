@@ -1,0 +1,11 @@
+# adg-delegate 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层，无 scope 的 ctx）：所以装了本 bundle 的 dsh 里，
+# `delegate` 是一个全局工具名 —— 它既能出现在调度者的工具面里，也能被写进任何子代理的
+# toolFilter；不需要把行写进 preset composition。
+#
+# 行 `id` 必须等于 index.mjs 的 `export const name`；`name` 是包名（无版本）。
+# 注意：**global 层同名重复注册会失败**，所以别在 preset 里再插一行同名工具。
+- insert:
+    - id: adg-delegate
+      name: adg-delegate

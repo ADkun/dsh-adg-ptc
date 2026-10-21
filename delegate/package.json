@@ -1,0 +1,51 @@
+{
+  "name": "adg-delegate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 委派插件：注册全局工具 delegate，让调度智能体在每一次委派时动态指定子代理的工具集合与 persona（平台 @deepseek-ai/dsh-tool-subagent 每个实例的 toolFilter 在挂载期写死，做不到这一点）；零运行时依赖",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/delegate.mjs": "./lib/delegate.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/delegate.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "delegate",
+    "subagent",
+    "persona",
+    "tool-filter"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  }
+}

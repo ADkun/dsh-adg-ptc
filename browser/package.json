@@ -1,0 +1,13 @@
+{
+  "name": "adg-browser",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 浏览器工具链：默认无头的 Chromium 系浏览器启动器（Chrome / Brave / Edge 探测，需要人工介入时才 --headed）+ 最小 CDP 驱动（零依赖）",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  }
+}

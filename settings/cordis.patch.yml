@@ -1,0 +1,20 @@
+# adg-settings 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层，无 scope 的 ctx）：本插件不往 composition 里
+# 加子插件，只挂一条设置路由 + 一页设置界面。
+#
+# 行 `id` 必须等于 index.js 的 `export const name`；`name` 是包名（无版本）。
+#
+# `config` 是三层优先级里的**中间层**（设置文件 > 本行 Config > 内置默认，见 lib/schema.mjs）：
+# 页面还没写过文件时用它。键名不在登记表里的会被丢掉并写一条警告，所以这里只列登记表上的键；
+# 这些值和 lib/schema.mjs 的 `default` 是同一批出厂值，改一处必须同时改另一处
+# （testing-guide.md 的「漂移检测」一节有判据）。
+- insert:
+    - id: adg-settings
+      name: adg-settings
+      config:
+        notifyTitle: 'DSH 通知'
+        notifySound: true
+        notifyPersist: true
+        skillInjectEnabled: true
+        skillInjectText: ''
