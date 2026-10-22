@@ -268,7 +268,22 @@ $notifyNote = ''
 $notifySkipped = $false
 # dsh CLI：用来把插件装进各 profile（`dsh plugin --profile <n> add file:<dir>`）。
 # 找不到就只报告、不安装，其余步骤照跑（与 4a 对 pnpm 缺失的处理同形）。
-$dshCmd = (Get-Command dsh -ErrorAction SilentlyContinue)
+# 两种取得方式，按优先级探测（2026-10-22 事故：dsh 只经 `npx @deepseek-ai/dsh` 运行，从未落到
+# 持久化 PATH；这一行原来只有 `Get-Command dsh` 一条路，于是全部插件安装被静默跳过 —— 7 个
+# `elseif (-not $dshCmd)` 各打一行「未找到 dsh 命令」就收工，exit 0，看着像跑完了）：
+#   ① PATH 上有 dsh.cmd → 直接用 dsh（必须认 .cmd：7 处调用都走 `cmd /c`，它跑不了 .ps1）；
+#   ② 没有就退回 `npx.cmd --yes @deepseek-ai/dsh`。npx 只在它自己的子进程里注入 PATH，
+#      普通终端里 `Get-Command dsh` 永远为空，但 npx.cmd 在 npm 全局 bin、持久化 PATH 上就有。
+# $dshInvoke 是**可直接拼进 cmd /c 的命令前缀**（'dsh' 或 'npx.cmd --yes @deepseek-ai/dsh'），
+# 门与调用统一用它；不要再单独拿一个布尔值当门。
+# 注意：npx 那条路每次按 registry 的 latest 解析，可能与正在运行的 dsh 版本不同 —— 对
+# `plugin add`（只是往 profile 里 pnpm add 一个 file: 包）没有影响，不要在别处依赖这个版本。
+$dshInvoke = $null
+if (Get-Command dsh.cmd -ErrorAction SilentlyContinue) {
+  $dshInvoke = 'dsh'
+} elseif (Get-Command npx.cmd -ErrorAction SilentlyContinue) {
+  $dshInvoke = 'npx.cmd --yes @deepseek-ai/dsh'
+}
 # $notifyNeedInstall：这个 profile 还欠一次 `dsh plugin add`（只在"这个 profile 里没有这个包"时为真）。
 $notifyNeedInstall = $false
 if ($SkipPackages) {
@@ -745,14 +760,14 @@ foreach ($name in $Profiles) {
     $notifyNeedInstall = -not (Test-Path -LiteralPath $notifyInProfile)
     if (-not $notifyNeedInstall) {
       $installNotes += "$name : adg-notify 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-notify 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$notifyDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $notifyLog = Join-Path $profileDir 'pnpm-adg-notify.log'
-        cmd /c "dsh plugin --profile $name add `"file:$notifyDest`" > `"$notifyLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$notifyDest`" > `"$notifyLog`" 2>&1"
         $notifyExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $notifyInProfile) {
@@ -778,14 +793,14 @@ foreach ($name in $Profiles) {
     $permNeedInstall = -not (Test-Path -LiteralPath $permInProfile)
     if (-not $permNeedInstall) {
       $installNotes += "$name : adg-permission 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-permission 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$permDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a / 4c：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $permLog = Join-Path $profileDir 'pnpm-adg-permission.log'
-        cmd /c "dsh plugin --profile $name add `"file:$permDest`" > `"$permLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$permDest`" > `"$permLog`" 2>&1"
         $permExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $permInProfile) {
@@ -810,14 +825,14 @@ foreach ($name in $Profiles) {
     $delegateNeedInstall = -not (Test-Path -LiteralPath $delegateInProfile)
     if (-not $delegateNeedInstall) {
       $installNotes += "$name : adg-delegate 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-delegate 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$delegateDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a / 4c：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $delegateLog = Join-Path $profileDir 'pnpm-adg-delegate.log'
-        cmd /c "dsh plugin --profile $name add `"file:$delegateDest`" > `"$delegateLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$delegateDest`" > `"$delegateLog`" 2>&1"
         $delegateExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $delegateInProfile) {
@@ -859,6 +874,8 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-notify 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
     } elseif ($pkgName -eq 'adg-notify') {
       $installNotes += "$name : adg-notify 包在位，但 manifest 缺一格（dependencies=$depLine / dsh.profile.bundles=$listedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-notify **没装进 node_modules**（dependencies=$depLine / dsh.profile.bundles=$listedLine）—— 委派里写 notify_user 会拿到「未生效」"
     }
   }
 
@@ -878,6 +895,8 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-permission 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
     } elseif ($permPkgName -eq 'adg-permission') {
       $installNotes += "$name : adg-permission 包在位，但 manifest 缺一格（dependencies=$permDepLine / dsh.profile.bundles=$permListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-permission **没装进 node_modules**（dependencies=$permDepLine / dsh.profile.bundles=$permListedLine）—— 调度者改子代理权限时会调到一个不存在的工具"
     }
   }
 
@@ -896,6 +915,8 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-delegate 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
     } elseif ($delegatePkgName -eq 'adg-delegate') {
       $installNotes += "$name : adg-delegate 包在位，但 manifest 缺一格（dependencies=$delegateDepLine / dsh.profile.bundles=$delegateListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-delegate **没装进 node_modules**（dependencies=$delegateDepLine / dsh.profile.bundles=$delegateListedLine）—— 调度者手上没有任何委派工具，整套 Adg PTC 模式退回单智能体"
     }
   }
 
@@ -910,14 +931,14 @@ foreach ($name in $Profiles) {
     $settingsNeedInstall = -not (Test-Path -LiteralPath $settingsInProfile)
     if (-not $settingsNeedInstall) {
       $installNotes += "$name : adg-settings 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-settings 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$settingsDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a / 4c / 4c-2 / 4c-4：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $settingsLog = Join-Path $profileDir 'pnpm-adg-settings.log'
-        cmd /c "dsh plugin --profile $name add `"file:$settingsDest`" > `"$settingsLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$settingsDest`" > `"$settingsLog`" 2>&1"
         $settingsExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $settingsInProfile) {
@@ -945,6 +966,8 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-settings 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
     } elseif ($settingsPkgName -eq 'adg-settings') {
       $installNotes += "$name : adg-settings 包在位，但 manifest 缺一格（dependencies=$settingsDepLine / dsh.profile.bundles=$settingsListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-settings **没装进 node_modules**（dependencies=$settingsDepLine / dsh.profile.bundles=$settingsListedLine）—— 设置里不会出现「Adg 设置」那一页"
     }
   }
 
@@ -958,14 +981,14 @@ foreach ($name in $Profiles) {
     $injectNeedInstall = -not (Test-Path -LiteralPath $injectInProfile)
     if (-not $injectNeedInstall) {
       $installNotes += "$name : adg-skill-inject 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-skill-inject 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$injectDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $injectLog = Join-Path $profileDir 'pnpm-adg-skill-inject.log'
-        cmd /c "dsh plugin --profile $name add `"file:$injectDest`" > `"$injectLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$injectDest`" > `"$injectLog`" 2>&1"
         $injectExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $injectInProfile) {
@@ -979,6 +1002,8 @@ foreach ($name in $Profiles) {
   }
 
   # 4c-9. 读回来断言 adg-skill-inject 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 一样）。
+  # 2026-10-22 补：这一段原来只把三个变量算完就结束，**没有** 承接的 if/else 报告块（其余
+  # 4c-1/3/5/7/11/13 都有）—— 于是它从写下来那天起就是死代码，skill-inject 装歪了永远不出声。
   if (-not $injectSkipped) {
     $injectReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
     $injectDepLine = @($injectReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-skill-inject' }).Count -gt 0
@@ -986,6 +1011,14 @@ foreach ($name in $Profiles) {
     $injectPkgName = ''
     if (Test-Path -LiteralPath $injectInProfile) {
       $injectPkgName = (Get-Content -LiteralPath $injectInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
+    }
+    if ($injectPkgName -ne 'adg-skill-inject') { $injectNeedInstall = $true }
+    if ($injectDepLine -and $injectListedLine -and ($injectPkgName -eq 'adg-skill-inject')) {
+      $installNotes += "$name : adg-skill-inject 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
+    } elseif ($injectPkgName -eq 'adg-skill-inject') {
+      $installNotes += "$name : adg-skill-inject 包在位，但 manifest 缺一格（dependencies=$injectDepLine / dsh.profile.bundles=$injectListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-skill-inject **没装进 node_modules**（dependencies=$injectDepLine / dsh.profile.bundles=$injectListedLine）—— 调度者系统提示词里不会有思考框架段"
     }
   }
 
@@ -999,14 +1032,14 @@ foreach ($name in $Profiles) {
     $guardNeedInstall = -not (Test-Path -LiteralPath $guardInProfile)
     if (-not $guardNeedInstall) {
       $installNotes += "$name : adg-source-guard 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-source-guard 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$guardDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $guardLog = Join-Path $profileDir 'pnpm-adg-source-guard.log'
-        cmd /c "dsh plugin --profile $name add `"file:$guardDest`" > `"$guardLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$guardDest`" > `"$guardLog`" 2>&1"
         $guardExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $guardInProfile) {
@@ -1033,6 +1066,8 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-source-guard 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
     } elseif ($guardPkgName -eq 'adg-source-guard') {
       $installNotes += "$name : adg-source-guard 包在位，但 manifest 缺一格（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-source-guard **没装进 node_modules**（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— run_code 的成功结果里不会多出「意图：」那行"
     }
   }
 
@@ -1047,14 +1082,14 @@ foreach ($name in $Profiles) {
     $parallelNeedInstall = -not (Test-Path -LiteralPath $parallelInProfile)
     if (-not $parallelNeedInstall) {
       $installNotes += "$name : adg-ptc-parallel 已经在 node_modules 里"
-    } elseif (-not $dshCmd) {
+    } elseif (-not $dshInvoke) {
       $installNotes += "$name : 未找到 dsh 命令，跳过 adg-ptc-parallel 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$parallelDest`""
     } else {
       Push-Location $profileDir
       try {
         # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-10：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $parallelLog = Join-Path $profileDir 'pnpm-adg-ptc-parallel.log'
-        cmd /c "dsh plugin --profile $name add `"file:$parallelDest`" > `"$parallelLog`" 2>&1"
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$parallelDest`" > `"$parallelLog`" 2>&1"
         $parallelExit = $LASTEXITCODE
       } finally { Pop-Location }
       if (Test-Path -LiteralPath $parallelInProfile) {
@@ -1081,6 +1116,11 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-ptc-parallel 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
     } elseif ($parallelPkgName -eq 'adg-ptc-parallel') {
       $installNotes += "$name : adg-ptc-parallel 包在位，但 manifest 缺一格（dependencies=$parallelDepLine / dsh.profile.bundles=$parallelListedLine）—— 手工补上再重启"
+    } else {
+      # 2026-10-22 补：原来只有上面两支，包**根本没进 node_modules** 时两支都不进 —— 整段安静跳过。
+      # 那次 adg-ptc-parallel 缺失就是这样被藏住的：4c-12 打了一行「未找到 dsh 命令，跳过」，
+      # 这里本该补一刀却什么都没说，于是"脚本跑完了"和"插件装好了"看起来是同一件事。
+      $installNotes += "$name : adg-ptc-parallel **没装进 node_modules**（dependencies=$parallelDepLine / dsh.profile.bundles=$parallelListedLine）—— 平行委派 section 不生效"
     }
   }
 }
