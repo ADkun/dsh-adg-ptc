@@ -156,6 +156,15 @@ test('I1: 登记表自洽 —— 键唯一、kind 合法、必备字段齐全、
   assert.deepEqual(KINDS, ['boolean', 'string', 'integer']);
   const keys = FIELDS.map((field) => field.key);
   assert.equal(new Set(keys).size, keys.length, '键不能重名');
+  // 键集合就是那六项（通知三项 + 注入三项），顺序即页面顺序。
+  assert.deepEqual(keys, [
+    'notifyTitle',
+    'notifySound',
+    'notifyPersist',
+    'skillInjectEnabled',
+    'skillInjectSubagent',
+    'skillInjectText',
+  ]);
   for (const field of FIELDS) {
     assert.ok(KINDS.includes(field.kind), `${field.key}: kind 必须是 ${KINDS.join('/')}`);
     assert.equal(typeof field.group, 'string');
@@ -306,7 +315,7 @@ test('漂移: 设置页登记的 notify 三项与 adg-notify 真正读的键/默
   assert.equal(NOTIFY_STORE_NAME, STORE_NAME, '设置文件名是两个模块之间的契约');
 });
 
-test('漂移: 设置页登记的注入两项与 adg-skill-inject 真正读的键/默认值/界一致', () => {
+test('漂移: 设置页登记的注入三项与 adg-skill-inject 真正读的键/默认值/界一致', () => {
   const consumed = FIELDS.filter((field) => field.consumer === 'adg-skill-inject').map((field) => field.key);
   assert.deepEqual(consumed, Object.keys(INJECT_DEFAULTS), 'adg-skill-inject 读的键必须与登记表逐项对上');
   for (const field of FIELDS.filter((item) => item.consumer === 'adg-skill-inject')) {
@@ -322,10 +331,57 @@ test('漂移: 注入插件读得懂设置页写的开关与自定义正文，空
       path.join(dir, STORE_NAME),
       `${JSON.stringify({ skillInjectEnabled: false, skillInjectText: '自定义正文' }, undefined, 2)}\n`,
     );
-    assert.deepEqual(readInjectDefaults(), { skillInjectEnabled: false, skillInjectText: '自定义正文' });
+    assert.deepEqual(readInjectDefaults(), {
+      skillInjectEnabled: false,
+      skillInjectSubagent: false,
+      skillInjectText: '自定义正文',
+    });
     fs.writeFileSync(path.join(dir, STORE_NAME), JSON.stringify({ skillInjectText: '' }));
-    assert.deepEqual(readInjectDefaults(), { skillInjectEnabled: true, skillInjectText: '' });
+    assert.deepEqual(readInjectDefaults(), {
+      skillInjectEnabled: true,
+      skillInjectSubagent: false,
+      skillInjectText: '',
+    });
   });
+});
+
+test('漂移: 子代理开关的两条路径（false / true / 键缺失回落）', async () => {
+  await withTempDir((dir) => {
+    const file = path.join(dir, STORE_NAME);
+    fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true, skillInjectSubagent: false }));
+    assert.equal(readInjectDefaults().skillInjectSubagent, false, 'false 要被如实读出来');
+    fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true, skillInjectSubagent: true }));
+    assert.equal(readInjectDefaults().skillInjectSubagent, true, 'true 要被如实读出来');
+    fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
+    assert.equal(readInjectDefaults().skillInjectSubagent, false, '键缺失要回落出厂默认 false');
+  });
+});
+
+test('漂移: cordis.patch.yml 的 config 出厂值与登记表 default 一致', () => {
+  const raw = fs.readFileSync(path.join(import.meta.dirname, '..', 'cordis.patch.yml'), 'utf8');
+  const lines = raw.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === 'config:');
+  assert.notEqual(start, -1, 'cordis.patch.yml 里要有 config: 块');
+  const config = {};
+  const re = /^        (\w+): (.*)$/;
+  for (const line of lines.slice(start + 1)) {
+    const match = re.exec(line);
+    if (!match) break;
+    const [, key, value] = match;
+    if (value === "''") config[key] = '';
+    else if (value === 'true') config[key] = true;
+    else if (value === 'false') config[key] = false;
+    else if (value.startsWith("'") && value.endsWith("'")) config[key] = value.slice(1, -1);
+    else assert.fail(`cordis.patch.yml 的 config.${key} 值认不出来：${JSON.stringify(value)}`);
+  }
+  assert.deepEqual(
+    Object.keys(config).sort(),
+    FIELDS.map((field) => field.key).sort(),
+    'config 里的键集合必须与登记表逐项对上',
+  );
+  for (const field of FIELDS) {
+    assert.deepEqual(config[field.key], field.default, `config.${field.key} 与登记表 default 不一致`);
+  }
 });
 
 test('漂移: notify 的 readUserDefaults 认得设置页写下的那份文件', () => {

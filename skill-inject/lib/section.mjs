@@ -90,20 +90,31 @@ export function resolveSectionText(options = {}) {
 }
 
 /**
+ * 这个 agent 是不是子代理：dsh-subagent 给每个子代理的会话头写 `origin: 'subagent'`（durable）。
+ *
+ * 子代理**是否也注入**由内容层闸门（设置键 `skillInjectSubagent`）决定，判据层不再排除它。
+ *
+ * @param {{origin?: string, agentPreset?: string} | undefined} header 会话头（durable meta）
+ * @returns {boolean} 是否是子代理
+ */
+export function isSubagentHeader(header) {
+  return header?.origin === 'subagent';
+}
+
+/**
  * 注入目标判定（纯函数，逐 agent 调用一次）。
  *
- * 只给 **Adg 调度者**：
- *   - 子代理排除：dsh-subagent 给每个子代理的会话头写 `origin: 'subagent'`（durable）；
+ * 只看 **preset 身份**：
  *   - preset 判定：运行期优先 `composedPreset(ctx)`（standing mount，读 scope 链），
  *     会话头 `agentPreset` 字段作后备（两个都由 dsh-subagent / agent-preset-registry 写入）；
- *   - 两者都拿不到时**不注入**：宁可漏，不可把框架塞给非 Adg 会话。
+ *   - 拿不到时**不注入**：宁可漏，不可把框架塞给非 Adg 会话。
+ *   - 子代理排除已按用户要求移到**内容层**闸门（设置键 `skillInjectSubagent`，默认关）。
  *
  * @param {{origin?: string, agentPreset?: string} | undefined} header 会话头（durable meta）
  * @param {string | undefined} composedPresetId 该 agent 的 standing mount preset id
  * @returns {boolean} 是否该给这个 agent 注入
  */
 export function shouldInjectFor(header, composedPresetId) {
-  if (header?.origin === 'subagent') return false;
   const presetId = composedPresetId ?? header?.agentPreset;
   return presetId === TARGET_PRESET;
 }

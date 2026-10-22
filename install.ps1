@@ -447,8 +447,9 @@ if ($SkipPackages) {
 
 # ── 2b-4. skill-inject/ 插件（思考框架注入）──────────────────────────────────
 # 与 2b / 2b-1 / 2b-2 / 2b-3 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
-# 它不注册任何工具：在 agent/created 时判定"这个 agent 是不是 Adg 调度者（origin 非 subagent
-# 且 preset 为 adg）"，是就在它自己的 agent.ctx 上注册一段系统提示词 section，正文取自
+# 它不注册任何工具：在 agent/created 时判定"这个 agent 的 preset 是不是 adg"（判定只看
+# preset；子代理是否也注入由设置键 skillInjectSubagent 决定，默认关），是就在它自己的
+# agent.ctx 上注册一段系统提示词 section，正文取自
 # 用户技能根的 skills\thinking-framework\SKILL.md（本脚本第 1 节拷的那份 —— 所以此插件的
 # 注入正文与技能文件永远来自同一次安装）。漏装的症状是调度者的系统提示词里没有思考框架段
 # （退回"靠模型自觉 read"的旧状态），不报错。
@@ -532,6 +533,53 @@ if ($SkipPackages) {
     $guardNote = "source-guard/ 插件 -> $guardDest（本次更新 $guardCopied 个文件）"
   } else {
     $guardNote = "source-guard/ 插件 -> $guardDest（已是最新，无需拷贝）"
+  }
+}
+
+# ── 2b-6. ptc-parallel/ 插件（PTC 并行执行提示）────────────────────────────
+# 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 / 2b-5 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
+# 它不注册任何工具：在 agent/created 时判定"这个 scope 是不是 PTC 呈现"（判据是
+# ctx.get('tools').get('run_code', agent) 不为 undefined），是就在那个 agent 自己的
+# agent.ctx 上注册一段系统提示词 section（调度者与子代理都算）。
+# 正文里**不写死任何工具名**：末尾那份"可并发 / 独占"清单是每次组装提示词时从
+# tools.view(scope).visible 现算的（写死即过期，模型会拿过期清单下结论）。
+# 漏装的症状是 PTC 会话的系统提示词里没有「## PTC 并行执行（一次 run_code 里多做）」段
+# （退回"模型不知道 PTC 能并行"的旧状态），不报错。
+$parallelSrc = Join-Path $here 'ptc-parallel'
+$parallelDest = Join-Path $root 'plugins\adg-ptc-parallel'
+$parallelNote = ''
+$parallelSkipped = $false
+# 4c-12 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
+$parallelInProfile = ''
+if ($SkipPackages) {
+  $parallelNote = '跳过（-SkipPackages）'
+  $parallelSkipped = $true
+} elseif (-not (Test-Path -LiteralPath (Join-Path $parallelSrc 'package.json'))) {
+  $parallelNote = "未找到 $parallelSrc，跳过 ptc-parallel/ 插件部署"
+  $parallelSkipped = $true
+} else {
+  # 本清单与 ptc-parallel/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
+  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。有子目录 lib\，先建出来。
+  New-Item -ItemType Directory -Force -Path (Join-Path $parallelDest 'lib') | Out-Null
+  $parallelFiles = @('index.mjs', 'lib\guide.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
+  $parallelCopied = 0
+  $parallelMissing = @()
+  foreach ($rel in $parallelFiles) {
+    $from = Join-Path $parallelSrc $rel
+    if (-not (Test-Path -LiteralPath $from)) { $parallelMissing += $rel; continue }
+    $to = Join-Path $parallelDest $rel
+    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
+    if ($same) { continue }
+    Copy-Item -Force -LiteralPath $from -Destination $to
+    $parallelCopied += 1
+  }
+  if ($parallelMissing.Count -gt 0) {
+    $parallelNote = "ptc-parallel/ 部署不完整：源里缺 $($parallelMissing -join ', ')"
+    $parallelSkipped = $true
+  } elseif ($parallelCopied -gt 0) {
+    $parallelNote = "ptc-parallel/ 插件 -> $parallelDest（本次更新 $parallelCopied 个文件）"
+  } else {
+    $parallelNote = "ptc-parallel/ 插件 -> $parallelDest（已是最新，无需拷贝）"
   }
 }
 
@@ -987,6 +1035,54 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-source-guard 包在位，但 manifest 缺一格（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— 手工补上再重启"
     }
   }
+
+  # 4c-12. adg-ptc-parallel 插件（PTC 并行执行提示）也装进这个 profile。
+  # 与 4c-8 / 4c-10 同形（file: 依赖 + reconcile）。漏装的后果：PTC 会话的系统提示词里
+  # 没有「## PTC 并行执行（一次 run_code 里多做）」段（模型回到"不知道 PTC 能并行"的旧状态），
+  # 不报错、不崩 —— 所以同样要如实报告。装了之后还要**重启 dsh**（插件在 agent/created 时才注册）。
+  if ($parallelSkipped) {
+    $installNotes += "$name : adg-ptc-parallel 未部署（$parallelNote）—— PTC 会话的系统提示词里不会有那段并行指引"
+  } else {
+    $parallelInProfile = Join-Path $profileDir "node_modules\adg-ptc-parallel\package.json"
+    $parallelNeedInstall = -not (Test-Path -LiteralPath $parallelInProfile)
+    if (-not $parallelNeedInstall) {
+      $installNotes += "$name : adg-ptc-parallel 已经在 node_modules 里"
+    } elseif (-not $dshCmd) {
+      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-ptc-parallel 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$parallelDest`""
+    } else {
+      Push-Location $profileDir
+      try {
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-10：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        $parallelLog = Join-Path $profileDir 'pnpm-adg-ptc-parallel.log'
+        cmd /c "dsh plugin --profile $name add `"file:$parallelDest`" > `"$parallelLog`" 2>&1"
+        $parallelExit = $LASTEXITCODE
+      } finally { Pop-Location }
+      if (Test-Path -LiteralPath $parallelInProfile) {
+        Remove-Item -LiteralPath $parallelLog -Force -ErrorAction SilentlyContinue
+        $installNotes += "$name : 已装 adg-ptc-parallel（dsh plugin add exit $parallelExit）"
+      } else {
+        $installNotes += "$name : adg-ptc-parallel 没装进 $profileDir（dsh plugin add exit $parallelExit）—— 关掉 dsh 后重跑本脚本（日志 $parallelLog）"
+        if (Test-Path -LiteralPath $parallelLog) { Write-Host (Get-Content -LiteralPath $parallelLog -Raw -Encoding UTF8) }
+      }
+    }
+  }
+
+  # 4c-13. 读回来断言 adg-ptc-parallel 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-11 一样）。
+  if (-not $parallelSkipped) {
+    $parallelReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    $parallelDepLine = @($parallelReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-ptc-parallel' }).Count -gt 0
+    $parallelListedLine = @($parallelReread.dsh.profile.bundles) -contains 'adg-ptc-parallel'
+    $parallelPkgName = ''
+    if (Test-Path -LiteralPath $parallelInProfile) {
+      $parallelPkgName = (Get-Content -LiteralPath $parallelInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
+    }
+    if ($parallelPkgName -ne 'adg-ptc-parallel') { $parallelNeedInstall = $true }
+    if ($parallelDepLine -and $parallelListedLine -and ($parallelPkgName -eq 'adg-ptc-parallel')) {
+      $installNotes += "$name : adg-ptc-parallel 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
+    } elseif ($parallelPkgName -eq 'adg-ptc-parallel') {
+      $installNotes += "$name : adg-ptc-parallel 包在位，但 manifest 缺一格（dependencies=$parallelDepLine / dsh.profile.bundles=$parallelListedLine）—— 手工补上再重启"
+    }
+  }
 }
 
 # 第 6 步：把脚本拷到用户根下的稳定副本。
@@ -1014,7 +1110,8 @@ foreach ($spec in @(
     @{ Pkg = 'adg-delegate'; Dest = $delegateDest },
     @{ Pkg = 'adg-settings'; Dest = $settingsDest },
     @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
-    @{ Pkg = 'adg-source-guard'; Dest = $guardDest })) {
+    @{ Pkg = 'adg-source-guard'; Dest = $guardDest },
+    @{ Pkg = 'adg-ptc-parallel'; Dest = $parallelDest })) {
   if (-not (Test-Path -LiteralPath $spec.Dest)) { continue }
   $expected = @()
   foreach ($f in Get-ChildItem -LiteralPath $spec.Dest -Recurse -File) {
@@ -1043,8 +1140,9 @@ Write-Host "  notify  -> $notifyNote（notify_user 工具；每个 profile 的�
 Write-Host "  permission -> $permNote（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
 Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / set_child_permission / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
-Write-Host "  skill-inject -> $injectNote（思考框架注入：把 skills\thinking-framework\SKILL.md 正文注入 Adg 调度者的系统提示词，子代理不注入）"
+Write-Host "  skill-inject -> $injectNote（思考框架注入：把 skills\thinking-framework\SKILL.md 正文注入 Adg 调度者的系统提示词；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「意图：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
+Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
 Write-Host ""
 Write-Host "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
@@ -1057,6 +1155,7 @@ Write-Host "（adg-delegate 插件：同样要重启 dsh 才注册；它是唯�
 Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有思考框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
 Write-Host "（adg-source-guard 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话里，顶层 run_code 的成功结果才会多出一行「意图：<当次 description>」（那句「源码未随本结果重复」说明句默认不出现）；失败结果永远逐字不变。注意它只改结果侧，tool/call 里那份入参源码平台没有挂载点可改。）"
+Write-Host "（adg-ptc-parallel 插件：同样要重启 dsh 才注册 —— 而且 section 是在 agent 创建那一刻挂上的，所以运行中的旧会话不补挂：重启 dsh + 新建对话才看得到。子代理的 scope 同样会被判定，工具清单按每个 agent 当前可见的工具现算。）"
 if ($packageFailed) {
   Write-Host ""
   Write-Host "注意：至少有一步 pnpm 没成功，$bundleName 可能还没装进 profile（上面的 profile 行里写明了）。" -ForegroundColor Yellow

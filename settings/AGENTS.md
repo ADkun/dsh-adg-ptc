@@ -1,6 +1,6 @@
 # AGENTS.md — settings（Adg 设置页框架）
 
-本模块 = 一个 dsh 插件包 **`adg-settings`**：在「设置」里注册一页 **Adg 设置**（浏览器半边 `client.js`），并提供宿主半边的同源读写路由 **`/api/adg-settings/settings`** 与一个设置文件 **`<DSH_PROFILE_DIR|DSH_HOME|~/.dsh>/adg-settings.json`**（**优先 profile 目录**：本机宿主进程里 `DSH_PROFILE_DIR` 就是当前 profile 目录 ⇒ 真实落点是 `<profile>\adg-settings.json`，**不是**用户根那份）。它是**一套框架**：加一项配置 = 在 `lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `client.js` 的 DICT 里加两条文案（`label` / `hint`），宿主与客户端的逻辑都不用改。现有两个占用者、共五条登记：通知三项（`notifyTitle` / `notifySound` / `notifyPersist`，由 `adg-notify` 消费）与思考框架注入两项（`skillInjectEnabled` / `skillInjectText`，由 `adg-skill-inject` 消费）。设计与不变量见 [design.md](design.md) 的 I1..I14。
+本模块 = 一个 dsh 插件包 **`adg-settings`**：在「设置」里注册一页 **Adg 设置**（浏览器半边 `client.js`），并提供宿主半边的同源读写路由 **`/api/adg-settings/settings`** 与一个设置文件 **`<DSH_PROFILE_DIR|DSH_HOME|~/.dsh>/adg-settings.json`**（**优先 profile 目录**：本机宿主进程里 `DSH_PROFILE_DIR` 就是当前 profile 目录 ⇒ 真实落点是 `<profile>\adg-settings.json`，**不是**用户根那份）。它是**一套框架**：加一项配置 = 在 `lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `client.js` 的 DICT 里加两条文案（`label` / `hint`），宿主与客户端的逻辑都不用改。现有两个占用者、共六条登记：通知三项（`notifyTitle` / `notifySound` / `notifyPersist`，由 `adg-notify` 消费）与思考框架注入三项（`skillInjectEnabled` / `skillInjectSubagent` / `skillInjectText`，由 `adg-skill-inject` 消费；`skillInjectSubagent` ＝ 子代理是否也注入同一段框架，**默认关** ⇒ 只注入调度者 ＝ 与改动前行为一致）。设计与不变量见 [design.md](design.md) 的 I1..I14。
 
 **为什么本模块有独立文档**（三样信号都在）：有独立于仓库根的命令（`node --test test`）；有模块特有红线（只放用户要的项、技术类键不许进页面、键名真相只在 `lib/schema.mjs`、消费方不许 import 本包、未知键与非法值必须拒且不落盘）；有跨模块路由（`install.ps1` / `install.sh` 部署它；`adg-notify` 按**文件契约**读它写的设置文件）。
 
@@ -30,7 +30,7 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 
 每条一行结论 + 就地理由 + 来源与载体（`[机检]` 给命令与期望判据，`[评]` 给评审判据）。**违反即返工。**
 
-- **R1 设置页只放「用户需要拍板」的项；技术类键（`appId` / `timeoutMs` / `scriptPath` / `powerShellPath`）不许进 `FIELDS`、不许出现在设置页，也不许由页面写进设置文件。** 理由：这是用户定下的口径 ——「以现有的可配置项为准，不新增可配置项」（2026-10-07 的设置页任务）。技术类键属于机器/部署细节，改它们的正确位置是 `cordis.patch.yml` 的 `config:` 或 profile，不是给人点的开关。载体：[机检] `settings/test/settings.test.mjs` 的「I1」用例断言 `FIELDS` 的键集合就是那五项（通知三项 + 注入两项，`skillInjectText` 是用户要写的正文，不是技术键）；[评] 读 `FIELDS` 与设置页截图。
+- **R1 设置页只放「用户需要拍板」的项；技术类键（`appId` / `timeoutMs` / `scriptPath` / `powerShellPath`）不许进 `FIELDS`、不许出现在设置页，也不许由页面写进设置文件。** 理由：这是用户定下的口径 ——「以现有的可配置项为准，不新增可配置项」（2026-10-07 的设置页任务）。技术类键属于机器/部署细节，改它们的正确位置是 `cordis.patch.yml` 的 `config:` 或 profile，不是给人点的开关。载体：[机检] `settings/test/settings.test.mjs` 的「I1」用例断言 `FIELDS` 的键集合就是那六项（通知三项 + 注入三项，`skillInjectText` 是用户要写的正文，不是技术键）；[评] 读 `FIELDS` 与设置页截图。
 - **R2 新增一条配置项必须先问用户再动手。** 理由：同上（用户的硬约束）。载体：[评] 读那次对话与 `FIELDS` 的 diff。
 - **R3 键名 / 默认值 / 界的真相只在 `settings/lib/schema.mjs`；消费方（`adg-notify` / `adg-skill-inject`）只读**文件**、不许 import 本包。** 理由：三者是各自独立的插件包，profile 里可能只装其中一个 —— import 一个解析不到的包会在挂载期把整个插件炸掉；设置文件是模块之间**唯一**的契约。载体：[机检] `settings/test/settings.test.mjs` 的四条「漂移」用例（两组键集合、两组默认值、两个 `maxLength`、三份 `STORE_NAME` 同名）。
 - **R4 浏览器半边不许自己定义界**：渲染与本地校验都用宿主 `GET` 回来的 `fields[]`。理由：第二份界就是漂移的源头（页面放行、宿主拒掉，就变成"保存了但没生效"）。载体：[评] 读 `client.js` 的 `checkField` / `displayValue`；[机检]「I3」用例断言 `describeFields()` 是可 JSON 化的纯数据。

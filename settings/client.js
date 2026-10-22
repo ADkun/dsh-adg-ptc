@@ -47,7 +47,10 @@ window.__ModuleLoader__.load({
         'group.skillInject': '思考框架注入',
         'field.skillInjectEnabled.label': '注入思考框架',
         'field.skillInjectEnabled.hint':
-          '开启后，Adg 调度智能体的系统提示词里会带上思考框架正文（子代理不带）。输入框左侧那颗「超思」开关改的是同一个值。',
+          '开启后，Adg 调度智能体的系统提示词里会带上思考框架正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「超思」开关改的是同一个值。',
+        'field.skillInjectSubagent.label': '同时注入子代理',
+        'field.skillInjectSubagent.hint':
+          '开启后，Adg 调度者派出的子代理也会拿到同一段思考框架；关闭时只注入调度者自己（出厂默认）。',
         'field.skillInjectText.label': '注入正文',
         'field.skillInjectText.hint':
           '留空就用技能文件（skills/thinking-framework/SKILL.md）的正文，改技能文件即改注入内容；填了就以这里的文本为准（不再读文件）。保存后下一次请求生效。',
@@ -99,7 +102,10 @@ window.__ModuleLoader__.load({
         'group.skillInject': 'Thinking-framework injection',
         'field.skillInjectEnabled.label': 'Inject the thinking framework',
         'field.skillInjectEnabled.hint':
-          'When on, the Adg scheduler prompt carries the thinking-framework text (subagents never get it). The “Thinking” chip in the composer flips the same value.',
+          'When on, the Adg scheduler prompt carries the thinking-framework text; whether subagents also get it is decided by the toggle below (off by default). The “Thinking” chip in the composer flips the same value.',
+        'field.skillInjectSubagent.label': 'Also inject into subagents',
+        'field.skillInjectSubagent.hint':
+          'When on, subagents spawned by the Adg scheduler get the same thinking-framework section; when off, only the scheduler does (the default).',
         'field.skillInjectText.label': 'Injected text',
         'field.skillInjectText.hint':
           'Leave empty to use the skill file (skills/thinking-framework/SKILL.md); fill it in to inject exactly this text instead (the file is then ignored). Applies from the next request.',

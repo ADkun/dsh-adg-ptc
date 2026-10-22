@@ -9,11 +9,11 @@
 //   2. section 的 text 是**每次组装都求值的 provider**：设置页的开关与自定义正文在下一次
 //      请求就生效，不需要重启 dsh；系统提示词每次请求原样重发、不参与折叠（compaction 只
 //      折叠会话历史），「这份技能读进来的正文不许压缩」由机制天然满足；
-//   3. 只注入**Adg 调度者**：监听 `agent/created`（serial，全局层监听者收到所有 agent），
-//      按 `shouldInjectFor()` 逐 agent 判定 —— 子代理（origin === 'subagent'）与非 Adg
-//      preset 的会话都不注入。preset composition 里的 scoped section 会经 composeFrom
-//      一并落到子代理（agent-preset-registry 的 join 把子代理 scope 直接绑到 generation
-//      scope），所以"只给调度者"必须靠逐 agent 判定，不能靠 composition 层的行。
+//   3. 注入目标：监听 `agent/created`（serial，全局层监听者收到所有 agent），
+//      按 `shouldInjectFor()` 逐 agent 判定 —— 只看 **preset 身份**（非 Adg preset 的会话
+//      一律不注入）。子代理**也注册**这一段，但**正文**在内容层再判一次：设置键
+//      `skillInjectSubagent` 关着（默认）时子代理拿到空正文，开着才拿到同一段框架。
+//      闸门放在内容层 ⇒ 设置保存后下一次组装系统提示词就生效，不用重启 dsh。
 //
 // 入口形状与 notify/permission/delegate 同款（契约三件套 name / inject / apply）：
 //   - `name` 必须与 cordis.patch.yml 里 insert 行的 `id` 一致；
@@ -25,6 +25,7 @@ import {
   DEFAULT_SKILL_PATH,
   SECTION_NAME,
   SECTION_ORDER,
+  isSubagentHeader,
   resolveSectionText,
   shouldInjectFor,
   sectionTextFor,
@@ -35,6 +36,7 @@ export {
   DEFAULT_SKILL_PATH,
   SECTION_NAME,
   SECTION_ORDER,
+  isSubagentHeader,
   resolveSectionText,
   shouldInjectFor,
   sectionTextFor,
@@ -50,17 +52,24 @@ export const inject = ['systemPrompt'];
  * 每次组装系统提示词时的正文：设置页关掉注入就返回空串（空 section 在渲染时被丢弃，
  * 等价于没有这一段），否则按「自定义正文 > SKILL.md」取正文。
  *
+ * **内容层闸门**：子代理（`options.subagent === true`）只有在设置键
+ * `skillInjectSubagent` 为 true 时才拿得到正文（出厂默认 false ⇒ 子代理拿不到）。
+ * 闸门在内容层而不是注册层，所以设置保存后下一次组装就生效 —— 不用重启 dsh。
+ *
  * 这里刻意**不缓存**：设置文件是唯一真相，重读一次的开销远小于"改了设置还要重启"的代价。
+ * @param {{subagent?: boolean}} [options] 本次组装是不是子代理
  * @returns {string} 本轮的 section 正文（可能是空串）
  */
-export function sectionTextNow() {
+export function sectionTextNow(options = {}) {
   const settings = readUserDefaults();
   if (settings.skillInjectEnabled !== true) return '';
+  if (options.subagent === true && settings.skillInjectSubagent !== true) return '';
   return resolveSectionText({ customText: settings.skillInjectText, skillPath: DEFAULT_SKILL_PATH }).text;
 }
 
 /**
- * 插件入口：监听 agent/created，给每个 Adg 调度者在它自己的 agent.ctx 上注册框架 section。
+ * 插件入口：监听 agent/created，给每个 Adg preset 的 agent（含子代理）在它自己的 agent.ctx 上
+ * 注册框架 section —— 子代理拿不拿得到正文由内容层闸门（`skillInjectSubagent`）决定。
  *
  * 注册挂在 agent.ctx 上 —— agent 注销时随 scope 自动拆除（practices.md 的既定模式），
  * 插件自己的清理只负责"拆监听器"这一件事，不追着 agent 收尸。
@@ -77,12 +86,13 @@ export function apply(ctx) {
         // composedPreset 读 standing mount（scope 链）；判据细节见 lib/section.mjs。
         const composed = ctx.get('agentPresets')?.composedPreset?.(agent.ctx);
         if (!shouldInjectFor(header, composed)) return;
+        const subagent = isSubagentHeader(header);
         const agentCtx = agent.ctx;
         if (agentCtx === void 0) return;
         agentCtx.systemPrompt.section({
           name: SECTION_NAME,
           order: SECTION_ORDER,
-          text: () => sectionTextNow(),
+          text: () => sectionTextNow({ subagent }),
         });
       } catch {
         // 单个 agent 的注册失败不拖垮其它 agent —— 框架缺席的最坏后果是回到"没有框架"。

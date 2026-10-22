@@ -17,4 +17,5 @@
         notifySound: true
         notifyPersist: true
         skillInjectEnabled: true
+        skillInjectSubagent: false
         skillInjectText: ''

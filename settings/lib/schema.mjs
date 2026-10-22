@@ -67,6 +67,15 @@ export const FIELDS = Object.freeze([
     hintKey: 'field.skillInjectEnabled.hint',
   }),
   Object.freeze({
+    key: 'skillInjectSubagent',
+    kind: 'boolean',
+    group: 'skillInject',
+    default: false,
+    consumer: 'adg-skill-inject',
+    labelKey: 'field.skillInjectSubagent.label',
+    hintKey: 'field.skillInjectSubagent.hint',
+  }),
+  Object.freeze({
     key: 'skillInjectText',
     kind: 'string',
     group: 'skillInject',

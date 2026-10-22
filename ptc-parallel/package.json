@@ -1,0 +1,44 @@
+{
+  "name": "adg-ptc-parallel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg PTC 并行执行提示插件：给 PTC 呈现的 agent（调度者与子代理）注入一段「一次 run_code 里把无依赖的调用并行发出去」的系统提示词（不注册任何工具；按 scope 的呈现模式逐 agent 判定）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/guide.mjs": "./lib/guide.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/guide.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "ptc",
+    "run-code"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

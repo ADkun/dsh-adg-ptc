@@ -1,0 +1,14 @@
+# adg-ptc-parallel 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层）：它注册的不是工具、而是一段系统提示词 section，
+# 由插件自己在 agent/created 时**逐 agent** 判定（PTC 呈现与否）后挂到那个 agent 自己的
+# scope 上 —— 调度者与子代理各自判定、各自挂。
+# 不写进 preset/agent.cordis.yml 的理由：preset composition 里的 scoped section 会经
+# composeFrom 一并落到子代理（agent-preset-registry 的 join 把子代理 scope 直接绑到
+# generation scope），而本段是**按 scope 的呈现模式**判定的 —— 判据要落在插件这一侧，
+# 才能对每个 agent 单独回答"这个 scope 是不是 PTC 呈现"。
+#
+# 行 `id` 必须等于 index.mjs 的 `export const name`；`name` 是包名（无版本）。
+- insert:
+    - id: adg-ptc-parallel
+      name: adg-ptc-parallel

@@ -14,11 +14,34 @@ import {
   SECTION_NAME,
   SECTION_ORDER,
   TARGET_PRESET,
+  isSubagentHeader,
   resolveSectionText,
   shouldInjectFor,
   sectionTextFor,
   stripFrontmatter,
 } from '../lib/section.mjs';
+import { sectionTextNow } from '../index.mjs';
+import { STORE_NAME } from '../lib/user-settings.mjs';
+
+/**
+ * 跑一段代码，期间把 DSH_PROFILE_DIR 指向临时目录（设置文件的落点），跑完恢复并删目录。
+ * 内容层闸门读的是设置文件，所以这一段用真实文件契约验，不 mock。
+ */
+function withSettingsDir(settings, run) {
+  const saved = process.env.DSH_PROFILE_DIR;
+  const dir = mkdtempSync(join(tmpdir(), 'adg-skill-inject-gate-'));
+  process.env.DSH_PROFILE_DIR = dir;
+  try {
+    if (settings !== undefined) {
+      writeFileSync(join(dir, STORE_NAME), JSON.stringify(settings), 'utf8');
+    }
+    return run(dir);
+  } finally {
+    if (saved === undefined) delete process.env.DSH_PROFILE_DIR;
+    else process.env.DSH_PROFILE_DIR = saved;
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 test('stripFrontmatter：剥掉头部 frontmatter，保留正文', () => {
   const raw = '---\nname: "thinking-framework"\ndescription: "x"\n---\n\n# 正文标题\n\n正文第一段。\n';
@@ -85,8 +108,8 @@ test('shouldInjectFor：Adg 调度者（只有会话头后备）→ 注入', () 
   assert.equal(shouldInjectFor({ agentPreset: 'adg-ptc' }, undefined), true);
 });
 
-test('shouldInjectFor：子代理 → 不注入（即使 preset 也是 adg-ptc）', () => {
-  assert.equal(shouldInjectFor({ origin: 'subagent', agentPreset: 'adg-ptc' }, 'adg-ptc'), false);
+test('shouldInjectFor：子代理 → 判据层不再排除它（子代理闸门已移到内容层）', () => {
+  assert.equal(shouldInjectFor({ origin: 'subagent', agentPreset: 'adg-ptc' }, 'adg-ptc'), true);
 });
 
 test('shouldInjectFor：其他 preset（standard 等）→ 不注入', () => {
@@ -96,6 +119,46 @@ test('shouldInjectFor：其他 preset（standard 等）→ 不注入', () => {
 test('shouldInjectFor：两者都拿不到 → 不注入（宁漏勿错）', () => {
   assert.equal(shouldInjectFor({}, undefined), false);
   assert.equal(shouldInjectFor(undefined, undefined), false);
+});
+
+test('isSubagentHeader：origin 是 subagent 才是子代理（别的 origin / 缺 origin 都不是）', () => {
+  assert.equal(isSubagentHeader({ origin: 'subagent' }), true);
+  assert.equal(isSubagentHeader({ origin: 'subagent', agentPreset: 'adg-ptc' }), true);
+  assert.equal(isSubagentHeader({ origin: 'user' }), false);
+  assert.equal(isSubagentHeader({ origin: undefined }), false);
+  assert.equal(isSubagentHeader({ agentPreset: 'adg-ptc' }), false);
+  assert.equal(isSubagentHeader(undefined), false);
+});
+
+// ── 内容层闸门（设置键 skillInjectSubagent）────────────────────────────────────
+
+test('内容层闸门：开关关时子代理拿不到正文，调度者照旧拿到', () => {
+  withSettingsDir({ skillInjectEnabled: true, skillInjectSubagent: false, skillInjectText: '框架正文' }, () => {
+    assert.equal(sectionTextNow({ subagent: true }), '', '开关关 ⇒ 子代理没有正文');
+    assert.notEqual(sectionTextNow(), '', '调度者照旧拿到正文');
+    assert.ok(sectionTextNow().includes('框架正文'));
+  });
+});
+
+test('内容层闸门：开关开时子代理拿到同一段正文', () => {
+  withSettingsDir({ skillInjectEnabled: true, skillInjectSubagent: true, skillInjectText: '框架正文' }, () => {
+    assert.equal(sectionTextNow({ subagent: true }), sectionTextNow(), '子代理与调度者拿同一段正文');
+    assert.ok(sectionTextNow({ subagent: true }).includes('框架正文'));
+  });
+});
+
+test('内容层闸门：设置文件里没有这一项时按「关」处理（子代理拿不到正文）', () => {
+  withSettingsDir({ skillInjectEnabled: true, skillInjectText: '框架正文' }, () => {
+    assert.equal(sectionTextNow({ subagent: true }), '');
+    assert.notEqual(sectionTextNow(), '');
+  });
+});
+
+test('内容层闸门：总开关关着时，子代理与调度者都没有正文', () => {
+  withSettingsDir({ skillInjectEnabled: false, skillInjectSubagent: true, skillInjectText: '框架正文' }, () => {
+    assert.equal(sectionTextNow({ subagent: true }), '');
+    assert.equal(sectionTextNow(), '');
+  });
 });
 
 test('契约常量：名字与取值符合仓库口径', () => {

@@ -34,8 +34,12 @@ function withTempDir(run) {
   }
 }
 
-test('USER_DEFAULTS: 出厂默认是「开着 + 留空即跟随技能文件」', () => {
-  assert.deepEqual(USER_DEFAULTS, { skillInjectEnabled: true, skillInjectText: '' });
+test('USER_DEFAULTS: 出厂默认是「开着 + 不注入子代理 + 留空即跟随技能文件」', () => {
+  assert.deepEqual(USER_DEFAULTS, {
+    skillInjectEnabled: true,
+    skillInjectSubagent: false,
+    skillInjectText: '',
+  });
   assert.equal(Object.isFrozen(USER_DEFAULTS), true);
   assert.equal(STORE_NAME, 'adg-settings.json');
   assert.equal(MAX_TEXT_LENGTH, 20000);
@@ -73,14 +77,41 @@ test('readUserDefaults: 缺项 / 项坏只影响那一项（含字符串形式�
   withTempDir((dir) => {
     const file = path.join(dir, STORE_NAME);
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: 'false' }));
-    assert.deepEqual(readUserDefaults(), { skillInjectEnabled: false, skillInjectText: '' });
+    assert.deepEqual(readUserDefaults(), {
+      skillInjectEnabled: false,
+      skillInjectSubagent: false,
+      skillInjectText: '',
+    });
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: 'yes', skillInjectText: '正文', extraKey: 1 }));
-    assert.deepEqual(readUserDefaults(), { skillInjectEnabled: true, skillInjectText: '正文' });
+    assert.deepEqual(readUserDefaults(), {
+      skillInjectEnabled: true,
+      skillInjectSubagent: false,
+      skillInjectText: '正文',
+    });
     fs.writeFileSync(file, JSON.stringify({ skillInjectText: 42 }));
     assert.deepEqual(readUserDefaults(), { ...USER_DEFAULTS });
   });
 });
 
+test('readUserDefaults: skillInjectSubagent 的读出 / 回落 / 字符串写法', () => {
+  withTempDir((dir) => {
+    const file = path.join(dir, STORE_NAME);
+    fs.writeFileSync(file, JSON.stringify({ skillInjectSubagent: true }));
+    assert.equal(readUserDefaults().skillInjectSubagent, true);
+    fs.writeFileSync(file, JSON.stringify({ skillInjectSubagent: false }));
+    assert.equal(readUserDefaults().skillInjectSubagent, false);
+    fs.writeFileSync(file, JSON.stringify({ skillInjectSubagent: 'true' }));
+    assert.equal(readUserDefaults().skillInjectSubagent, true);
+    fs.writeFileSync(file, JSON.stringify({ skillInjectSubagent: 'false' }));
+    assert.equal(readUserDefaults().skillInjectSubagent, false);
+    for (const bad of ['yes', 1, 0, null, {}, []]) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectSubagent: bad }));
+      assert.equal(readUserDefaults().skillInjectSubagent, false);
+    }
+    fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
+    assert.equal(readUserDefaults().skillInjectSubagent, false);
+  });
+});
 test('readUserDefaults: 正文的长度上限（正好 20000 收，20001 不收）', () => {
   withTempDir((dir) => {
     const file = path.join(dir, STORE_NAME);
