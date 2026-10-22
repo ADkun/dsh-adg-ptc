@@ -10,7 +10,7 @@
 
 import { defineTool } from '@deepseek-ai/dsh-tools';
 
-import { ASK_TOOL_NAME, SUBAGENT_KINDS, TOOL_NAME, askUser, createOwnerIndex, delegate } from './lib/delegate.mjs';
+import { ASK_TOOL_NAME, SUBAGENT_KINDS, TOOL_NAME, askUser, createChildFaces, createOwnerIndex, delegate } from './lib/delegate.mjs';
 
 /** 插件名：必须等于 cordis.patch.yml 里 insert 行的 `id`。 */
 export const name = 'adg-delegate';
@@ -27,7 +27,7 @@ export { ASK_TOOL_NAME, TOOL_NAME };
  */
 const DESCRIPTION = [
   '派一个子代理去做一件事，并**在这一次委派**指定它拿到的工具集合与 persona（这是平台自带委派做不到的：那边的滤镜在挂载期就写死了）。要按任务现配能力面就用本工具，别用那条挂载期写死的静态委派工具。',
-  '`tools` 省略 = 不过滤，它拿到自己继承到的全部工具（再减去内置 deny 名单）；给了 = 只保留清单里那些；空数组 = 什么都不给。',
+  '`tools` 省略 = 不过滤，它拿到自己继承到的全部工具（再减去内置 deny 名单）；给了 = 只保留清单里那些；空数组 = 任务能力一个不给（平台续接通道 send_message 仍在，子代理要靠它回传结果）。',
   '`persona` 省略 = 它没有 persona 段；给了 = 这一次用它遮蔽子代理本来带的 persona。',
   '缺省（也是唯一）路径：派出的是 continuable 子代理，返回可接续、可 steer 的会话 id；`background: false` 在当前 dsh 版本不可用（平台 SubagentRuntime 只暴露 startActivation），给了会当场报错。',
   '清单里不成立的名字**不会**让整次调用失败，会逐条出现在 `tools_note` 里；`run_code` 例外，点名它当场报错。',
@@ -91,7 +91,7 @@ export function createDelegateTool(deps = {}) {
         type: 'array',
         items: { type: 'string' },
         description:
-          '这一次给这个子代理的全局工具名清单。省略 = 不过滤（它拿到继承到的全部，再减去内置 deny 名单）；给了 = 只保留这些；空数组 = 什么都不给。',
+          '这一次给这个子代理的全局工具名清单。省略 = 不过滤（它拿到继承到的全部，再减去内置 deny 名单）；给了 = 只保留这些；空数组 = 任务能力一个不给（平台续接通道 send_message 仍在）。',
       },
       persona: {
         type: 'string',
@@ -231,16 +231,34 @@ export function createAskUserTool(deps = {}) {
 export function apply(ctx) {
   // 本插件是全 DSH 唯一的委派入口，所以「子代理 → 派它的那个调度者」这张表只有这里能填。
   const owners = createOwnerIndex();
+  // 「预留 childId → 待贴能力面」表：让 persona 在子代理**建立窗口**里贴上，抢在首轮装配之前（I7 / I18）。
+  const faces = createChildFaces();
   const services = () => ({
     subagents: ctx.get('subagents'),
     agents: ctx.get('agents'),
     userQuestions: ctx.get('userQuestions'),
   });
 
+  // 建立窗口监听：`delegate` 派出的子代理一被 announce 就贴能力面。平台在
+  // `startActivation` 里先装配子代理、再投递首条 prompt、最后才返回 —— 等返回再贴就晚了，
+  // 子代理第一轮系统提示词会带着它从 preset 继承来的**调度者 persona**（这正是本监听的用处）。
+  // 监听器必须同步完成注册（section / restrict 都是同步注册、活生效），异常只记状态不抛
+  // （见 lib/delegate.mjs 的 createChildFaces）。
+  ctx.effect(() => {
+    const off = ctx.on('agent/created', (payload) => {
+      faces.applyFor(payload?.agent);
+    });
+    return () => {
+      if (typeof off === 'function') off();
+    };
+  }, 'adg-delegate.child-face()');
+
   ctx.tools.register(
     createDelegateTool({
       services,
       rememberChild: (childId, parent) => owners.remember(childId, parent),
+      rememberFace: (childId, face) => faces.remember(childId, face),
+      takeFace: (childId) => faces.take(childId),
     }),
   );
   ctx.tools.register(

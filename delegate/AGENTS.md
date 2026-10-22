@@ -3,8 +3,7 @@
 本模块是仓库内部的第一方子插件（与 `notify/`、`permission/` 同形制）：包名 `adg-delegate`，在**全局层**注册工具 `delegate`，
 让调度智能体在**每一次委派**时现给子代理指定工具集合与 persona —— 平台 `@deepseek-ai/dsh-tool-subagent`
 做不到这一点（它已在 0.2.x 删掉 per-child 的 persona / toolFilter：委派缝隙里没有入口，官方口径是"配进 Agent Preset"）。
-本插件保住这个能力的载体是**创建后窗口**：`startActivation` 建立子代理后，在它的活实例上贴 `tools.restrict` 与 persona 段
-（设计见 [design.md](design.md) 的 I16）。装载形状与 `notify/`、`permission/`
+本插件保住这个能力的载体是**能力面窗口**：预留 `childId` 后，在子代理的**建立窗口**（`agent/created`，即 `startActivation` 返回之前）把 `tools.restrict` 与 persona 段贴上去 —— 等返回再贴就晚了，子代理首轮会带着从 preset 继承来的调度者 persona（设计见 [design.md](design.md) 的 I7b / I16）。装载形状与 `notify/`、`permission/`
 同一种（稳定副本 + profile 的 `file:` 依赖 + `dsh.profile.bundles`），验证判据在 [testing-guide.md](testing-guide.md)。
 
 ## 命令
@@ -41,11 +40,12 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | R7 | `export const name` 必须等于 `cordis.patch.yml` 的 insert 行 `id`；禁止在 preset 里再注册一个同名 `delegate`。 | 不一致时 loader 找不到插件入口；**global 层同名重复注册会让整个 profile 的插件加载失败**。 | D12；`node tools/check-preset.mjs` |
 | R8 | `inject` 只能是 `['tools']`；`subagents` / `agents` / `userQuestions`（以及将来要用的任何服务）在**调用那一刻**才 `ctx.get`。 | 注册顺序、以及某些服务是否挂载，不该由 apply 时机决定；缺哪个报哪个，而不是让整个 profile 起不来。 | D7；`delegate/index.mjs` 的 `apply` |
 | R9 | 禁止写死任何本机绝对路径或用户根。 | 本模块其实不需要路径；真要就按 `import.meta.url` 推（测试就是这么做的）。 | D12 的正则扫描 |
-| R10 | 派发只走 `subagents.startActivation({provider:'spawn', label, request, signal, delivery:'parent'})` 这一条可续路径；`background:false` 必须**当场报错**，不许静默建成可续；`childId` 取不到不许当成功回报。 | 本机平台（0.2.1-rc.2）的 `SubagentRuntime` 没有 `start` / `startContinuable`，`startActivation` 是唯一入口，spawn provider 一律产出可续子代理。静默改道会把「前台」伪装成成功；`childId` 缺失时子代理可能已建立但没有可接续的 id，假报成功会骗过调度者。 | D9 / D10；design.md 的 I4 |
+| R10 | 派发只走 `subagents.startActivation({provider:'spawn', label, childId, request, signal, delivery:'parent'})` 这一条可续路径（`childId` 是本插件预留的，见 R14）；`background:false` 必须**当场报错**，不许静默建成可续；`childId` 取不到、或回来的 id 与预留的不一致，都不许当成功回报。 | 本机平台（0.2.1-rc.2）的 `SubagentRuntime` 没有 `start` / `startContinuable`，`startActivation` 是唯一入口，spawn provider 一律产出可续子代理。静默改道会把「前台」伪装成成功；`childId` 缺失时子代理可能已建立但没有可接续的 id，假报成功会骗过调度者；id 不一致意味着能力面贴到了一个没有先验登记的对象上，边界不可信。 | D9 / D10 / D31；design.md 的 I4 / I7b / I18 |
 | R11 | 禁止解析 `jobs` 服务、禁止实现一次性路径；`kind` 的 enum 只有 `continuable`，不许在描述或文档里承诺别的路。 | 本插件固定按 continuable 语义工作；没有 `jobs` 就没有一次性后台，硬拿回来只会把一条不存在的路径写进契约。 | design.md 的 I4；`delegate/lib/delegate.mjs` 的 `requireSubagents` |
-| R12 | 禁止在工具描述或文档里把 persona 说成"在子代理原有 persona 上追加"。 | 它经创建后窗口注册成该子代理上的 scoped `deployment:persona-prefix` 段，是**遮蔽**该子代理的部署 persona。 | design.md 的 I7（含**未观测**的量法）；D22 |
+| R12 | 禁止在工具描述或文档里把 persona 说成"在子代理原有 persona 上追加"；也禁止把"调用方没给 persona"实现成**不注册**。 | 它经能力面窗口注册成该子代理上的 scoped `deployment:persona-prefix` 段，是**遮蔽**该子代理的部署 persona（子代理经 `composeFrom` 继承整份 preset，**包括调度者的 persona 段**）。没给时注册一段**空串**才是"没有 persona 段"：不注册等于不遮蔽，子代理会带着调度者的 persona 开工。 | design.md 的 I7（含**未观测**的量法）；D22 / D32 |
 | R13 | `ask_user` 的 owner 必须是**派它的那个调度者**（按配对表取回 id、用 `agents.get(id)` 换成活着的那个 Agent 实例）；取不到就**抛错**，禁止退回"以子代理自己的名义问"。 | 用户提问服务在带 agent 时只认 live runtime root：子代理自己问拿 `DELEGATED_CALLER` —— 那不是"问不到人"，而是"看起来问过了却没人能答"。同一性要求（`agents.get(id) === agent`）决定了不能用 id 或快照顶替，dsh 重启后配对表的旧条目也不作数。 | `delegate/test/delegate.test.mjs` 的 D15 / D17 / D20；`delegate/lib/delegate.mjs` 的 `resolveAskOwner` / `createOwnerIndex` |
-| R14 | 能力面（persona / toolFilter）**只经创建后窗口**下发且 fail-closed：`startActivation` 返回后 `agents.get(childId)` 取活实例贴 `tools.restrict` / persona 段；取不回活实例或 `restrict` / `section` 形状不符 ⇒ **先 `dispose()` 回收再抛错**；禁止把 persona / toolFilter 塞进平台 request。 | 平台 0.2.x 的 `SubagentStartRequest` 没有这两个字段（塞进去会被静默丢弃），委派缝隙里没有别的入口；下发失败还把子代理留着当成功，等于交出一个"没受限、没 persona"的假成果。 | design.md 的 I9 / I16；D8 / D22 / D23 |
+| R14 | 能力面（persona / toolFilter）**只经能力面窗口**下发且 fail-closed：预留 `childId`（`newChildId()`）→ 派发前登记 `createChildFaces()` → `agent/created` 里**同步**贴 `tools.restrict` / persona 段 → `take()` 收口三态（`applied` / `failed` / `pending`）；`failed` 或兜底形状不符 ⇒ **先 `dispose()` 回收再抛错**；返回 id 与预留 id 不一致 ⇒ 抛错；禁止把 persona / toolFilter 塞进平台 request。 | 平台 0.2.x 的 `SubagentStartRequest` 没有这两个字段（塞进去会被静默丢弃），委派缝隙里没有别的入口。**时点**同样是硬要求：`startLocal` 里"装配子代理 → 投递首条 prompt → 返回"是一次性的，等返回再贴就迟了 —— 子代理首轮会带着从 preset 继承来的调度者 persona 定型。下发失败还把子代理留着当成功，等于交出一个"没受限、没 persona"的假成果。 | design.md 的 I7b / I9 / I16；D8 / D22 / D23 / D28–D31 |
+| R15 | `send_message` 是平台续接通道、不是任务能力：只要它在本次可用名里就必须无条件留在 `allow` 里（不随调用方是否点名它而变，`tools: []` 也照留）。 | 平台在 `startActivation` 时就按子代理继承到的工具目录追加「用 send_message 回传结果」的续接提示（`@deepseek-ai/dsh-subagent` `lib/index.js:1460`）；创建后窗口的 `restrict({allow})` 把它剥掉会让提示与工具面自相矛盾。条件化：只在 `knownNames` 里存在时并入（否则 `restrict()` 抛 unknown global tool）。它**不是**内置 deny 的一员，也不得替 `run_code` 开后门。 | D24–D27；`delegate/lib/delegate.mjs` 的 `CONTINUATION_TOOL` / `planToolFilter` |
 
 ## 跨模块路由
 
@@ -53,7 +53,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 |---|---|---|
 | 改工具计划（allow / deny / 忽略口径） | [design.md](design.md) 的「核心数据模型」I1–I6 | [testing-guide.md](testing-guide.md) 的「用例总表」D2–D6 |
 | 改派发路径 | `design.md` 的 I4 / I9 / I10 | 平台契约：`@deepseek-ai/dsh-subagent` 的 `SubagentRuntime.startActivation` 与 `SubagentActivationSpec`；`@deepseek-ai/dsh-tool-subagent` 的同名执行路径（参考实现） |
-| 改创建后窗口（能力面载体） | `design.md` 的 I7 / I16 | 平台对照：`@deepseek-ai/dsh-subagent` 的 `applyChildOverrides` / `applyChildComposition`；`testing-guide.md` 的人工 review 项（竞态） |
+| 改能力面窗口（能力面载体：预留 id / `agent/created` 监听 / 三态收口） | `design.md` 的 I7 / I7b / I16 | 平台对照：`@deepseek-ai/dsh-subagent` 的 `applyChildOverrides` / `applyChildComposition`、`startLocal` 的时序，`@deepseek-ai/dsh-agent` 的 `agent/created` announce；`testing-guide.md` 的人工 review 项（`agent/created` 的时点） |
 | 改工具名或参数 | `preset/agent.cordis.yml` 的调度 persona（**唯一消费方**；`delegate` 是全局层工具名，**不需要写进 preset 的委派行**） | `tools/check-preset.mjs` 的 `KNOWN_TOOLS`（工具名要能过 preset 的静态自检） |
 | 改装载形状（目录名 / 包名 / 装法） | `install.ps1` / `install.sh`（接线在安装脚本里） | `permission/AGENTS.md` 的「跨模块路由」与 `notify/design.md` 的装载不变量（同一种装法，本模块不另立一套） |
 | 改「读不出可用工具名」的降级口径 | `design.md` 的 I6 | `testing-guide.md` 的人工 review 项；根 `AGENTS.md` 的「诚实原则」 |
@@ -68,9 +68,9 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 
 | 改了什么 | 怎么生效 | 怎么复核 |
 |---|---|---|
-| `delegate/` 任何文件 | 重装子插件（`install.*`：稳定副本 + `dsh plugin --profile <p> add`）+ **重启 dsh** + 新会话 | `cd delegate && node --test test`；再在新会话里让调度者用一次 `delegate`（给一个 `tools` 清单与一段 persona），按 [testing-guide.md](testing-guide.md) 的「验证 ≠ 装载」核对 `tools_note` 与子代理实际拿到的工具面 |
+| `delegate/` 任何文件 | 重装子插件（`install.*`：稳定副本 + `dsh plugin --profile <p> add`）+ **重启 dsh** + 新会话（监听器在插件装载那一刻注册，运行中的旧会话不补挂） | `cd delegate && node --test test`；再在新会话里让调度者用一次 `delegate`（给一个 `tools` 清单；再派一次**不给** persona），按 [testing-guide.md](testing-guide.md) 的「验证 ≠ 装载」核对 `tools_note`、子代理首轮的工具面，以及首轮有没有调度者 persona 残留 |
 | 本模块任何 `.md` 文档 | 立即生效（只是文件） | 按 `adg-doc-criterion` 技能的质量红线清单自检 |
 
-**未观测**：装好子插件并重启 dsh 之后，`delegate` 是否真出现在调度者的工具面里、子代理是否真按这一次的 `tools` 与 `persona` 建立（含创建后窗口的竞态，见 I16）；量法：在新会话里让调度者用一次 `delegate`（给一个 `tools` 清单与一段 persona），按 [testing-guide.md](testing-guide.md) 的「验证 ≠ 装载」核对 `tools_note` 与子代理首轮自报的工具面 / persona 段。
+**未观测**：装好子插件并重启 dsh 之后，`delegate` 是否真出现在调度者的工具面里、子代理是否真按这一次的 `tools` 与 `persona` 建立（含 `agent/created` 是否恒在首轮装配之前，见 I7b）；量法：在新会话里让调度者用一次 `delegate`（给一个 `tools` 清单、一次**不给** persona），按 [testing-guide.md](testing-guide.md) 的「验证 ≠ 装载」核对 `tools_note` 与子代理**首轮**自报的工具面 / persona 段 —— 首轮不该出现调度者 persona。
 
 **接线两半已成立**：`delegate` 在 `tools/check-preset.mjs` 的 `KNOWN_TOOLS` 里（与 `agent` 相邻的两条），判据＝`node tools/check-preset.mjs` exit 0；调度 persona 也显式提到它（`preset/agent.cordis.yml` 的「你手上的子代理」段写明"委派用 `delegate`"）。

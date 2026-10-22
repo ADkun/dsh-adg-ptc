@@ -61,6 +61,21 @@ export const BUILTIN_DENY = Object.freeze([
 export const RESERVED_PTC_NAME = 'run_code';
 
 /**
+ * 平台为**可续子代理**提供的续接通道（结果回传），不是"任务能力面"。
+
+ * 平台在 `startActivation` 时（`delivery !== "caller"`）会按子代理**继承到的**工具目录判定
+ * `isAdjacentAgentSendMessageTool(...)`；`send_message` 在，就在这次 prompt 末尾追加
+ * 「用 send_message 把结果回传给父代理」的续接提示（证据行：`@deepseek-ai/dsh-subagent`
+ * `lib/index.js:1460`，标记注册见 `lib/types/internal.js:13-16`）。adg-delegate 随后在创建后
+ * 窗口用 `tools.restrict({allow: [...]})` 把没被点名的它剥掉，就会出现"提示让你调它、工具面
+ * 却没有它"的自相矛盾。所以只要它在本次可用名里，本插件**无条件**把它并入最终 allow 清单。
+
+ * 条件化是必需的：不在 `knownNames` 里还强行并入，平台 `restrict()` 会抛
+ * `names unknown global tool ...`，整次委派当场失败（根 AGENTS.md 红线 7 同源）。
+ */
+export const CONTINUATION_TOOL = "send_message";
+
+/**
  * 调用方（调度）智能体。没有它就没有"派出去"这回事 —— 与平台 subagent 工具同一条口径。
  * @param {{agent?: object}} [exec] 工具执行上下文
  * @param {string} [toolName] 报错时用的工具名（`ask_user` 与 `delegate` 共用这段断言）
@@ -114,7 +129,14 @@ export function readRestrictableNames(parent) {
  * 语义（与平台 `ToolRestriction` 同形，两者都是"只减不增"）：
  * - `tools` 省略 ⇒ 只下发 `{deny: <内置名单∩可用名>}`，子代理拿到它继承到的全部减去那几项。
  * - `tools` 给了 ⇒ 下发 `{allow: <清单∩可用名>, deny: <内置名单∩可用名>}`，先按 deny 去掉、再按 allow 只留。
- * - `tools` 是空数组 ⇒ `{allow: [], …}`：什么都不给。
+ * - `tools` 是空数组 ⇒ `{allow: [], …}`：任务能力一个不给，但平台续接通道照留（见下）。
+ *
+ * **`send_message` 是平台续接通道、不是任务能力**：平台在 `startActivation` 时就按子代理继承到的
+ * 工具目录追加了"用它回传结果"的提示（见 `CONTINUATION_TOOL` 常量注释与 design.md 的 I17）。
+ * 只要它在本次可用名里，就**无条件**并入最终 allow 清单，不随调用方有没有点名它而变；调用方
+ * 已经点名过就不再重复追加。`requested === undefined` 走纯 deny 分支，`send_message` 本来就在
+ * 继承目录里，不需要动。`plan.tools` 就是"实际下发给子代理的 allow 清单"：调用方点名的可用名
+ * 按点名顺序在前，续接通道追加在末尾；省略 `tools` 时是 `[]`（未过滤的意思写在 tools_note 里）。
  *
  * 三条处理口径（`ignored` 与 `tools` 一起回显给调用方，**不静默丢弃**）：
  * - 对照表里没有的名字 → `reason: 'unknown'`，剔除并写进 tools_note；
@@ -175,6 +197,14 @@ export function planToolFilter(requested, knownNames) {
     tools.push(raw);
   }
 
+  // `send_message` 是平台续接通道、不是任务能力（见 `CONTINUATION_TOOL`）：只要它在本次可用名里就
+  // **无条件**并入最终 allow 清单，不随调用方有没有点名它而变；点名过就不再重复追加。
+  // 省略 `tools` 的纯 deny 分支不剥它（它本来就在继承目录里），所以只在这里动。
+  if (knownNames.has(CONTINUATION_TOOL) && !seen.has(CONTINUATION_TOOL)) {
+    seen.add(CONTINUATION_TOOL);
+    tools.push(CONTINUATION_TOOL);
+  }
+
   return { provided: true, denyNames, tools, ignored, filter: { allow: tools, deny: denyNames } };
 }
 
@@ -197,6 +227,9 @@ export function toolsNote(plan) {
     parts.push('空清单：本次不给子代理任何工具');
   } else {
     parts.push(`只保留 ${plan.tools.length} 个：${plan.tools.join('、')}`);
+    if (plan.tools.includes(CONTINUATION_TOOL)) {
+      parts.push(`${CONTINUATION_TOOL} 是平台续接通道，不是任务能力，本次一并保留以便回传结果`);
+    }
   }
   if (plan.ignored.length > 0) {
     const described = plan.ignored.map(
@@ -243,26 +276,46 @@ export function continuableChildId(started) {
   return childId;
 }
 
+/** persona 段的段名（与平台 `applyChildOverrides` / `dsh-persona` 同一个名字，靠同名遮蔽）。 */
+export const PERSONA_SECTION = 'deployment:persona-prefix';
+
 /**
- * 把这次委派的能力面（persona / toolFilter）贴到**已建立**的子代理身上。
+ * 本次委派该贴在子代理身上的能力面。**persona 恒为字符串**（调用方没给就是空串）：
+ * 空串不是"跳过"，而是"用一段空段遮蔽掉子代理从 preset 继承来的调度者 persona"（见 I7）。
+ *
+ * @param {{persona?: string}} args 调用方实参
+ * @param {ReturnType<typeof planToolFilter>} plan 本次工具计划
+ * @returns {{persona: string, filter: {allow?: string[], deny: string[]} | undefined}}
+ */
+export function buildFace(args, plan) {
+  return {
+    persona: typeof args?.persona === 'string' ? args.persona : '',
+    filter: plan?.filter,
+  };
+}
+
+/**
+ * 把这次委派的能力面（persona / toolFilter）贴到子代理的 scoped ctx 上。
  *
  * 平台 0.2.x 把 per-child 组合从委派缝隙里拿掉了：`SubagentStartRequest` 没有
- * persona / toolFilter 字段，`startLocal` 组装 composition 时只带 agentPreset，
- * 平台参考实现（tool-subagent）也把这件事挪进了 Agent Preset。本插件要保住
- * 「每一次委派现给工具面与 persona」，只能用创建后窗口：子代理的 ctx 是 scoped 的，
- * `tools.restrict()` 与 `systemPrompt.section()` 都活生效 —— 它第一轮请求的
- * 系统提示词与工具目录在这之后才装配。形状与平台 `applyChildOverrides` 一致：
- * persona 注册成 `deployment:persona-prefix` 段（遮蔽部署 persona），toolFilter
- * 走 `tools.restrict()`（名字已在调用方视图上校验过，只减不增）。
+ * persona / toolFilter 字段，`startLocal` 组装 composition 时只带 agentPreset，子代理
+ * 经 `composeFrom` 继承整份 preset —— **包括调度者的 persona 段**。形状与平台
+ * `applyChildOverrides` 一致：persona 注册成同名的 `deployment:persona-prefix` 段，
+ * 靠"最近 scope 的同名条目压过祖先"遮蔽它；toolFilter 走 `tools.restrict()`
+ * （名字已在调用方视图上校验过，只减不增）。
  *
- * @param {object|undefined} child 子代理 Agent（`agents.get(childId)` 的活实例）
+ * **persona 一律注册**（调用方没给就注册空串）：不注册等于不遮蔽，子代理就会带着
+ * 调度者的 persona 开工 —— 那正是本函数的调用窗口必须抢在首轮装配之前的原因（见 I7 的
+ * 时点不变量与 I18 的预留 childId）。空段在渲染时被丢弃，效果就是"没有 persona 段"。
+ *
+ * @param {object|undefined} child 子代理 Agent（建立窗口里是 `agent/created` 给的那个活实例）
  * @param {{persona?: string, filter?: {allow?: string[], deny: string[]}}} face
  * @returns {string[]} 实际施加的项目（'toolFilter' / 'persona'）
  */
 export function applyChildFace(child, { persona, filter } = {}) {
   if (child === undefined || child?.ctx === undefined) {
     throw new Error(
-      `${TOOL_NAME}: 建立子代理后取不到它的活实例（agents.get 返回 ${describeValue(child)}）` +
+      `${TOOL_NAME}: 取不到子代理的活实例（got ${describeValue(child)}）` +
         ' —— 这次的能力面与 persona 下不去，不能当成成功回报',
     );
   }
@@ -277,22 +330,85 @@ export function applyChildFace(child, { persona, filter } = {}) {
     child.ctx.tools.restrict(filter);
     applied.push('toolFilter');
   }
-  if (persona !== undefined) {
-    const systemPrompt = child.ctx.systemPrompt;
-    if (typeof systemPrompt?.section !== 'function' || typeof systemPrompt?.getSectionOrder !== 'function') {
-      throw new Error(
-        `${TOOL_NAME}: 子代理 ctx.systemPrompt.section 不可用（API 形状变了）—— ` +
-          'persona 下不去，拒绝把「没给 persona」当成「给了」回报',
-      );
-    }
-    systemPrompt.section({
-      name: 'deployment:persona-prefix',
-      order: systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
-      text: persona,
-    });
-    applied.push('persona');
+  const systemPrompt = child.ctx.systemPrompt;
+  if (typeof systemPrompt?.section !== 'function' || typeof systemPrompt?.getSectionOrder !== 'function') {
+    throw new Error(
+      `${TOOL_NAME}: 子代理 ctx.systemPrompt.section 不可用（API 形状变了）—— ` +
+        'persona 下不去，拒绝把「没给 persona」当成「给了」回报',
+    );
   }
+  systemPrompt.section({
+    name: PERSONA_SECTION,
+    order: systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+    text: typeof persona === 'string' ? persona : '',
+  });
+  applied.push('persona');
   return applied;
+}
+
+/**
+ * 为一次委派预留的 `childId`（`randomUUID`，与平台 `startLocal` 缺省生成的那一个同形）。
+ *
+ * 为什么要自己预留：平台在 `startActivation` 的 `startLocal` 里既**装配子代理**（此时
+ * `composeFrom` 把调度者 persona 落进它的 scope），又**投递首条 prompt**，然后才返回；
+ * 返回之后再去贴 persona 就晚了 —— 子代理第一轮请求可能已经按调度者 persona 装配完毕
+ * （轨迹里那条「系统提示词已更新」就是这个晚了一步的窗口）。预留 id 让本插件在子代理
+ * **建立窗口**（`agent/created`）里就认得出它、并把 persona 抢在首轮装配之前贴上去。
+ *
+ * @returns {string} 本次子代理的会话 id
+ */
+export function newChildId() {
+  const uuid = globalThis.crypto?.randomUUID;
+  if (typeof uuid !== 'function') {
+    throw new Error(`${TOOL_NAME}: 运行环境没有 globalThis.crypto.randomUUID，无法预留子代理 id`);
+  }
+  return uuid.call(globalThis.crypto);
+}
+
+/**
+ * 「本次委派 → 待贴能力面」表：按**预留的 childId** 索引，跨 `startActivation` 的等待窗口。
+ *
+ * 三个动作对应三段时序：`remember` 在派发**之前**登记；`applyFor` 由全局层的
+ * `agent/created` 监听在子代理建立窗口里同步调用（抢在首轮装配之前）；`take` 在
+ * `startActivation` 返回后取回结论 —— 已贴、贴失败（带原始错误）、或压根没赶上。
+ *
+ * 监听器里**吞掉**异常只记状态，不往外抛：`agent/created` 抛错会让平台整个 create 失败，
+ * 那样既拿不到可诊断的错误、又绕过了本插件"先回收再抛错"的收尾（I9）。真正报错由
+ * `take` 之后的那一步做。
+ *
+ * 条目只在 `take` 时删除 —— 建立失败 / 没赶上都要经过它，所以不会有残留。
+ *
+ * @returns {{remember: (childId: string, face: object) => void, applyFor: (agent: object) => boolean, take: (childId: string) => object|undefined, size: () => number}}
+ */
+export function createChildFaces() {
+  const faces = new Map();
+  return {
+    remember(childId, face) {
+      if (typeof childId !== 'string' || childId === '') return;
+      faces.set(childId, { face, status: 'pending', error: undefined });
+    },
+    applyFor(agent) {
+      const childId = agent?.id;
+      const entry = typeof childId === 'string' ? faces.get(childId) : undefined;
+      if (entry === undefined || entry.status !== 'pending') return false;
+      try {
+        applyChildFace(agent, entry.face);
+        entry.status = 'applied';
+      } catch (error) {
+        entry.status = 'failed';
+        entry.error = error;
+      }
+      return true;
+    },
+    take(childId) {
+      const entry = faces.get(childId);
+      faces.delete(childId);
+      return entry;
+    },
+    size() {
+      return faces.size;
+    },
+  };
 }
 
 /**
@@ -300,7 +416,7 @@ export function applyChildFace(child, { persona, filter } = {}) {
  *
  * @param {{description: string, prompt: string, tools?: string[], persona?: string, background?: boolean}} args
  * @param {{agent?: object, signal?: AbortSignal}} exec 工具执行上下文
- * @param {{services?: () => object, rememberChild?: (childId: string, parent: object) => void}} [deps]
+ * @param {{services?: () => object, rememberChild?: (childId: string, parent: object) => void, rememberFace?: (childId: string, face: object) => void, takeFace?: (childId: string) => object|undefined}} [deps]
  * @returns {Promise<{description: string, subagent_id: string, kind: string, tools: string[], tools_note: string, persona: 'set'|'unset'}>}
  */
 export async function delegate(args, exec, deps = {}) {
@@ -321,35 +437,52 @@ export async function delegate(args, exec, deps = {}) {
 
   const subagents = requireSubagents(deps);
   const request = buildRequest(args, parent);
+  const face = buildFace(args, plan);
+
+  // 预留 childId：能力面要在子代理**建立窗口**里贴上（首轮装配之前），而那个窗口拿不到
+  // 本插件的返回值 —— 只有 id 是双方都知道的（见 I18）。deps.rememberFace 是全局层
+  // `agent/created` 监听要用的那条登记。
+  const childId = newChildId();
+  deps.rememberFace?.(childId, face);
   const started = await subagents.startActivation({
     provider: SUBAGENT_PROVIDER,
     label: args.description,
+    childId,
     request,
     signal,
     delivery: 'parent',
   });
-  const childId = continuableChildId(started);
+  const establishedId = continuableChildId(started);
+  if (establishedId !== childId) {
+    deps.takeFace?.(childId);
+    throw new Error(
+      `${TOOL_NAME}: startActivation 返回的 childId（${establishedId}）与预留的 ${childId} 不一致 —— ` +
+        '能力面被贴到了一个不存在先验登记的 id 上，这次委派的能力边界不可信，不能当成成功回报',
+    );
+  }
 
-  // 能力面在创建后窗口贴上去；贴失败就当场回收这个子代理再抛错 —— 绝不把「没受限」当成功。
-  const face = { persona: args.persona, filter: plan.filter };
-  if (face.persona !== undefined || face.filter !== undefined) {
-    try {
-      const agents = deps.services?.()?.agents;
-      if (typeof agents?.get !== 'function') {
-        throw new Error(
-          `${TOOL_NAME}: 需要 agents 服务（@deepseek-ai/dsh-agent 的 AgentRegistry）` +
-            '来取回刚建立的子代理并下发这次的能力面',
-        );
-      }
-      applyChildFace(agents.get(childId), face);
-    } catch (error) {
-      try {
-        await started.dispose?.();
-      } catch {
-        /* 回收失败不掩盖原始错误：真正要报的是能力面那一条 */
-      }
-      throw error;
+  // 建立窗口的结果：'applied' = persona 已抢在首轮装配前贴上；'pending' = 监听没赶上
+  // （平台没发 agent/created，或本插件没挂监听）；'failed' = 贴的时候抛了错。
+  const settlement = deps.takeFace?.(childId);
+  try {
+    if (settlement?.status === 'failed') {
+      throw settlement.error;
     }
+    if (settlement?.status === 'applied') {
+      // 已经贴上：toolFilter 随 applyChildFace 一起下发过了，这里不再重复 restrict。
+      deps.rememberChild?.(childId, parent);
+      return delegationResult(args, 'continuable', childId, plan);
+    }
+    // 没赶上建立窗口（或本插件没有那条监听）：退回创建后窗口贴一次。此时 persona 还来得及
+    // 遮蔽后续轮次，但可能已经错过第一轮 —— 这条路径不该在正常装配下出现（I7 的时点不变量）。
+    applyChildFace(requireChild(deps, childId), face);
+  } catch (error) {
+    try {
+      await started.dispose?.();
+    } catch {
+      /* 回收失败不掩盖原始错误：真正要报的是能力面那一条 */
+    }
+    throw error;
   }
 
   // 留一条配对：子代理后来调 `ask_user` 时，靠它把问题以**你**的名义问出去（I13）。
@@ -358,7 +491,31 @@ export async function delegate(args, exec, deps = {}) {
 }
 
 /**
+ * 取回刚建立的子代理活实例（创建后窗口的**兜底**路径 + `agents` 服务的 fail-closed 断言）。
+ *
+ * 正常装配下不该走到这里：能力面在建立窗口（`agent/created`）就贴完了（I7b）。走到这里意味着
+ * `settlement.status === 'pending'`（没赶上建立窗口），此时至少要把 persona 的遮蔽补上 ——
+ * 补不上（服务缺失 / 取不到活实例）就抛错，由调用方回收子代理（I9）。
+ * @param {{services?: () => object}} deps
+ * @param {string} childId 子代理会话 id
+ * @returns {object} 子代理 Agent
+ */
+function requireChild(deps, childId) {
+  const agents = deps.services?.()?.agents;
+  if (typeof agents?.get !== 'function') {
+    throw new Error(
+      `${TOOL_NAME}: 需要 agents 服务（@deepseek-ai/dsh-agent 的 AgentRegistry）` +
+        '来取回刚建立的子代理并下发这次的能力面',
+    );
+  }
+  return agents.get(childId);
+}
+
+/**
  * 本工具结果。`tools` 回显真的下发的清单（省略 tools 时是空数组，清单在 tools_note 里讲清）。
+ *
+ * `persona` 的口径与 `buildFace` 一致：只有**非空字符串**才算 `set`；其余一律 `unset`
+ * （那种情况下本插件贴的是一段空段，净效果就是"没有 persona 段" —— 不许回报成给了）。
  * @returns {{description: string, subagent_id: string, kind: string, tools: string[], tools_note: string, persona: 'set'|'unset'}}
  */
 function delegationResult(args, kind, subagentId, plan) {
@@ -368,7 +525,7 @@ function delegationResult(args, kind, subagentId, plan) {
     kind,
     tools: plan.tools,
     tools_note: toolsNote(plan),
-    persona: args.persona === undefined ? 'unset' : 'set',
+    persona: typeof args.persona === 'string' && args.persona !== '' ? 'set' : 'unset',
   };
 }
 

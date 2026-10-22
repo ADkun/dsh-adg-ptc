@@ -9,8 +9,8 @@ last_reviewed: 2026-10-19
 
 两层验证，别把它们混成一层：
 
-- **机制层**（自动化、可离线）：工具计划、请求装配、唯一派发路径的分支、创建后窗口的能力面下发、错误口径、入口与 bundle 的形状 —— 全在 `delegate/test/delegate.test.mjs` 里，用假服务与假调用方跑。
-- **装载层**（只能重启后观测）：`cordis.patch.yml` 能不能被 loader 装载、`delegate` 真出现在调度者的工具面里、子代理真的按这次的 `toolFilter` 与 `persona` 建立（含创建后窗口的竞态）—— 单元测试与静态自检都看不到这些。
+- **机制层**（自动化、可离线）：工具计划、请求装配、唯一派发路径的分支、能力面在建立窗口的下发（含兜底与失败回收）、错误口径、入口与 bundle 的形状 —— 全在 `delegate/test/delegate.test.mjs` 里，用假服务与假调用方跑。
+- **装载层**（只能重启后观测）：`cordis.patch.yml` 能不能被 loader 装载、`delegate` 真出现在调度者的工具面里、子代理真的按这次的 `toolFilter` 与 `persona` 建立（含建立窗口与首轮装配的先后）—— 单元测试与静态自检都看不到这些。
 
 ## 命令
 
@@ -27,13 +27,13 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 |---|---|---|---|---|
 | D1 | `createDelegateTool()` 用**真的** `defineTool` | 参数是隐式属性映射（必填收成顶层 `required: ['description','prompt']`）、`tools` 是 string 数组；output 是对象根 + `additionalProperties:false` + 六个字段；两个反向对照（对象根写进 `parameters` ⇒ `parameters.type must be a value schema object`；缺 `output` ⇒ 读 `output.render` 的 TypeError）；`isConcurrencySafe(合法实参) === true`、`({}) === false` | I11 | `delegate/test/delegate.test.mjs` D1 |
 | D2 | `planToolFilter` / `delegate` + 假子代理 | `tools` 省略 ⇒ 假子代理的 `restrict` 收到只有 `deny` 的滤镜（没有 `allow` 键）；瘦 profile（`['Read','delegate']`）⇒ deny 只有 `delegate`；`tools` 回显 `[]`；note 以「未过滤」开头 | I1 / I2 | D2 |
-| D3 | 同上 | 给清单 ⇒ `allow` 与 `deny` 同时下发，`allow` 只留清单里的可用名 | I1 | D3 |
+| D3 | 同上 | 给清单 ⇒ `allow` 与 `deny` 同时下发，`allow` 只留清单里的可用名（+ 平台续接通道 `send_message`，I17） | I1 / I17 | D3 |
 | D4 | 同上 | 未知名剔除、同名去重、`ignored` 保持点名顺序、逐条进 `tools_note`；空字符串这种坏值抛错 | I3 | D4 |
-| D5 | 同上 | 六个内置名被点名也不进 `allow`（且仍在 `deny` 里）；`notify_user` **不在**名单里、可以进 `allow`；`tools: []` ⇒ `allow: []` + 「空清单」 | I1 | D5 |
+| D5 | 同上 | 六个内置名被点名也不进 `allow`（且仍在 `deny` 里）；`notify_user` **不在**名单里、可以进 `allow`；`tools: []`（瘦 profile，无 `send_message`）⇒ `allow: []` + 「空清单」 | I1 / I17 | D5 |
 | D6 | 同上 | `run_code` ⇒ 抛错（消息含 `run_code` 与「PTC 传输保留名」），且发生在调用任何服务之前（`startActivation` 零调用、`restrict` 零调用） | I5 | D6 |
 | D7 | `assertCallerAgent` / `delegate` | 没有 `exec.agent` ⇒ 抛错；缺 `subagents` 服务 ⇒ 报清楚是哪个服务 | — | D7 |
 | D8 | `buildRequest` | request 键恰为 `['prompt','parent']`；`label` / `signal` 不进 request（它们在 `SubagentActivationSpec` 上）；persona / toolFilter / maxDepth 都**不进** request | I7 / I8 / I16 | D8 |
-| D9 | `delegate` + 假 `subagents` / 假子代理 | 缺省与显式 `background: true` 都走 `startActivation`，spec 键恰为 `provider,label,request,signal,delivery`、`provider === 'spawn'`、`delivery === 'parent'`、`signal` 同源、`request.parent` 就是调用方；能力面贴到假子代理的 `restrict`（deny 恰为内置名单）；没给 persona ⇒ `systemPrompt` 零调用；`childId` 取不到 ⇒ 抛错；`view` 的实参就是那个 Agent 对象 | I4 / I8 / I10 / I16 | D9 |
+| D9 | `delegate` + 假 `subagents` / 假子代理 | 缺省与显式 `background: true` 都走 `startActivation`，spec 键恰为 `provider,label,childId,request,signal,delivery`、`provider === 'spawn'`、`delivery === 'parent'`、`signal` 同源、`request.parent` 就是调用方、`spec.childId` 就是回报的那个 id；能力面贴到假子代理的 `restrict`（deny 恰为内置名单）；**没给 persona 也注册一个空 persona 段**（空段＝遮蔽继承来的调度者 persona）；`childId` 取不到 ⇒ 抛错；`view` 的实参就是那个 Agent 对象 | I4 / I7 / I8 / I10 / I16 / I7b | D9 |
 | D10 | `delegate` + 假 `subagents` | `background: false` ⇒ 抛错（消息说明"当前 dsh 版本不可用"），且 `startActivation` 零调用、`restrict` 零调用 | I4 | D10 |
 | D11 | `readRestrictableNames` | `view` 不是函数 / 返回 `{}` / 返回空 `Set` ⇒ 三种都抛错且零服务调用；形状对了返回 `Set` | I6 | D11 |
 | D12 | 三个源文件 + `package.json` | 入口三件套在位；`name` = patch 的 `id` = 包名；`type` / `main` / `dsh.bundle.patch` 正确；**没有** `dependencies`；纯逻辑层零 `import`；两个源文件里没有盘符绝对路径与用户根 | I11 | D12 |
@@ -46,10 +46,21 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | D19 | `createOwnerIndex` / `BUILTIN_DENY` | 配对表只记「非空 childId + 有 id 的 parent」；`ask_user` 的名字**不在** `BUILTIN_DENY` 里（子代理必须有提问通道） | I12 | D19 |
 | D20 | `delegate` + 假 `subagents` | 可续路径把 `(childId → 调用方)` 交给配对表，且用的是取回来的那个 id | I13 | D20 |
 | D21 | 真 `defineTool` 编出的 `ask_user` | 在假服务上跑通一次完整调用，`output.render` 出一行人话（含问了几个问题、以谁的名义） | — | D21 |
-| D22 | `applyChildFace` | persona 注册成 `{name:'deployment:persona-prefix', order:getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text}` 段、toolFilter 走 `tools.restrict`；空 face ⇒ 零贴；取不到活实例 / `restrict` 不是函数 / `section` 不可用 ⇒ 三种都抛错（fail-closed） | I7 / I16 | D22 |
-| D23 | `delegate` 的失败回收 | 能力面下发失败（`agents` 服务缺失 / `get` 回 `undefined`）⇒ `startActivation` 返回值的 `dispose` 被调**一次** + 抛错（绝不留未受限子代理当成功）；正常路径零回收 | I9 / I16 | D23 |
+| D22 | `applyChildFace` | persona **一律**注册成 `{name:'deployment:persona-prefix', order:getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text}` 段（给了就是那段文本，没给就是空串＝遮蔽）、toolFilter 走 `tools.restrict`；取不到活实例 / `restrict` 不是函数 / `section` 不可用 ⇒ 三种都抛错（fail-closed） | I7 / I16 | D22 |
+| D23 | `delegate` 的失败回收 | 兜底路径（没赶上建立窗口）里 `agents` 服务缺失 / `get` 回 `undefined` ⇒ `startActivation` 返回值的 `dispose` 被调**一次** + 抛错（绝不留未受限子代理当成功）；正常路径零回收 | I9 / I16 | D23 |
+| D24 | `planToolFilter` | 显式传 `tools`（不含 `send_message`）⇒ `plan.tools` / `filter.allow` 末尾仍含 `CONTINUATION_TOOL`；点名过不再重复追加；`tools_note` 点明保留原因 | I17 | D24 |
+| D25 | `planToolFilter` | `knownNames` 不含 `send_message` ⇒ 不注入（`allow` 只留点名的可用名）且不抛错；`tools: []` 在无通道时仍是空清单 + 「空清单」 | I17 / I6 | D25 |
+| D26 | `delegate` + 假子代理 | `tools: []`（有 `send_message`）⇒ 假子代理 `restrict` 收到的 `allow` 恰为 `['send_message']`（平台提示照样会被追加） | I17 | D26 |
+| D27 | `toolsNote` | 保留 `send_message` 时文案含「send_message 是平台续接通道，不是任务能力，本次一并保留以便回传结果」 | I17 | D27 |
+| D28 | `delegate` + 假 runtime 的**建立窗口回调** | 能力面在 `startActivation` **返回之前**就贴上（回调里 `restrict` 与 persona 段各一次）；返回后**不再**重复贴（同名段重复注册会抛）；头一轮装配看到的就是这次的 persona | I7b / I16 | D28 |
+| D29 | `delegate` + 关闭建立窗口的假 runtime | 漏过建立窗口（`take` 回 `pending`）⇒ 退回创建后窗口贴**一次**（persona 段照样落到子代理身上，兜底不静默） | I7b / I16 | D29 |
+| D30 | 建立窗口里贴失败 | 子代理 `ctx` 缺 `systemPrompt` ⇒ 监听器**不吞**该结论：`delegate` 取回 `failed` 后先 `dispose()` 再抛原始错误（`systemPrompt\.section 不可用`） | I9 / I7b | D30 |
+| D31 | 预留 id 与平台回显不一致 | 假 runtime 回一个别的 id ⇒ 抛错（消息含「与预留的」），且待贴表**零残留**（不许把贴到未知 id 的东西当成功） | I7b | D31 |
+| D32 | `buildFace` / `newChildId` | persona **恒为字符串**：没给 = `''`、非字符串（如 `42`）= `''`、给了就是那段文本；`newChildId()` 是 36 位 uuid 且两次不同 | I7 | D32 |
+| D33 | `delegate` 的 persona 回显 | 给了非空字符串 ⇒ `out.persona === 'set'`；给空串或没给 ⇒ `'unset'`；**三种情况下 persona 段都注册了一次**（unset 时 `text === ''`，靠它遮蔽继承来的调度者 persona） | I7 | D33 |
+| D34 | `createChildFaces().applyFor` | 贴的时候抛错 ⇒ `applyFor` **不抛**、只把 `status` 记成 `failed` 并留存原始错误（`agent/created` 的派发方不该被本插件的失败拖垮）；没登记 / 已收口 / 传 `undefined` ⇒ 一律 `false` | I7b | D34 |
 
-**测试纪律**：造工具定义一律用**真的** `defineTool`（作者侧 schema 方言与 `output` 硬要求只有真实现判得了）；假件只替换服务、调用方与子代理运行时，**不**替换 schema 编译器。假 `subagents` 只实现 `startActivation`（平台唯一入口）并记录 `dispose`；假子代理用 ledger 记下 `restrict` / `section` 的每次调用 —— persona / toolFilter 走创建后窗口，测试就在这个窗口的**接收端**断言。用例之间不共享可变状态，所以可以任意顺序、并发跑。
+**测试纪律**：造工具定义一律用**真的** `defineTool`（作者侧 schema 方言与 `output` 硬要求只有真实现判得了）；假件只替换服务、调用方与子代理运行时，**不**替换 schema 编译器。假 `subagents` 只实现 `startActivation`（平台唯一入口）并记录 `dispose`，它的 `onCreate` 回调模拟平台"装配子代理 → `agent/created` → 投递首条 prompt → 返回"的**建立窗口**；假子代理用 ledger 记下 `restrict` / `section` 的每次调用 —— persona / toolFilter 在建立窗口贴，测试就在这个窗口的**接收端**断言。用例之间不共享可变状态，所以可以任意顺序、并发跑。
 
 ## 迁移矩阵
 
@@ -61,8 +72,8 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 
 | 契约面 | 用例 |
 |---|---|
-| `SubagentRuntime.startActivation(spec)` 的 spec 键（`provider` / `label` / `request` / `signal` / `delivery:'parent'`）与 `SubagentActivation.childId` | D9 |
-| 创建后窗口：`AgentRegistry.get(childId)` 活实例上的 `tools.restrict(filter)` / `systemPrompt.section('deployment:persona-prefix')` | D22 / D23 |
+| `SubagentRuntime.startActivation(spec)` 的 spec 键（`provider` / `label` / `childId` / `request` / `signal` / `delivery:'parent'`）与 `SubagentActivation.childId`（预留 id 必须原样回来） | D9 / D31 |
+| 能力面窗口：`agent/created` 活实例上的 `tools.restrict(filter)` / `systemPrompt.section('deployment:persona-prefix')`，兜底走 `AgentRegistry.get(childId)` | D22 / D23 / D28–D31 |
 | `ToolRestriction{allow?, deny?}` 的两侧下发与"只减不增"的用法 | D2 / D3 / D5 |
 | `SubagentStartRequest` 的键集（只有 `prompt` / `parent`；**永不出现** `maxDepth`，也没有 persona / toolFilter 的位置） | D8 / D9 |
 | `tools.view(agent).restrictableNames`（含读不出时的 fail-closed 分支） | D11 |
@@ -72,15 +83,15 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 
 ## 验证 ≠ 装载
 
-- **能证明的**：工具计划、请求装配、唯一派发路径的分支、创建后窗口的调用形状、错误口径、入口与 bundle 的形状、零依赖。
+- **能证明的**：工具计划、请求装配、唯一派发路径的分支、能力面在建立窗口的调用形状与三态收口、错误口径、入口与 bundle 的形状、零依赖。
 - **证明不了的**：`delegate/cordis.patch.yml` 能被 loader 装载；`delegate` 与 `ask_user` 真出现在调度者 / 子代理的工具面里；子代理真的按这次的 `toolFilter` 与 `persona` 建立；`ask_user` 的卡片真落在调度者会话里、用户作答后答复真回到子代理（后两个假件与客户端渲染那一段）。
 - **一条很容易踩的假证据**：用例里的 `subagents` 是假件 —— "D9 通过"只说明本插件**交给平台的 spec 形状**对，不说明平台接受了它。`startActivation` 的前置校验（parent 同一性、capabilities）、provider 是否放行那批名字，只有真实挂载（或一次真委派）能观测。
-- **第二条同样的假证据**：用例里的假子代理是本插件自造的 —— "D22 通过"只说明**调用形状**对；`tools.restrict` 与 `systemPrompt.section` 在真子代理身上是不是活生效、以及第一轮请求的装配是否晚于能力面下发（竞态，见 I16），只有真会话能观测。
+- **第二条同样的假证据**：用例里的假子代理与假建窗回调都是本插件自造的 —— "D22 / D28 通过"只说明**调用形状与时点**对；`tools.restrict` 与 `systemPrompt.section` 在真子代理身上是不是活生效、平台的 `agent/created` 是否真在首轮装配之前（I7b），只有真会话能观测。
 - **第三条**：用例里的 `agents` / `userQuestions` 也是假件 —— "D15 通过"只说明**请求形状**对；用户提问服务的 `assertLiveRoot` 同一性判定、卡片的渲染与回收、答复走的耐久路径，只有真会话能观测。
 
 ## 人工 review 项
 
-**未观测**：创建后窗口与子代理 loop 的竞态（I16）—— `startActivation` 返回后、能力面贴上之前，子代理是否可能已经 claim inbox 并装配第一轮请求（若发生，首条 prompt 的系统提示词与工具目录不受这次 tools / persona 约束）；量法：真实会话里委派一次带 `tools` 清单与 persona 的子代理，让它**首轮就**报告自己的工具面与 persona 段，与 `tools_note` 比对。
+**未观测**：`agent/created` 是否**恒**在 `startLocal` 返回之前送达（I7b）—— 若平台把子代理的 announce 推迟到投递之后，本插件的建立窗口就会落空、退回创建后窗口，子代理首轮仍会带着调度者 persona；量法：真实会话里委派一次**不给 persona** 的子代理，让它**首轮就**报告自己的 persona 段（应当没有调度者 persona 残留）与工具面（应当已按 `tools_note` 裁过），若首轮不合口径就查 `settlement.status` 是否为 `pending`。
 **未观测**：`view` 的非公开性（类型面是 `private`，本机解析到的实现里是原型方法）在 dsh 升级后是否还成立；量法：升级后跑 `cd delegate && node --test test`，再做一次真实委派，看是否抛 I6 的自诊断错。
 **未观测**：scope key 约定（`exec.agent` 就是 scope key）在别的 dsh 版本里是否也成立 —— 不成立会**静默**退化成"只有全局层"的对照表；量法：真实会话里用 `tools: ["Read"]` 委派一次，断言 `tools_note` 没有把 `Read` 列为忽略。
 **未观测**：内置 deny 六个名字与真实 profile 的交集；量法：装齐 `adg-permission` / `adg-notify` 后委派一次，断言不抛 unknown-name 错，并在 `list_agents` 上确认该子代理的工具面里没有这六个名字（`notify_user` 例外：它不在名单里，给了就该出现）。
@@ -88,6 +99,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 **未观测**：并发多条委派时对照表读数的稳定性；量法：并发派两条，断言两条的 `tools` / `tools_note` 一致。
 **未观测**：`ask_user` 的登录墙端到端链路（子代理开有头窗口 → 直接问用户 → 用户在卡片上作答 → 答复回到子代理 → 它自己复核登录态并继续）；量法：在真站点登录墙前派一次带 `ask_user` 的浏览器委派，读转写：它这一轮调的是 `ask_user` 还是 `notify_user`、卡片落在哪个会话、拿到答复后有没有先复核登录态再继续。
 **未观测**：配对表跨越 dsh 重启 / 子代理被 `send_message` 续起之后还能不能取到活着的调度者（预期：重启后旧条目查不到活实例 ⇒ 抛错；续起同一进程内的子代理 ⇒ 仍能问）；量法：派一个带 `ask_user` 的子代理，让它先只报一句、用 `send_message` 续起后再问一次，观察是 `asked_as: 'scheduler'` 还是那条"委派你的调度者此刻不是活着的会话"。
+**未观测**：I17 在真实会话里的端到端效果 —— 平台是否真的按子代理继承到的 `send_message` 追加了续接提示、子代理首轮能否真的调到 `send_message` 并把结果回传（机制层只证明本插件保留了这个通道）；量法：新会话里让调度者用一次 `delegate`（给 `tools: []`），让子代理**首轮就**报告自己的工具面里有没有 `send_message`、并真的调一次 `send_message` 回传结果，与 `tools_note` 比对。
 
 ## 交付前的最小闭环
 

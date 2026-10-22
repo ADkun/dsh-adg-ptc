@@ -45,7 +45,7 @@ last_reviewed: 2026-10-19
 {
   provided: boolean,                     // 调用方有没有给 tools
   denyNames: string[],                   // 内置名单 ∩ 本次可用名 —— 真正下发的 deny
-  tools: string[],                       // 真正下发的 allow（未给 tools 时是 []）
+  tools: string[],                       // 真正下发的 allow（未给 tools 时是 []）；平台续接通道 send_message 在可用时必在末尾
   ignored: [{name, reason}],             // 点名叫不动的：reason = 'denied' | 'unknown'，保持点名先后顺序
   filter: {allow?: string[], deny: string[]} | undefined,   // 创建后窗口交给 tools.restrict 的滤镜；undefined = 不下滤镜
 }
@@ -53,6 +53,7 @@ last_reviewed: 2026-10-19
 
 `filter` 的两种形状就是全部内容：省略 `tools` ⇒ 只 deny；给了 `tools` ⇒ allow + deny。
 它**不进平台 request**（平台契约没有这个字段），经创建后窗口贴到子代理身上（I16）。
+`allow` 里必含平台续接通道 `send_message`（只要它在本次可用名里）：它不是任务能力、不随调用方是否点名它而变（I17）。
 
 ### 不变量
 
@@ -89,10 +90,20 @@ last_reviewed: 2026-10-19
 载体：D11。
 **未观测**：`view` 在 `@deepseek-ai/dsh-tools` 的类型面是 `private`（本机解析到的实现里它是原型上的普通方法，运行期可调用）；哪天它变成 `#private` 或改名，本插件会以自诊断错拒绝委派，而不是静默放过；量法：升级 dsh 后跑 `cd delegate && node --test test`，再做一次真实委派看是否抛 I6 的自诊断错。
 
-**I7 persona 只在给了的时候出现，且语义是"遮蔽"不是"追加"；载体是创建后窗口。**
-`request` 里没有 `persona` 键（平台契约没有这个字段）；给了 ⇒ 在创建后窗口把它注册成该子代理 scoped ctx 上的 `deployment:persona-prefix` 段（`systemPrompt.section({name, order: getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text})`，与平台 `applyChildOverrides` 同形），**遮蔽**该子代理的部署 persona（模板插值语义与部署 persona 相同，本插件不碰）。
-载体：D8（request 里没有）/ D22（窗口里的注册形状）。
-**未观测**：遮蔽的净效果（部署 persona 是否真的整段落下去）；量法：真派一次带 persona 的子代理，读它会话日志里的 `deployment:persona-prefix` 段，确认部署 persona 没有残留。
+**I7 persona 恒被"钉住"：给了就遮蔽成它，没给就遮蔽成空段；载体是子代理的**建立窗口**。**
+`request` 里没有 `persona` 键（平台契约没有这个字段）。子代理经 `composeFrom` 继承整份 preset，**包括调度者的 `deployment:persona-prefix` 段**；给了 `persona` ⇒ 在该子代理 scoped ctx 上注册同名的 `deployment:persona-prefix` 段（`systemPrompt.section({name, order: getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text})`，与平台 `applyChildOverrides` 同形），**遮蔽**部署 persona；没给 ⇒ 照样注册一段**空串**（空段渲染时被丢弃，净效果＝"没有 persona 段"）。**"没给就不注册"是错的**：不注册等于不遮蔽，子代理会带着调度者的 persona 开工。
+载体：D8（request 里没有）/ D22（空段也注册）/ D32（`buildFace` 恒为字符串）。
+**未观测**：遮蔽的净效果（部署 persona 是否真的整段落下去）；量法：真派一次不给 persona 的子代理，读它会话日志里的 `deployment:persona-prefix` 段，确认调度者 persona 没有残留。
+
+**I7b 时点：persona 必须在子代理**第一轮装配之前**贴上，不能等 `startActivation` 返回。**
+平台在 `startLocal` 里一次做完三件事：`composeFrom` 装配子代理（调度者 persona 落进它的 scope）→ 投递首条 prompt → 返回。子代理的 loop 可以在返回之前就 claim inbox 并装配第一轮请求；等返回后再贴 persona，子代理首轮系统提示词已经带着调度者 persona 定型了（轨迹里那条「系统提示词已更新」就是这次迟到的窗口 —— 它改的是后续轮次，不是首轮）。因此：
+- 本插件**自己预留 `childId`**（`newChildId()` = `randomUUID()`，与平台缺省生成同形），把它放进 `SubagentActivationSpec.childId`；
+- 派发**之前**把 `(childId → face)` 登记进 `createChildFaces()` 的表；
+- 全局层监听 `agent/created`，按 `agent.id` 认领并在**同步**的监听里贴能力面（`section()` / `restrict()` 都是同步注册、活生效）；
+- `startActivation` 返回后用 `take(childId)` 收口三态：`applied` ＝ 已抢在首轮前贴上；`failed` ＝ 贴的时候抛了错（带着原始错误抛给调用方，先 `dispose()` 回收）；`pending` ＝ **没赶上建立窗口**，退回创建后窗口贴一次（兜底不静默，但正常装配下不该出现）。
+监听器里**吞掉**异常只记状态、不往外抛：`agent/created` 抛错会让平台整个 create 失败，既拿不到可诊断错误、又绕过"先回收再抛错"（I9）。真正报错由 `take` 之后那一步做。返回的 id 与预留 id 不一致 ⇒ 抛错（能力面贴到了一个没有先验登记的 id 上，边界不可信）。
+载体：D28（建立窗口）/ D29（兜底）/ D30（失败回收）/ D31（id 不一致）/ `delegate/index.mjs` 的 `apply`。
+**未观测**：`agent/created` 在本机平台是否**恒**在 `startLocal` 返回之前送达（本插件按 `dsh-agent` 的 `announce` → `ctx.serial('agent/created')` 推断，且 `setup` 回调先于它）；量法：真派一次不带 `persona` 的子代理，让它**首轮就**报告自己的 persona 段与工具面，确认没有调度者 persona 残留、且 `tools` 已被裁过 —— 若首轮仍带调度者 persona，读回调里的 `settlement.status`（应当出现 `pending` 兜底）。
 
 **I8 `maxDepth` 一律不传。**
 一跳可达 = 平台默认值 1 + deny `delegate`；写 `0` 会让每次委派以 `subagent depth 1 exceeds maxDepth 0` 失败。
@@ -129,13 +140,24 @@ last_reviewed: 2026-10-19
 等的是人去登录 / 过验证码 / 拍板，可以等几分钟到几十分钟；平台对工具调用**没有**默认超时（`defineTool` 的 `timeoutMs` 省略即不声明），这也是平台自带的 `ask_user_question` 能无限等答复的前提。`isConcurrencySafe: false` —— 它改的是"这次调用有没有拿到答复"这件事本身。
 载体：D14（定义里没有 `timeoutMs`）；对照 `delegate` 的 `timeoutMs: 15000`（那边只等建立与投递）。
 
-**I16 能力面（persona / toolFilter）经创建后窗口下发，且 fail-closed。**
-平台 0.2.x 把 per-child 组合从委派缝隙里拿掉了：`SubagentStartRequest` 没有 persona / toolFilter 字段，`startLocal` 组装子代理 composition 时只带 `agentPreset`，平台参考实现（tool-subagent）也把这件事挪进了 Agent Preset（点名这两个字段直接抛 "no longer supported"）。本插件要保住「每一次委派现给工具面与 persona」，载体只能是创建后窗口：`startActivation` 返回后 `agents.get(childId)` 取活实例，在它的 scoped ctx 上 `tools.restrict(filter)` + `systemPrompt.section('deployment:persona-prefix')` —— 两者都活生效，子代理第一轮请求的装配在这之后。
-形状与平台 `applyChildOverrides` 一致（`delegate/lib/delegate.mjs` 的 `applyChildFace`）；取不回活实例、`restrict` / `section` 形状不符 ⇒ 抛错（先回收，见 I9）。`face` 全空（没给 tools 滤镜也没给 persona）时跳过窗口，不碰子代理。
-载体：D8（request 里没有这两个字段）/ D22（窗口形状与 fail-closed）/ D23（失败回收）。
-**未观测**：竞态 —— 子代理的 loop 是否可能在这一步之前 claim inbox 并装配第一轮请求（若发生，首条 prompt 的系统提示词与工具目录不受这次 tools / persona 约束）；量法：真实会话里委派一次带 `tools` 清单与 persona 的子代理，让它**首轮就**报告自己的工具面与 persona 段，与 `tools_note` 比对。
+**I16 能力面（persona / toolFilter）经**建立窗口**下发（兜底落到创建后窗口），且 fail-closed。**
+平台 0.2.x 把 per-child 组合从委派缝隙里拿掉了：`SubagentStartRequest` 没有 persona / toolFilter 字段，`startLocal` 组装子代理 composition 时只带 `agentPreset`，子代理经 `composeFrom` 继承整份 preset。平台参考实现（tool-subagent）把这件事挪进了 Agent Preset（点名这两个字段直接抛 "no longer supported"）；本插件要保住「每一次委派现给工具面与 persona」，载体是**子代理建立窗口**（`agent/created` + 预留 `childId`，见 I7b）：在它的 scoped ctx 上 `tools.restrict(filter)` + `systemPrompt.section('deployment:persona-prefix')` —— 两者都活生效，且抢在首轮装配之前。
+形状与平台 `applyChildOverrides` 一致（`delegate/lib/delegate.mjs` 的 `applyChildFace`）；取不回活实例、`restrict` / `section` 形状不符 ⇒ 抛错（先回收，见 I9）。漏过建立窗口（`settlement.status === 'pending'`）时退回创建后窗口贴一次，绝不静默跳过。
+载体：D8（request 里没有这两个字段）/ D22（窗口形状与 fail-closed）/ D23（失败回收）/ D28–D31（建立窗口的时点、兜底、失败与 id 一致性）。
+**未观测**：竞态 —— 建立窗口与子代理 loop claim inbox 的先后（I7b 那条未观测项是同一个问题，量法见那里）。
 
-## 对外接口
+**I17 `send_message` 是平台续接通道、不是任务能力：只要它在本次可用名里就必须留在 `allow` 里。**
+平台在 `startActivation` 时（`delivery !== "caller"`）会按子代理**继承到的**工具目录判定 `isAdjacentAgentSendMessageTool(this.ctx.get("tools")?.get("send_message", child))`；`send_message` 在，就在这次 prompt 末尾追加「用 send_message 把结果回传给父代理」的续接提示（`@deepseek-ai/dsh-subagent` `lib/index.js:1460`；内部标记见 `lib/types/internal.js:13-16`）。这个判定发生在本插件的创建后窗口**之前**——此刻子代理还没被 `tools.restrict` 裁过，所以提示被追加了。若随后的 `restrict({allow})` 把它剥掉（调用方在 `tools` 里没点名它、或给了空清单），子代理就会拿着"提示让你调 send_message"却没有这个工具，自相矛盾。
+因此 `planToolFilter` 在 `knownNames.has(CONTINUATION_TOOL)` 时把它**无条件**并入最终 allow：不随调用方有没有点名它而变，`tools: []` 也照留；调用方点名过就不再重复追加。**条件化**是必需的：不在 `knownNames` 里还并入会让平台 `restrict()` 抛 `names unknown global tool ...`，整次委派当场失败（根 `AGENTS.md` 红线 7 同源）。`requested === undefined` 走纯 deny 分支，`send_message` 本来就在继承目录里，不动。它**不是**内置 deny 的一员，也不得替 `run_code` 开后门（I5 仍然成立）。
+`tools_note` 在"只保留 N 个"里点明它被保留的原因（不静默）。
+载体：D24–D27；`delegate/lib/delegate.mjs` 的 `CONTINUATION_TOOL` / `planToolFilter` / `toolsNote`。
+
+**I18 本插件**预留**子代理的 `childId`，并核对平台回显的 id 与它一致。**
+`SubagentActivationSpec.childId` 是可选的预留身份（平台签名为 `SessionId`，实现是 `brandString` —— 运行期就是普通字符串），本插件用 `newChildId()`（`globalThis.crypto.randomUUID()`，与 `startLocal` 缺省生成同形）填它。理由：能力面要在**建立窗口**里贴上（I7b），而那个窗口（`agent/created`）拿不到 `startActivation` 的返回值 —— **预留的 id 是双方唯一都知道的那把钥匙**。`startActivation` 需要 `provider.prepareContinuable` 才允许预留 id（spawn 声明了它，`startActivation` 对缺这条能力的 provider 抛 `reserved child ids require a local backend`）。
+返回的 `childId` 与预留值不一致 ⇒ **抛错**（并清掉这次登记）：说明能力面被贴到了一个没有先验登记的对象上，这次委派的边界不可信。取不到 id 仍按 I9 抛错。
+载体：D9（`spec.childId` = 回报 id）/ D31（不一致 ⇒ 抛错且零残留）；`newChildId()` / `createChildFaces()`。
+
+
 
 **模型面（工具契约）**
 
@@ -161,12 +183,12 @@ last_reviewed: 2026-10-19
 
 **库接口（`delegate/lib/delegate.mjs`，零 import）**
 
-常量：`TOOL_NAME` / `ASK_TOOL_NAME` / `SUBAGENT_PROVIDER`（`'spawn'`）/ `SUBAGENT_KINDS`（只含 `'continuable'`）/ `BUILTIN_DENY` / `RESERVED_PTC_NAME`（`'run_code'`）。
-函数：`assertCallerAgent(exec)` / `readRestrictableNames(parent)` / `planToolFilter(requested, knownNames)` / `toolsNote(plan)` / `buildRequest(args, parent)` / `continuableChildId(started)` / `applyChildFace(child, face)` / `delegate(args, exec, deps)`；提问通道另有 `createOwnerIndex()` / `resolveAskOwner(caller, ownerId, agents)` / `questionRequest(questions, agent, signal)` / `answerResult(result)` / `askUser(questions, exec, deps)`。
+常量：`TOOL_NAME` / `ASK_TOOL_NAME` / `SUBAGENT_PROVIDER`（`'spawn'`）/ `SUBAGENT_KINDS`（只含 `'continuable'`）/ `BUILTIN_DENY` / `RESERVED_PTC_NAME`（`'run_code'`）/ `PERSONA_SECTION`（`'deployment:persona-prefix'`）。
+函数：`assertCallerAgent(exec)` / `readRestrictableNames(parent)` / `planToolFilter(requested, knownNames)` / `toolsNote(plan)` / `buildRequest(args, parent)` / `continuableChildId(started)` / `buildFace(args, plan)`（persona 恒为字符串）/ `newChildId()`（预留 id）/ `createChildFaces()`（建立窗口的待贴表：`remember` / `applyFor` / `take`）/ `applyChildFace(child, face)` / `delegate(args, exec, deps)`；提问通道另有 `createOwnerIndex()` / `resolveAskOwner(caller, ownerId, agents)` / `questionRequest(questions, agent, signal)` / `answerResult(result)` / `askUser(questions, exec, deps)`。
 
 **装配接口（`delegate/index.mjs`）**
 
-`name` / `inject` / `TOOL_NAME` / `ASK_TOOL_NAME` / `createDelegateTool(deps)` / `createAskUserTool(deps)` / `apply(ctx)`；`createDelegateTool` 的 `deps = {defineTool?, services?, rememberChild?}`，`createAskUserTool` 的 `deps = {defineTool?, services?, ownerIdOf?}` —— `services()` 回 `{subagents, agents, userQuestions}`（都在**调用那一刻**才取），`rememberChild` / `ownerIdOf` 由 `apply` 接到同一个 `createOwnerIndex()` 上（配对表就活在这个闭包里）。
+`name` / `inject` / `TOOL_NAME` / `ASK_TOOL_NAME` / `createDelegateTool(deps)` / `createAskUserTool(deps)` / `apply(ctx)`；`createDelegateTool` 的 `deps = {defineTool?, services?, rememberChild?, rememberFace?, takeFace?}`，`createAskUserTool` 的 `deps = {defineTool?, services?, ownerIdOf?}` —— `services()` 回 `{subagents, agents, userQuestions}`（都在**调用那一刻**才取），`rememberChild` / `ownerIdOf` 由 `apply` 接到同一个 `createOwnerIndex()` 上，`rememberFace` / `takeFace` 接到同一个 `createChildFaces()` 上（后者同时被 `apply` 里的 `agent/created` 监听使用，这就是 persona 抢在首轮之前的那一格）。
 
 ## 非功能红线
 

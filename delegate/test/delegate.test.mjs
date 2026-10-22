@@ -19,6 +19,8 @@ import { createAskUserTool, createDelegateTool } from '../index.mjs';
 import {
   ASK_TOOL_NAME,
   BUILTIN_DENY,
+  CONTINUATION_TOOL,
+  PERSONA_SECTION,
   RESERVED_PTC_NAME,
   SUBAGENT_KINDS,
   SUBAGENT_PROVIDER,
@@ -27,9 +29,12 @@ import {
   applyChildFace,
   askUser,
   assertCallerAgent,
+  buildFace,
   buildRequest,
+  createChildFaces,
   createOwnerIndex,
   delegate,
+  newChildId,
   planToolFilter,
   questionRequest,
   readRestrictableNames,
@@ -86,15 +91,20 @@ function fakeParent(names = KNOWN, seen = []) {
 /**
  * 假 SubagentRuntime：只实现本插件会调的 `startActivation`（平台唯一入口），
  * 把收到的 spec 原样记下来，并回一个带 dispose 的 activation（回收要可观测）。
+ *
+ * 真实平台的时序是**先装配子代理、再投递首条 prompt、最后返回** —— `onCreate(spec)`
+ * 就是本插件模拟"建立窗口"（`agent/created`）的那一格；`childId` 回显预留的那个 id。
  */
 function fakeSubagents() {
   const calls = { startActivation: [], disposed: [] };
-  return {
+  const runtime = {
     calls,
+    onCreate: undefined,
     async startActivation(spec) {
       calls.startActivation.push(spec);
+      runtime.onCreate?.(spec);
       return {
-        childId: 'child-session-1',
+        childId: spec.childId ?? 'child-session-1',
         messageId: 'message-1',
         dispose: async () => {
           calls.disposed.push(spec);
@@ -102,11 +112,12 @@ function fakeSubagents() {
       };
     },
   };
+  return runtime;
 }
 
 /**
  * 假子代理（`agents.get(childId)` 回的那个活实例）：记下 `tools.restrict` 与
- * `systemPrompt.section` 的每次调用 —— persona / toolFilter 走创建后窗口，
+ * `systemPrompt.section` 的每次调用 —— 能力面走建立窗口 / 创建后窗口，
  * 测试就在这个窗口的接收端断言。
  */
 function fakeChild() {
@@ -126,25 +137,36 @@ function fakeChild() {
   return { child, ledger };
 }
 
-/** 一套典型夹具：假 runtime + 假子代理 + agents 服务 + 组装好的 deps。 */
-function fixture({ names = KNOWN } = {}) {
+/**
+ * 一套典型夹具：假 runtime + 假子代理 + agents 服务 + 配对表与能力面表。
+ *
+ * `establishment: true`（缺省）模拟平台真实时序 —— 子代理一被 announce，全局层的
+ * `agent/created` 监听就把本次能力面贴上去（抢在首轮装配之前）；`false` 模拟"没赶上
+ * 建立窗口"，此时 `delegate` 走创建后窗口的兜底路径（需要 agents 服务）。
+ */
+function fixture({ names = KNOWN, establishment = true } = {}) {
+  const faces = createChildFaces();
   const subagents = fakeSubagents();
   const { child, ledger } = fakeChild();
   const agents = { get: (id) => (id === child.id ? child : undefined) };
-  return {
-    subagents,
-    child,
-    ledger,
-    agents,
-    deps: { services: () => ({ subagents, agents }) },
-    depsFor: (warn) => ({ services: () => ({ subagents, agents }), ...(warn === undefined ? {} : { warn }) }),
-    parent: fakeParent(names),
+  subagents.onCreate = (spec) => {
+    child.id = spec.childId ?? child.id;
+    if (establishment) faces.applyFor(child);
   };
+  const deps = {
+    services: () => ({ subagents, agents }),
+    rememberFace: (childId, face) => faces.remember(childId, face),
+    takeFace: (childId) => faces.take(childId),
+  };
+  return { subagents, child, ledger, agents, faces, deps, parent: fakeParent(names) };
 }
 
 function depsFor(subagents, warn, agents) {
+  const faces = createChildFaces();
   return {
     services: () => ({ subagents, ...(agents === undefined ? {} : { agents }) }),
+    rememberFace: (childId, face) => faces.remember(childId, face),
+    takeFace: (childId) => faces.take(childId),
     ...(warn === undefined ? {} : { warn }),
   };
 }
@@ -231,7 +253,7 @@ test('D2 tools 省略 ⇒ 只下发 deny、不含 allow；deny 必须与可用�
 
   assert.deepEqual(out.tools, []);
   assert.equal(out.kind, 'continuable');
-  assert.equal(out.subagent_id, 'child-session-1');
+  assert.match(out.subagent_id, /^[0-9a-f-]{36}$/);
   assert.equal(out.persona, 'unset');
   assert.match(out.tools_note, /^未过滤：子代理拿到它继承到的全部工具/);
   assert.match(out.tools_note, new RegExp(`减去 ${BUILTIN_DENY.length} 项：${BUILTIN_DENY.join('、')}`));
@@ -254,11 +276,12 @@ test('D3 tools 给清单 ⇒ allow 与 deny 同时下发（allow 只留清单里
 
   const filter = fx.ledger.restrict[0];
   assert.deepEqual(Object.keys(filter).sort(), ['allow', 'deny']);
-  assert.deepEqual(filter.allow, ['Read', 'Bash']);
+  assert.deepEqual(filter.allow, ['Read', 'Bash', CONTINUATION_TOOL]);
   assert.deepEqual(filter.deny, [...BUILTIN_DENY]);
-  assert.deepEqual(out.tools, ['Read', 'Bash']);
+  assert.deepEqual(out.tools, ['Read', 'Bash', CONTINUATION_TOOL]);
   assert.equal(out.persona, 'set');
-  assert.match(out.tools_note, /^只保留 2 个：Read、Bash/);
+  assert.match(out.tools_note, /^只保留 3 个：Read、Bash、send_message/);
+  assert.match(out.tools_note, /send_message 是平台续接通道/);
   assert.match(out.tools_note, /忽略了 1 个点名的名字：delegate（内置禁用）/);
 });
 
@@ -280,8 +303,8 @@ test('D4 清单里的未知名被剔除、去重，并逐条出现在 tools_note
     { agent: fx2.parent, signal: undefined },
     fx2.deps,
   );
-  assert.deepEqual(out2.tools, ['Read']);
-  assert.match(out2.tools_note, /只保留 1 个：Read/);
+  assert.deepEqual(out2.tools, ['Read', CONTINUATION_TOOL]);
+  assert.match(out2.tools_note, /只保留 2 个：Read、send_message/);
   assert.match(out2.tools_note, /忽略了 2 个点名的名字/);
   assert.match(out2.tools_note, /nosuch_tool（这次没有这个工具名）/);
   assert.match(out2.tools_note, /agent_brower（这次没有这个工具名）/);
@@ -305,12 +328,12 @@ test('D5 内置 deny 六个名字即使被点名也不进 allow（且仍在 deny
   );
 
   const filter = fx.ledger.restrict[0];
-  assert.deepEqual(filter.allow, ['Read']);
+  assert.deepEqual(filter.allow, ['Read', CONTINUATION_TOOL]);
   for (const denied of BUILTIN_DENY) {
     assert.ok(!filter.allow.includes(denied), `${denied} 不该进 allow`);
   }
   assert.deepEqual(filter.deny, [...BUILTIN_DENY]);
-  assert.deepEqual(out.tools, ['Read']);
+  assert.deepEqual(out.tools, ['Read', CONTINUATION_TOOL]);
   for (const denied of BUILTIN_DENY) {
     assert.match(out.tools_note, new RegExp(`${denied}（内置禁用）`));
   }
@@ -325,12 +348,12 @@ test('D5 内置 deny 六个名字即使被点名也不进 allow（且仍在 deny
     notifyFx.deps,
   );
   const notifyFilter = notifyFx.ledger.restrict[0];
-  assert.deepEqual(notifyFilter.allow, ['Read', 'notify_user']);
+  assert.deepEqual(notifyFilter.allow, ['Read', 'notify_user', CONTINUATION_TOOL]);
   assert.deepEqual(notifyFilter.deny, [...BUILTIN_DENY]);
-  assert.deepEqual(outNotify.tools, ['Read', 'notify_user']);
+  assert.deepEqual(outNotify.tools, ['Read', 'notify_user', CONTINUATION_TOOL]);
 
-  // 空数组：什么都不给 —— allow 下发时必须是"已定义的空清单"，不能退化成不下发 allow
-  const none = fixture();
+  // 空数组：本 profile 没有续接通道时，allow 下发时必须是"已定义的空清单"，不能退化成不下发 allow
+  const none = fixture({ names: ['Read'] });
   const out2 = await delegate({ ...BASE_ARGS, tools: [] }, { agent: none.parent, signal: undefined }, none.deps);
   assert.deepEqual(none.ledger.restrict[0].allow, []);
   assert.deepEqual(out2.tools, []);
@@ -392,12 +415,14 @@ test('D9 走 startActivation（平台唯一入口），spec 键恰为平台要�
 
   assert.equal(fx.subagents.calls.startActivation.length, 1);
   const spec = fx.subagents.calls.startActivation[0];
-  assert.deepEqual(Object.keys(spec), ['provider', 'label', 'request', 'signal', 'delivery']);
+  assert.deepEqual(Object.keys(spec), ['provider', 'label', 'childId', 'request', 'signal', 'delivery']);
   assert.equal(spec.provider, SUBAGENT_PROVIDER);
   assert.equal(SUBAGENT_PROVIDER, 'spawn');
   assert.equal(spec.label, BASE_ARGS.description);
   assert.equal(spec.signal, signal);
   assert.equal(spec.delivery, 'parent');
+  // 预留 childId（I18）：能力面靠它才能在建立窗口里被认出来
+  assert.equal(spec.childId, out.subagent_id);
   assert.deepEqual(Object.keys(spec.request), ['prompt', 'parent']);
   assert.equal(spec.request.parent, parent);
   assert.deepEqual(spec.request.prompt, [{ type: 'text', text: BASE_ARGS.prompt }]);
@@ -405,15 +430,18 @@ test('D9 走 startActivation（平台唯一入口），spec 键恰为平台要�
   assert.equal('persona' in spec.request, false);
   assert.equal('toolFilter' in spec.request, false);
 
-  // 能力面在创建后窗口下发：内置 deny 进 restrict；这次没给 persona，systemPrompt 不动
+  // 能力面在**建立窗口**下发：内置 deny 进 restrict；没给 persona ⇒ 仍注册一个**空**段
+  // （空段 = 遮蔽掉继承来的调度者 persona；不注册就等于让子代理带着它开工，I7）
   assert.equal(fx.ledger.restrict.length, 1);
   assert.deepEqual(fx.ledger.restrict[0].deny, [...BUILTIN_DENY]);
   assert.equal('allow' in fx.ledger.restrict[0], false);
-  assert.equal(fx.ledger.sections.length, 0);
+  assert.deepEqual(fx.ledger.sections, [
+    { name: PERSONA_SECTION, order: 'order-of-DEPLOYMENT_PERSONA_PREFIX', text: '' },
+  ]);
 
   assert.equal(out.kind, SUBAGENT_KINDS[0]);
   assert.equal(out.kind, 'continuable');
-  assert.equal(out.subagent_id, 'child-session-1');
+  assert.match(out.subagent_id, /^[0-9a-f-]{36}$/);
   assert.equal(out.description, BASE_ARGS.description);
 
   // 对照表是从**调用方自己的**工具视图里读的：view 的实参必须是那个 Agent 对象
@@ -502,15 +530,15 @@ test('D13 真 defineTool 编出的定义能在假服务上跑通一次完整调�
   const definition = createDelegateTool({ services: fx.deps.services });
   const value = await definition.execute({ ...BASE_ARGS, tools: ['Read'] }, { agent: fx.parent, signal: undefined });
 
-  assert.equal(value.subagent_id, 'child-session-1');
+  assert.match(value.subagent_id, /^[0-9a-f-]{36}$/);
   assert.equal(value.kind, 'continuable');
-  assert.deepEqual(value.tools, ['Read']);
+  assert.deepEqual(value.tools, ['Read', CONTINUATION_TOOL]);
   // 能力面真的贴到了子代理身上
-  assert.deepEqual(fx.ledger.restrict[0], { allow: ['Read'], deny: [...BUILTIN_DENY] });
+  assert.deepEqual(fx.ledger.restrict[0], { allow: ['Read', CONTINUATION_TOOL], deny: [...BUILTIN_DENY] });
   const rendered = definition.output.render({}, value);
   assert.equal(rendered[0].type, 'text');
-  assert.match(rendered[0].text, /child-session-1/);
-  assert.match(rendered[0].text, /只保留 1 个：Read/);
+  assert.match(rendered[0].text, new RegExp(value.subagent_id));
+  assert.match(rendered[0].text, /只保留 2 个：Read、send_message/);
 });
 
 // ── ask_user（I12）：子代理的提问通道 ────────────────────────────────────────
@@ -660,7 +688,9 @@ test('D20 可续路径把 (childId → 调度者) 交给配对表', async () => 
     ...fx.deps,
     rememberChild: (childId, owner) => pairs.push([childId, owner]),
   });
-  assert.deepEqual(pairs, [['child-session-1', parent]]);
+  assert.equal(pairs.length, 1);
+  assert.equal(pairs[0][1], parent);
+  assert.match(pairs[0][0], /^[0-9a-f-]{36}$/);
 });
 
 test('D21 真 defineTool 编出的 ask_user 能在假服务上跑通一次完整调用并 render 出一行人话', async () => {
@@ -691,7 +721,7 @@ test('D21 真 defineTool 编出的 ask_user 能在假服务上跑通一次完整
 // 平台把 per-child persona / toolFilter 从委派缝隙里拿掉了；本插件用与平台
 // applyChildOverrides 同形的方式在创建后窗口贴上去。这几条钉住形状与 fail-closed 口径。
 
-test('D22 applyChildFace：persona 注册成 deployment:persona-prefix 段、toolFilter 走 restrict；形状不符 fail-closed', () => {
+test('D22 applyChildFace：persona **一律**注册成 deployment:persona-prefix 段（没给就是空段＝遮蔽）、toolFilter 走 restrict；形状不符 fail-closed', () => {
   const { child, ledger } = fakeChild();
   const applied = applyChildFace(child, { persona: '你是只读侦察兵', filter: { deny: ['delegate'] } });
   assert.deepEqual(applied, ['toolFilter', 'persona']);
@@ -700,14 +730,14 @@ test('D22 applyChildFace：persona 注册成 deployment:persona-prefix 段、too
     { name: 'deployment:persona-prefix', order: 'order-of-DEPLOYMENT_PERSONA_PREFIX', text: '你是只读侦察兵' },
   ]);
 
-  // 什么都不给 ⇒ 什么都不贴
-  const empty = fakeChild();
-  assert.deepEqual(applyChildFace(empty.child, {}), []);
-  assert.equal(empty.ledger.restrict.length, 0);
-  assert.equal(empty.ledger.sections.length, 0);
+  // 没给 persona ⇒ 仍注册**空**段：不注册就是不遮蔽，子代理会带着继承来的调度者 persona 开工
+  const bare = fakeChild();
+  assert.deepEqual(applyChildFace(bare.child, {}), ['persona']);
+  assert.equal(bare.ledger.restrict.length, 0);
+  assert.deepEqual(bare.ledger.sections, [{ name: PERSONA_SECTION, order: 'order-of-DEPLOYMENT_PERSONA_PREFIX', text: '' }]);
 
   // 取不到活实例 ⇒ 抛错
-  assert.throws(() => applyChildFace(undefined, { filter: { deny: ['delegate'] } }), /取不到它的活实例/);
+  assert.throws(() => applyChildFace(undefined, { filter: { deny: ['delegate'] } }), /取不到子代理的活实例/);
 
   // restrict 不是函数 ⇒ 抛错（绝不把没受限的子代理当成"已按清单下发"）
   const noRestrict = { id: 'c', ctx: { tools: {} } };
@@ -718,23 +748,122 @@ test('D22 applyChildFace：persona 注册成 deployment:persona-prefix 段、too
   assert.throws(() => applyChildFace(noPrompt, { persona: 'p' }), /systemPrompt\.section 不可用/);
 });
 
+test('D28 能力面在**建立窗口**贴上（子代理首轮装配之前）—— 不是等 startActivation 返回之后', async () => {
+  const fx = fixture();
+  // 平台真实时序：装配 → 投递首条 prompt → 返回。断言"贴上"发生在返回之前
+  let restrictedAtReturn = 0;
+  const spec = (await delegate({ ...BASE_ARGS, persona: '你是档案管理员' }, { agent: fx.parent, signal: undefined }, fx.deps));
+  assert.equal(spec.persona, 'set');
+  restrictedAtReturn = fx.ledger.sections.length;
+  assert.equal(restrictedAtReturn, 1, '建立窗口里就该有 persona 段');
+  assert.deepEqual(fx.ledger.sections, [
+    { name: PERSONA_SECTION, order: 'order-of-DEPLOYMENT_PERSONA_PREFIX', text: '你是档案管理员' },
+  ]);
+  // 建立窗口贴过之后，创建后窗口不再重复贴（否则同名段重复注册会抛）
+  assert.equal(fx.ledger.restrict.length, 1);
+  assert.equal(fx.ledger.sections.length, 1);
+});
+
+test('D29 没赶上建立窗口 ⇒ 退回创建后窗口贴一次（兜底不静默）', async () => {
+  const fx = fixture({ establishment: false });
+  const out = await delegate({ ...BASE_ARGS, persona: '你是档案管理员' }, { agent: fx.parent, signal: undefined }, fx.deps);
+  assert.equal(out.persona, 'set');
+  assert.deepEqual(fx.ledger.sections, [
+    { name: PERSONA_SECTION, order: 'order-of-DEPLOYMENT_PERSONA_PREFIX', text: '你是档案管理员' },
+  ]);
+});
+
+test('D30 建立窗口里贴失败 ⇒ 不吞掉：回收子代理后把原始错误抛给调用方', async () => {
+  const fx = fixture();
+  const brokenChild = { ctx: { tools: { restrict: () => {} } } };
+  fx.child.ctx = brokenChild.ctx; // 没有 systemPrompt ⇒ applyChildFace 抛错
+  await assert.rejects(
+    () => delegate({ ...BASE_ARGS, persona: 'p' }, { agent: fx.parent, signal: undefined }, fx.deps),
+    /systemPrompt\.section 不可用/,
+  );
+  assert.equal(fx.subagents.calls.disposed.length, 1);
+});
+
+test('D31 预留 childId 与平台回显不一致 ⇒ 抛错（能力边界不可信，不许当成功）', async () => {
+  const fx = fixture();
+  fx.subagents.startActivation = async (spec) => ({
+    childId: 'someone-else',
+    messageId: 'm',
+    dispose: async () => {},
+  });
+  await assert.rejects(
+    () => delegate({ ...BASE_ARGS }, { agent: fx.parent, signal: undefined }, fx.deps),
+    /与预留的/,
+  );
+  assert.equal(fx.faces.size(), 0, '不一致时登记表不许残留');
+});
+
+test('D32 buildFace：persona 恒为字符串（没给＝空串，不是 undefined）；newChildId 每次不同', () => {
+  const plan = planToolFilter(undefined, new Set(KNOWN));
+  assert.deepEqual(buildFace({}, plan), { persona: '', filter: plan.filter });
+  assert.equal(buildFace({ persona: 'p' }, plan).persona, 'p');
+  assert.equal(buildFace({ persona: 42 }, plan).persona, '', '非字符串一律当没给');
+
+  const a = newChildId();
+  const b = newChildId();
+  assert.match(a, /^[0-9a-f-]{36}$/);
+  assert.notEqual(a, b);
+});
+
+test('D33 回显的 persona 只认**非空字符串**：空串也算 unset（不许把"贴了空段"报成给了）', async () => {
+  for (const [persona, expected] of [
+    ['你是档案管理员', 'set'],
+    ['', 'unset'],
+    [undefined, 'unset'],
+  ]) {
+    const fx = fixture();
+    const args = persona === undefined ? { ...BASE_ARGS } : { ...BASE_ARGS, persona };
+    const out = await delegate(args, { agent: fx.parent, signal: undefined }, fx.deps);
+    assert.equal(out.persona, expected);
+    // 无论 set/unset，persona 段**都**注册了（unset 时是一段空串，靠它遮蔽继承来的调度者 persona）
+    assert.equal(fx.ledger.sections.length, 1);
+    assert.equal(fx.ledger.sections[0].text, persona ?? '');
+  }
+});
+
+test('D34 建立窗口监听器不把异常抛回平台：applyFor 吞下错误只记状态', () => {
+  const faces = createChildFaces();
+  faces.remember('child-x', { persona: 'p', filter: undefined });
+  // ctx 缺 systemPrompt ⇒ applyChildFace 抛，但 applyFor 不许把这条错误抛给 agent/created 的派发方
+  const broken = { id: 'child-x', ctx: { tools: { restrict: () => {} } } };
+  assert.equal(faces.applyFor(broken), true);
+  const entry = faces.take('child-x');
+  assert.equal(entry.status, 'failed');
+  assert.match(String(entry.error), /systemPrompt\.section 不可用/);
+
+  // 没登记的 agent / 已经收口过的 agent ⇒ 一律返回 false（监听器是全局的，别人的 agent 也会经过）
+  assert.equal(faces.applyFor({ id: 'someone-else', ctx: {} }), false);
+  assert.equal(faces.applyFor(undefined), false);
+  assert.equal(faces.applyFor(broken), false);
+});
+
 test('D23 能力面下发失败 ⇒ 回收子代理再抛错；agents 服务缺失同理（绝不留下没受限的子代理当成功）', async () => {
   const parent = fakeParent();
 
-  // agents 服务缺失：取不回子代理 ⇒ 回收 + 抛错
+  // 兜底路径（没赶上建立窗口）取不回子代理 ⇒ 回收 + 抛错
   const noAgents = fakeSubagents();
+  const noAgentsDeps = {
+    services: () => ({ subagents: noAgents }),
+    rememberFace: () => {},
+    takeFace: () => undefined,
+  };
   await assert.rejects(
-    () => delegate({ ...BASE_ARGS }, { agent: parent, signal: undefined }, depsFor(noAgents)),
+    () => delegate({ ...BASE_ARGS }, { agent: parent, signal: undefined }, noAgentsDeps),
     /需要 agents 服务/,
   );
   assert.equal(noAgents.calls.disposed.length, 1);
 
   // agents.get 取不到活实例 ⇒ applyChildFace 抛错 ⇒ 回收
-  const fx = fixture();
+  const fx = fixture({ establishment: false });
   fx.agents.get = () => undefined;
   await assert.rejects(
     () => delegate({ ...BASE_ARGS }, { agent: parent, signal: undefined }, fx.deps),
-    /取不到它的活实例/,
+    /取不到子代理的活实例/,
   );
   assert.equal(fx.subagents.calls.disposed.length, 1);
 
@@ -742,4 +871,51 @@ test('D23 能力面下发失败 ⇒ 回收子代理再抛错；agents 服务缺�
   const ok = fixture();
   await delegate({ ...BASE_ARGS }, { agent: ok.parent, signal: undefined }, ok.deps);
   assert.equal(ok.subagents.calls.disposed.length, 0);
+});
+
+// ── send_message 是平台续接通道（I17）────────────────────────────────────
+// 平台在 startActivation 时就按子代理继承到的工具目录追加了续接提示；本插件在创建后窗口
+// 下发的 allow 不能把它剥掉，否则提示与工具面自相矛盾。这几条钉住"无条件保留"的口径。
+
+test('D24 send_message 是平台续接通道：显式传 tools 没点名它，allow 仍含它', () => {
+  const plan = planToolFilter(['Read', 'Bash'], new Set(KNOWN));
+  assert.deepEqual(plan.tools, ['Read', 'Bash', CONTINUATION_TOOL]);
+  assert.ok(plan.filter.allow.includes(CONTINUATION_TOOL));
+  assert.deepEqual(plan.filter.allow, ['Read', 'Bash', CONTINUATION_TOOL]);
+  // 点名过就不再重复追加
+  const named = planToolFilter(['Read', CONTINUATION_TOOL], new Set(KNOWN));
+  assert.deepEqual(named.tools, ['Read', CONTINUATION_TOOL]);
+  // tools_note 反映保留事实（不静默）
+  assert.match(toolsNote(plan), new RegExp(CONTINUATION_TOOL + ' 是平台续接通道'));
+});
+
+test('D25 knownNames 里没有 send_message ⇒ 不强行注入（且不抛错）', () => {
+  const lean = new Set(['Read', 'delegate', 'notify_user']);
+  const plan = planToolFilter(['Read', 'Bash'], lean);
+  assert.deepEqual(plan.tools, ['Read']);
+  assert.ok(!plan.filter.allow.includes(CONTINUATION_TOOL));
+  // 纯 deny 分支也不受影响
+  const denyOnly = planToolFilter(undefined, lean);
+  assert.deepEqual(denyOnly.tools, []);
+  // 空清单在没有续接通道时仍是空清单
+  const empty = planToolFilter([], lean);
+  assert.deepEqual(empty.tools, []);
+  assert.deepEqual(empty.filter.allow, []);
+  assert.match(toolsNote(empty), /^空清单：本次不给子代理任何工具/);
+});
+
+test('D26 tools: [] 时 send_message 仍在（平台提示照样会被追加）', async () => {
+  const fx = fixture();
+  const out = await delegate({ ...BASE_ARGS, tools: [] }, { agent: fx.parent, signal: undefined }, fx.deps);
+  assert.deepEqual(fx.ledger.restrict[0].allow, [CONTINUATION_TOOL]);
+  assert.deepEqual(out.tools, [CONTINUATION_TOOL]);
+  assert.match(out.tools_note, /^只保留 1 个：send_message/);
+  assert.match(out.tools_note, new RegExp(CONTINUATION_TOOL + ' 是平台续接通道'));
+});
+
+test('D27 tools_note 文案反映 send_message 被保留的原因', () => {
+  const plan = planToolFilter(['Read', 'Bash'], new Set(KNOWN));
+  const note = toolsNote(plan);
+  assert.match(note, /只保留 3 个：Read、Bash、send_message/);
+  assert.match(note, /send_message 是平台续接通道，不是任务能力，本次一并保留以便回传结果/);
 });
