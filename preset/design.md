@@ -102,13 +102,14 @@ stateDiagram-v2
 
 ### SchedulerPersona（不可变值对象）
 
-调度智能体的 persona 段，写在 `preset/agent.cordis.yml` 顶部的 `- id: persona` 行里，`config` 下只有 `prefix` 一个字段（与 standard preset 及各 surface 的 persona 行同形：0.2.1-rc.2 起 `personaSuffix` 部署默认为空串，工作目录改由 `working-directory:current` 运行时上下文提供）。它是一个**结构固定的文本**：四个大标题 `## 目标` / `## 你手上的子代理`（名册）/ `## 约束` / `## 验收标准`。它**不是**流程脚本：只规定目标、约束、验收标准，不规定每一步的产出与固定格式。
+调度智能体的 persona 段，写在 `preset/agent.cordis.yml` 顶部的 `- id: persona` 行里，`config` 下只有 `prefix` 一个字段（与 standard preset 及各 surface 的 persona 行同形：0.2.1-rc.2 起 `personaSuffix` 部署默认为空串，工作目录改由 `working-directory:current` 运行时上下文提供）。它是一个**结构固定的文本**：五个大标题 `## 目标` / `## 你手上的子代理`（名册）/ `## 约束` / `## 验收标准` / `## 回复内容`。它**不是**流程脚本：只规定目标、约束、验收标准，不规定每一步的产出与固定格式。
 
 - `## 约束` 由 12 个 **顶级** `【…】` 段组成（拆解立目标 / 要不要派 / 派给谁 / 派几次 / 怎么发 / 委派里写什么 / 技能 / 中转材料 / 浏览器：权限 / 浏览器：模式 / 进度汇报 / 不确定就问）；数 `【…】` 标记会多数出几个 —— 其中「【拆解立目标】」内含【目标】/【要干什么】/【不要干什么】/【验收标准】四个**子项**，它们是该段的子结构，不是顶级段。思考框架的装载不在这份 persona 里：它由第一方插件 `adg-skill-inject` 在 agent 创建时把技能正文直接注入调度者系统提示词（见 `skill-inject/design.md`）—— persona 级的"先读技能"指令已被证过依赖模型自觉，不可靠。
-- `## 验收标准` 在位的是**两段**：第 1 段＝按【拆解立目标】里定下的【验收标准】逐条判定的判据；第 2 段＝交付纪律与分段交付，它**以加粗的「面向用户的输出以人类可读性为第一原则」开头**，并当场写明范围＝直接答复 + 文档 / 报告 / 表格 / 幻灯片等一切用户看得到的成果（委派产出这类成果时把这条写进委派）。
+- `## 验收标准` 只留在位**一段**：按【拆解立目标】里定下的【验收标准】逐条判定的判据（最强的约束＝能用脚本 / 命令 / 测试程序化验证的；其次是另派一个不继承写者编辑内容的独立子代理做对抗判断；只能由用户拍板的先与用户确认）。
+- `## 回复内容` 在位的是交付纪律与分段交付：它**以加粗的「面向用户的输出以人类可读性为第一原则」开头**，并当场写明范围＝直接答复 + 文档 / 报告 / 表格 / 幻灯片等一切用户看得到的成果（委派产出这类成果时把这条写进委派）。这一段原先挂在 `## 验收标准` 下当第 2 段，现在独立成节：标题名本身就是它对调度者的指令，混在验收判据里会被读成"判据"而不是"怎么写"。
 - 不变量：
-  - **I22**：禁止删掉或改写 `## 约束` 与 `## 验收标准` 这两个锚段的内容 —— 判据是**对抗评审**（自检不覆盖锚段内容与在位：`tools/check-preset.mjs` 只做逐行文本扫描，不检查这两个锚段；评审时逐段对照 `preset/agent.cordis.yml` 的调度 persona，判据见 `preset/testing-guide.md` 的「用例总表」里锚段在位与锚段语义那两条用例）。**现行形态是 12 段**：原【需要用户本人的事】段已刻意删除（它的两条必要口径并入【浏览器：模式】与【不确定就问】），除此之外仍禁止增删改写。
-  - **I23**：禁止把这两个锚段改写成预算、字数上限或分步流程 —— 它们约束的是"派给谁 / 派几次 / 材料怎么中转 / 写下来的东西怎么组织"，不是"单个子代理能读多少、能写多少"。
+  - **I22**：禁止删掉或改写 `## 约束`、`## 验收标准` 与 `## 回复内容` 这三个锚段的内容 —— 判据是**对抗评审**（自检不覆盖锚段内容与在位：`tools/check-preset.mjs` 只做逐行文本扫描，不检查这三个锚段；评审时逐段对照 `preset/agent.cordis.yml` 的调度 persona，判据见 `preset/testing-guide.md` 的「用例总表」里锚段在位与锚段语义那两条用例）。**现行形态是 12 段**：原【需要用户本人的事】段已刻意删除（它的两条必要口径并入【浏览器：模式】与【不确定就问】），除此之外仍禁止增删改写。
+  - **I23**：禁止把这三个锚段改写成预算、字数上限或分步流程 —— 它们约束的是"派给谁 / 派几次 / 材料怎么中转 / 写下来的东西怎么组织"，不是"单个子代理能读多少、能写多少"。
 - `suffix` 字段**不在位**（刻意删去）：0.2.1-rc.2 起 `{{cwd}}` 不再是注册的 prompt 变量（`dsh-agent-loop` 只注册 `provider` / `model`），而 persona suffix section 没设 `interpolate:false`，走插值路径会抛 `unknown prompt variable "{{cwd}}"`。上游 `dsh-web-app/cordis.patch.yml` 同期也删掉了 `personaSuffix`（部署默认回落到 schema 的空串），工作目录改由 `dsh-working-directory` 注册的 `working-directory:current` 运行时上下文提供（`interpolate:false`，渲染成 `Current working directory: ...`）。删掉 `suffix:` 字段行后，`@deepseek-ai/dsh-persona` 的 schema 默认值（空串）生效，同名 section 在渲染期被 `filter((text) => text.length > 0)` 丢弃。字段不存在由 `tools/check-preset.mjs` 钉住。
 
 ## 对外接口
@@ -127,7 +128,7 @@ stateDiagram-v2
 | R1 | 禁止加回通用 `subagent` / `subagent_fork` 委派行。理由：子代理继承父代理的整套 composition，一旦存在通用行，子代理就能绕过委派机制再开一个不受限的子代理；`delegation` 组只留一条静态入口是第二道保险。 | 组合文本 + `tools/check-preset.mjs` | `[机检]` |
 | R2 | 工具面（委派行的 `toolFilter.allow` 与 `delegate` 的 `tools`）是真实能力边界，不是提示（见 I18）—— 禁止在 persona 里要求子代理做那次工具面之外的事，禁止承诺子代理互相转交。 | `tools/check-preset.mjs` 的名字校验 + 一次真实委派 | `[机检]`+`[人]` |
 | R3 | 禁止给三行体积旋钮写回覆盖值（见 I19），并禁止把交付侧的证据落点判据（按【拆解立目标】里的【验收标准】逐条判定）简化成"让子代理自报"。理由：截断工具结果会把工具**已经取到**的事实切掉，子代理只能重取、换查询或拿残缺证据下结论，三者都比不裁更贵；而拿不出前后对比数字就无法判断改动是否真的省了成本。这一行覆盖两项判据，两半的载体不同，见右列。 | 本 preset 的组合文本 | 旋钮那一半：`tools/check-preset.mjs` 的旋钮行检查 `[机检]`；交付侧证据落点判据那一半：对抗评审 `[评]` + `tools/check-preset.mjs` 的 persona 段存在性检查 |
-| R4 | 禁止在 persona 里写 token / 读取预算或字数次数上限。理由：那是把子代理的注意力从"做对"挪到"少写"。 | `## 约束` 与 `## 验收标准` 的锚段 | `[评]` |
+| R4 | 禁止在 persona 里写 token / 读取预算或字数次数上限。理由：那是把子代理的注意力从"做对"挪到"少写"。 | `## 约束` / `## 验收标准` / `## 回复内容` 的锚段 | `[评]` |
 | R5 | 禁止把 `agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question` 从 `adg-delegate` 的 `BUILTIN_DENY` 里删掉、放宽或绕过，或经 `delegate` 的 `tools` 把它们发给子代理（见 I10 / I16 / I17）。理由：前四个都能再开子代理，一放就破坏一跳可达的链路，并让承载编排约束的那几段整段失效。子代理要问人**一律走 `ask_user`**（`adg-delegate` 的第二个工具，owner 是派它的调度者），禁止给平台的 `ask_user_question`；`ask_user` 恰恰**必须**留在可给名单里，禁掉它就等于把子代理打回"单向喊一声 + 等重派"（见 R12）。 | `delegate/AGENTS.md` 的 R1 + 组合文本 | `[机检]` |
 | R6 | 禁止给委派行写 `maxDepth`，也禁止 `delegate` 给子代理传 `maxDepth`（见 I12：`subagent depth 1 exceeds maxDepth 0` 会让每次委派失败）。 | 组合文本 + `delegate/AGENTS.md` 的 R6 | `[机检]` |
 | R7 | 禁止给任何请求设 `maxTokens` / `agentOptions` / `reasoningEffort`（见 I13）。理由：输出只占账单很小一份，压它损伤质量。 | 组合文本 | `[机检]` |
@@ -140,7 +141,7 @@ stateDiagram-v2
 | R14 | 禁止删掉编排层规则：材料重叠（后一件事要读前一件已经读进来的那份材料）的任务合并成一次委派（浏览器那半：同一份信息默认只在一个站点取）、同一实体的后续任务接给已经读过它的那个子代理（`send_message`）、跨子代理传递大材料走 digest、派发前过必要性闸门并给未纳入的旁路挂号。理由：这些是实践踩过的坑 —— 合并省的是同一份材料被从头读 N 遍；材料不重叠时拆开并行不比合并贵（长委派里做第二件事还要背第一件事的全部过程），接续省的是重新建立上下文，挂号省的是"看起来做了其实没做"。 | 组合文本 `## 约束` 的第 ①② 段 | `[评]` |
 | R15 | 禁止把未纳入的旁路静默丢掉：最终答复里必须有挂号句"未纳入本次：X（可能影响 Y，未调研）"。理由：静默丢弃会让读交付的人以为范围已覆盖。 | 组合文本 `## 约束` 的必要性闸门段 | `[评]` |
 | R16 | digest 工件只落平台临时根、任务结束即删；read-only 环境不造工件。理由：工件写进工作区或仓库会污染交付物，没删就说已清理是假报告。 | 组合文本「中转材料」段 | `[评]`+`[人]` |
-| R17 | 禁止把输出纪律改写成字数上限，也禁止省掉"未验证 / 未纳入"块。理由：交付要能被人逐条复核，删掉这两块等于把不确定性藏起来。 | 组合文本 `## 验收标准` 第 2 段 | `[评]` |
+| R17 | 禁止把输出纪律改写成字数上限，也禁止省掉"未验证 / 未纳入"块。理由：交付要能被人逐条复核，删掉这两块等于把不确定性藏起来。 | 组合文本 `## 回复内容` 段 | `[评]` |
 | R18 | 委派一律走后台（`delegate` 默认 `background: true`），没有"阻塞等待"的例外，也不许用 `pwsh` 睡眠 / 轮询等它跑完（派完就结束本轮，子代理结束时的结算通知会把你唤起）。理由：前台一次性委派不进 `list_agents`、后续 `send_message` 报 `NOT_RESUMABLE`，等于把一次可接续的委派变成一次性调用。 | 组合文本 + `delegate/design.md` 的 `kind` + `list_agents` 的行为 | `[评]`+`[人]` |
 | R19 | 浏览器运行模式由**调度者**在派发前判定，不为此问用户：完全确定不需要登录 / 验证码 → 无头；确定需要 → 有头；拿不准 → 先无头，真正撞上登录墙 / 验证码时再换成有头。判定的结果写进委派文本。理由：模式决定用户能不能看见窗口，但每个任务都问一遍是把人的判断变成打扰，而"拿不准先无头、撞墙再升级"本来就是登录协议的路径 —— 工具层的默认（`headless`）不得被改，换模式仍必须显式且只有一条换法。 | 组合文本「浏览器：模式」段 | `[评]` |
 | R20 | 中途需要人工介入时，子代理默认用 **`ask_user` 直接问用户**（把有头窗口开好、问清"用户要做什么"、等答复，拿到后自己复核一次登录态再接着干）；`notify_user` 是**单向补充**而不是替代 —— 它只解决"人不在电脑前看不到"，`ask_user` 走不通时才退回"`notify_user` 喊一声 + 把未决问题写进最终结果报回调度者"。 | `notify/design.md` 的「对外接口」＋ `delegate` 的可给名单（`ask_user` / `notify_user`） | `[评]` |
@@ -150,6 +151,7 @@ stateDiagram-v2
 | R24 | 给了 `pwsh` 就必须同时给 `job_list` / `job_output` / `job_kill`（见 I14，落在每次现给的 `tools` 上）。理由：缺了它们，子代理起的后台作业没有人能收。 | 本文件「DelegationRow 与动态工具面」（I14）；`skills/adg-delegation/SKILL.md` 的「`tools` 是硬边界」 | `[机检]` `tools/check-preset.mjs` 的 `EV7` |
 | R25 | 子代理的工具面不写 `skill`（见 I15）：技能按**渐进式披露**放在 `skills/` 里，需要技能的委派由调度者给出技能文件的**绝对路径** +「先 read 该文件再动手」，不内联、不复述技能正文（技能面只归调度智能体）。理由：写 `skill` 是已注册名、不会让委派失败，但会让子代理拿一份它读不到的技能面。 | 本文件「DelegationRow 与动态工具面」（I15） | `[机检]` `tools/check-preset.mjs` 的 WARN |
 | R26 | `preset/agent.cordis.yml` 是 **UTF-8 无 BOM**：用按 ANSI 猜测编码的文本工具（Windows PowerShell 的 `Get-Content` / `Set-Content`）读写会乱码并改变行数。理由：乱码会让逐行静态扫描的判据失真，而那个判据本身看不出来。 | 本 preset 的组合文本（它要能被逐行扫描） | `[评]` + 改完跑 `node tools/check-preset.mjs` 并复核行数与内容 |
+| R27 | `plan-mode` 不由本 preset 挂载（`preset/agent.cordis.yml` 里没有 `planning` 组、没有 `@deepseek-ai/dsh-plan-mode` 行，摘掉处留一段中文注释写明理由与加回方法），plan mode 归 host 组合。理由：① 插件自带的 section 末段要求 "Make exit_plan_mode the only and final tool call in that assistant response"，而本 preset 是 PTC 呈现（模型只看得见 `run_code`，只能在程序里 `await tools.exit_plan_mode(...)`）—— 那条约束在本 preset 下不可满足，留着就是一条注定被违反的指令；② 成本形态与"减少固定上下文"不符：section 只在 plan mode 激活时注入（`active ? this.section : ""`），但 `exit_plan_mode` 工具与 `/plan` 斜杠命令**常驻注册**，非激活时仍占一条工具 schema 与一段工具说明。**摘掉不等于会话里没有 plan mode**：host 组合（`@deepseek-ai/dsh-base` 的 `cordis.patch.yml`）自己就挂着一行 `- id: plan-mode` / `name: '@deepseek-ai/dsh-plan-mode'`，`/plan` 与 `exit_plan_mode` 由那一份提供，section 换成 deployment 版本文本。 | `@deepseek-ai/dsh-plan-mode` 的 `lib/index.js`（`EXIT_PLAN_MODE`、section 末段、`active ? this.section : ""`）+ host 组合的 `cordis.patch.yml` | `[评]`（`tools/check-preset.mjs` 不管这条） |
 
 **未观测**：调度者是否真的每次都执行浏览器任务的权限闸门；量法：抽若干浏览器任务，转写里看 `ask_user_question` 是否出现在任何浏览器委派之前，并核对当时的文件策略行。
 
