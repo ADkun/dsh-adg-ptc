@@ -63,6 +63,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 
 - `base` = `decision.content`（数组时）否则 `result.content`（数组时）否则 `[]`。默认 `next()` 不产 content，所以要保留的输出在 `result.content`。
 - 意图块 = `{type:'text', text: SUCCESS_PREFIX (+ '\n意图：' + intent)}`，`intent` 取自 `exec.arguments.description`（平台必填项，trim 后可为空）。`SUCCESS_PREFIX` 默认为空串 ⇒ 默认只出「意图：」一行；意图也缺失时不出块，结果正文与平台默认逐字相同。
+- 意图块的文本**在有正文时以 `\n` 结尾** —— 换行进字符串，不靠块边界（下游会把多个 text 块用空串拼起来，块边界到不了模型；见第 5 节的三条出处）。
 - `...decision` 保证 `additionalContexts` / `meta` 等字段透传，不被抹掉。
 
 ## 4. 不变量
@@ -77,6 +78,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 | I6 | 单次改写失败不外抛：catch 后落一条 `ctx.logger?.warn` 并返回 `next()` 的决策 —— 失败路径的"原样"本来就是本插件的默认立场，异常路径收敛到同一立场 | `test/plugin.test.mjs` 的 W7 |
 | I7 | 只依赖 `tools/post-execute` 一个事件，且 `prepend: true` | W2 |
 | I8 | 零第三方依赖；Node `>= 22`；只用语言内建能力 | `package.json` 无 `dependencies`；[评] 读 import 行 |
+| I9 | 意图块自带换行：下游把多个 text 块用空串拼接时，意图与正文之间仍有换行可分辨 | D21 / D22 / W3d |
 
 ## 5. 平台契约速查（升级 dsh 后重核这几条）
 
@@ -88,6 +90,14 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 - `ToolExecutionInput.arguments: unknown` —— 本插件的意图来源；`parent?: ToolExecutionToken` —— 子分发判据。
 - run_code 失败：`throw new CodeRunFailedError('code run failed (${kind}): ${message}' + logs + sandbox + escalation)`，归一后 `isError: true`。
 - `tools.restrict()` 两侧都拒绝 `run_code` 这个名字（保留名）⇒ 本插件**不注册任何工具**，与 delegate 的 R4 不冲突。
+
+**下游怎么读结果正文**（决定了意图块必须自带换行 —— 升级 dsh 后重核这三处）：
+
+- `dsh-plugin-save-token` 的 `src/index.js` 的 `flattenPlainText(content)` —— 逐块 `text += b.text`，**空串拼接、块边界被吃掉**。
+- `dsh-llm-pi-ai` 的 `lib/index.js` 的 `flattenText(message)`（工具结果经 `toolResultOf(message, toolNames, flattenText(message))` 落到模型可见正文）—— `filter(text).map(text).join("")`，**空串拼接、块边界被吃掉**。
+- `dsh-llm-deepseek` 的 `lib/index.js` 的 `assistant(message, model, onReplayDegrade)`（text 分支）与 tool 角色分支 —— **保留块边界**。
+
+⇒ 走 pi-ai 路径时模型看到的是一整段拼好的字符串，块边界根本到不了模型 —— 所以「意图」要跟正文分开，靠的不能是 text 块边界，必须是**自己的换行符**。
 
 ## 6. 未观测项
 

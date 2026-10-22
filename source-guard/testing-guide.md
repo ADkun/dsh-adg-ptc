@@ -13,8 +13,8 @@
 | D3 | PTC 子分发不命中（`parent` 为 token 或对象） | 同上 | I2 | `[机检]` |
 | D4 | `exec` 缺形状（null / undefined / 字符串 / 数字）不抛错、不命中 | 同上 | I2 | `[机检]` |
 | D5 | 意图读取：`arguments.description` 取到并 trim；缺失 / 非字符串 / 整体非对象返回空串 | `intentOf` 用例组 | I2 | `[机检]` |
-| D6 | 成功路径：意图块前置 + 原有正文，顺序与引用都不变 | `applyPolicy` 用例 | I4 | `[机检]` |
-| D7 | 意图块形状：恰好 `{type:'text', text}` 两个键 | `successPrefixBlocks` 用例 | I4 | `[机检]` |
+| D6 | 成功路径：意图块前置（文本以 `\n` 结尾）+ 原有正文，顺序与引用都不变 | `applyPolicy` 用例 | I4 / I9 | `[机检]` |
+| D7 | 意图块形状：恰好 `{type:'text', text}` 两个键；缺省不带尾换行 | `successPrefixBlocks` 用例 | I4 / I9 | `[机检]` |
 | D8 | 意图缺失且前缀为空时不出任何块，正文与平台默认逐字相同 | `applyPolicy` 用例 | I4 | `[机检]` |
 | D8b | 意图缺失时 `successPrefixBlocks` 返回空数组（不出现"意图："字样） | `successPrefixBlocks` 用例 | I4 | `[机检]` |
 | D9 | `result` 无 content 数组时只出意图块，不抛错 | 同上 | I6 | `[机检]` |
@@ -25,13 +25,16 @@
 | D14 | 非管辖 exec（别的工具 / 子分发）的决策原样返回 | 同上 | I2 | `[机检]` |
 | D15 | `decision` 不是对象（null / undefined / 字符串 / 0）时原样返回 | 同上 | I6 | `[机检]` |
 | D16 | `additionalContexts` / `meta` 等字段随决策透传 | 同上 | I4 | `[机检]` |
-| D17 | 决策自带 content 时接在说明块之后，不覆盖上游正文 | 同上 | I4 | `[机检]` |
+| D17 | 决策自带 content 时接在说明块之后，不覆盖上游正文（意图块文本带 `\n`） | 同上 | I4 / I9 | `[机检]` |
 | D18 | 契约常量形状：`TOOL_NAME === 'run_code'`、`FAILURE_PREFIX === ''`、`SUCCESS_PREFIX === ''`（前缀句默认关闭） | 契约常量用例 | I2 | `[机检]` |
+| D21 | 意图块在有正文时自带换行结尾；无正文（缺省 / `followedByBody:false`）时不带 | `successPrefixBlocks` 用例 | I9 | `[机检]` |
+| D22 | 下游空串拼接后意图与正文之间仍有换行（边界不靠块） | `applyPolicy` 用例 | I9 | `[机检]` |
 | W1 | 契约三件套：`name === 'adg-source-guard'` / `inject === ['tools']` / `apply` 是函数 | 假 ctx 用例 | I7 | `[机检]` |
 | W2 | 挂载：恰好注册一个 `tools/post-execute` 监听器，`{prepend:true}`，effect 标签在位 | 同上 | I7 | `[机检]` |
-| W3 | 调用：`next()` 之后成功 run_code 被改写（意图块 + 原正文），`next()` 只被调一次 | 同上 | I4 | `[机检]` |
+| W3 | 调用：`next()` 之后成功 run_code 被改写（意图块文本以 `\n` 结尾 + 原正文），`next()` 只被调一次 | 同上 | I4 / I9 | `[机检]` |
 | W3b | 调用：意图缺失时只回平台正文（与未装插件逐字相同，不多一个块） | 同上 | I4 | `[机检]` |
 | W3c | 调用：正文缺失但有意图时只出意图块（不造空 content 数组） | 同上 | I6 | `[机检]` |
+| W3d | 接线层：下游空串拼接后意图与正文之间仍有换行 | 同上 | I9 | `[机检]` |
 | W4 | 调用：失败结果原样返回 `next()` 的决策（接线层也守住 R1） | 同上 | I1 | `[机检]` |
 | W5 | 调用：非 run_code 原样返回 | 同上 | I2 | `[机检]` |
 | W6 | 卸载：effect 返回的 disposer 移除监听器 | 同上 | I7 | `[机检]` |

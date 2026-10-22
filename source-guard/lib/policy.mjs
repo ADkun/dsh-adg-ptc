@@ -60,14 +60,27 @@ export function intentOf(exec) {
  *
  * `SUCCESS_PREFIX` 为空（默认）时只出「意图：」一行；前缀与意图都空时返回
  * 空数组 —— 那次调用的结果正文与平台默认逐字相同（不硬塞一个空块）。
+ *
+ * `followedByBody` = true 表示这次意图块后面**还有正文**：此时块的文本以
+ * `\n` 结尾。理由：下游（save-token 的 flattenPlainText、pi-ai 的 flattenText）
+ * 会把多个 text 块用空串拼起来，块边界会被吃掉 —— 换行必须写进字符串，
+ * 靠块边界是分不开的。
+ *
  * @param {string} intent 当次执行的意图（可为空串）
+ * @param {{followedByBody?: boolean}} options
  * @returns {{type: 'text', text: string}[]}
  */
-export function successPrefixBlocks(intent) {
+export function successPrefixBlocks(intent, options = {}) {
+  const { followedByBody = false } = options;
   const lines = [];
   if (SUCCESS_PREFIX.length > 0) lines.push(SUCCESS_PREFIX);
   if (intent.length > 0) lines.push(`意图：${intent}`);
-  return lines.length > 0 ? [{ type: 'text', text: lines.join('\n') }] : [];
+  if (lines.length === 0) return [];
+  // 换行写进字符串，不靠 text 块边界：下游（save-token 的 flattenPlainText、
+  // pi-ai 的 flattenText）都会把多个 text 块用空串拼起来，块边界会被吃掉 ——
+  // 没有自己的换行，意图就会贴在正文头上。
+  const text = followedByBody ? `${lines.join('\n')}\n` : lines.join('\n');
+  return [{ type: 'text', text }];
 }
 
 /**
@@ -100,7 +113,7 @@ export function applyPolicy({ exec, result, decision }) {
   const base = Array.isArray(decision.content)
     ? decision.content
     : Array.isArray(result?.content) ? result.content : [];
-  const prefix = successPrefixBlocks(intentOf(exec));
+  const prefix = successPrefixBlocks(intentOf(exec), { followedByBody: base.length > 0 });
   if (prefix.length === 0 && base.length === 0) return decision;
   return {
     ...decision,

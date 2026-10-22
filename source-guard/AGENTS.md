@@ -1,6 +1,6 @@
 # AGENTS.md — source-guard（`adg-source-guard` 源码守卫插件）
 
-本模块 = 一个 dsh 插件包 **`adg-source-guard`**：**不注册任何工具**，在全局层监听 `tools/post-execute`（prepend），对**顶层 `run_code`** 的执行结果做一次成败分流 —— **成功**时在模型可见正文最前面补一行当次执行意图（`意图：<description>`，前缀句默认关闭），**失败**时原样返回、一个字都不改。设计与不变量见 [design.md](design.md) 的 I1..I8，验证见 [testing-guide.md](testing-guide.md)。
+本模块 = 一个 dsh 插件包 **`adg-source-guard`**：**不注册任何工具**，在全局层监听 `tools/post-execute`（prepend），对**顶层 `run_code`** 的执行结果做一次成败分流 —— **成功**时在模型可见正文最前面补一行当次执行意图（`意图：<description>`，前缀句默认关闭；意图行与正文之间**有换行** —— 换行写进字符串，不靠块边界），**失败**时原样返回、一个字都不改。设计与不变量见 [design.md](design.md) 的 I1..I9，验证见 [testing-guide.md](testing-guide.md)。
 
 **为什么本模块有独立文档**（三样信号都在）：有独立命令（`cd source-guard && node --test test`）；有模块特有红线（失败路径零改动、只碰顶层 run_code、不碰 `tool/call` 的源码）；有跨模块路由（`install.ps1` / `install.sh` 部署它）。
 
@@ -54,4 +54,4 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 
 部署由 `install.ps1` / `install.sh` 的第 2b 步（把 `source-guard/` 拷到用户根的稳定副本）与第 4c / 4c-1 步（逐 profile `dsh plugin --profile <n> add file:<稳定副本>` + 读回断言）完成。
 
-**未观测**：重启 dsh 后监听器是否真的接到每次 run_code 上；量法：重启 dsh → 新建 Adg 对话 → 让模型跑一次成功的 run_code（结果正文应多出一行「意图：<当次 description>」，前缀句默认不出现）与一次失败的 run_code（结果正文应与未装本插件时逐字相同）。
+**未观测**：重启 dsh 后监听器是否真的接到每次 run_code 上；量法：重启 dsh → 新建 Adg 对话 → 让模型跑一次成功的 run_code（结果正文应多出一行「意图：<当次 description>」，前缀句默认不出现，且意图行与正文之间有换行）与一次失败的 run_code（结果正文应与未装本插件时逐字相同）。

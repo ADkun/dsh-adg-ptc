@@ -72,7 +72,7 @@ test('D6 成功路径：意图块前置 + 原有正文，正文顺序不变', ()
   assert.equal(decision.kind, 'accept');
   const texts = decision.content.map((block) => block.text);
   assert.equal(texts.length, 3);
-  assert.equal(texts[0], '意图：跑一下');
+  assert.equal(texts[0], '意图：跑一下\n');
   assert.equal(texts[1], 'line1');
   assert.equal(texts[2], 'line2');
   // 原有 block 是原对象引用，未被复制改写
@@ -83,6 +83,8 @@ test('D7 成功路径：意图块带类型 text', () => {
   const blocks = successPrefixBlocks('意图');
   assert.deepEqual(Object.keys(blocks[0]).sort(), ['text', 'type']);
   assert.equal(blocks[0].type, 'text');
+  // 缺省不带尾换行：换行只在"后面还有正文"时才有意义
+  assert.equal(blocks[0].text, '意图：意图');
 });
 
 test('D8 成功路径：意图缺失且前缀为空时不出任何块，正文与平台默认逐字相同', () => {
@@ -167,7 +169,7 @@ test('D17 决策自带 content 时原样接在后面（不覆盖上游已产出�
   const upstream = [{ type: 'text', text: 'upstream' }];
   const decision = { kind: 'accept', content: upstream };
   const out = applyPolicy({ exec: topExec('x'), result: okResult([{ type: 'text', text: 'result-side' }]), decision });
-  assert.deepEqual(out.content.map((b) => b.text), ['意图：x', 'upstream']);
+  assert.deepEqual(out.content.map((b) => b.text), ['意图：x\n', 'upstream']);
 });
 
 test('D18 契约常量形状', () => {
@@ -201,3 +203,18 @@ test('D20 源码里没有写死本机绝对路径', async () => {
     assert.doesNotMatch(text, /[A-Za-z]:\\+dsh/i, `${file} 出现 X:\\dsh 绝对路径`);
   }
 });
+
+test('D21 意图块在有正文时自带换行结尾；无正文时不带', () => {
+  assert.equal(successPrefixBlocks('x', { followedByBody: true })[0].text, '意图：x\n');
+  assert.equal(successPrefixBlocks('x')[0].text, '意图：x');
+  assert.equal(successPrefixBlocks('x', { followedByBody: false })[0].text, '意图：x');
+});
+
+test('D22 下游空串拼接后意图与正文之间仍有换行（边界不靠块）', () => {
+  const base = [{ type: 'text', text: '正文第一行' }];
+  const decision = applyPolicy({ exec: topExec('x'), result: okResult(base), decision: { kind: 'accept' } });
+  // 模拟 provider / save-token 的 flatten：多个 text 块用空串拼接
+  const joined = decision.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  assert.equal(joined, '意图：x\n正文第一行');
+});
+
