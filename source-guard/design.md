@@ -18,7 +18,7 @@ PTC 模式下模型经 `run_code` 干活，源码全文进上下文有**两条**
 
 所以本插件做的是：**在结果侧再确认一次"成功时不把源码从结果里带回来"**，并把平台不会渲染的当次执行意图补在最前面；失败路径**原样保留**，一个字都不加、一个字节都不删。
 
-**前缀句默认关闭**（`SUCCESS_PREFIX = ''`）：源码未随结果重复本来就是平台默认行为，每次成功都解释一遍只是噪音。默认只补「意图：<description>」一行 —— 这才是平台不渲染、模型回读时真正需要的信息。想改回显式宣告就把 `lib/policy.mjs` 的 `SUCCESS_PREFIX` 设成非空串（失败路径不受影响，D18 钉住默认值为空串）。
+**前缀句默认关闭**（`SUCCESS_PREFIX = ''`）：源码未随结果重复本来就是平台默认行为，每次成功都解释一遍只是噪音。默认只补「已执行代码：<description>」一行 —— 这才是平台不渲染、模型回读时真正需要的信息。想改回显式宣告就把 `lib/policy.mjs` 的 `SUCCESS_PREFIX` 设成非空串（失败路径不受影响，D18 钉住默认值为空串）。
 
 **不许对外说成「源码完全不进上下文」**：`tool/call` 的 `arguments` 那份源码，平台目前没有挂载点能改（见 I7 的未观测项）。
 
@@ -62,7 +62,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 ```
 
 - `base` = `decision.content`（数组时）否则 `result.content`（数组时）否则 `[]`。默认 `next()` 不产 content，所以要保留的输出在 `result.content`。
-- 意图块 = `{type:'text', text: SUCCESS_PREFIX (+ '\n意图：' + intent)}`，`intent` 取自 `exec.arguments.description`（平台必填项，trim 后可为空）。`SUCCESS_PREFIX` 默认为空串 ⇒ 默认只出「意图：」一行；意图也缺失时不出块，结果正文与平台默认逐字相同。
+- 意图块 = `{type:'text', text: SUCCESS_PREFIX (+ '\n已执行代码：' + intent)}`，`intent` 取自 `exec.arguments.description`（平台必填项，trim 后可为空）。`SUCCESS_PREFIX` 默认为空串 ⇒ 默认只出「已执行代码：」一行；意图也缺失时不出块，结果正文与平台默认逐字相同。
 - 意图块的文本**在有正文时以 `\n` 结尾** —— 换行进字符串，不靠块边界（下游会把多个 text 块用空串拼起来，块边界到不了模型；见第 5 节的三条出处）。
 - `...decision` 保证 `additionalContexts` / `meta` 等字段透传，不被抹掉。
 
@@ -101,7 +101,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 
 ## 6. 未观测项
 
-- **未观测**：真实运行期 `exec.arguments` 是否就是模型原始 arguments 对象（含 `description` 字段、值形态）；量法：装好后在新 Adg 会话里跑一次成功的 run_code，看结果正文是否多出「意图：<当次 description>」一行。
+- **未观测**：真实运行期 `exec.arguments` 是否就是模型原始 arguments 对象（含 `description` 字段、值形态）；量法：装好后在新 Adg 会话里跑一次成功的 run_code，看结果正文是否多出「已执行代码：<当次 description>」一行。
 - **未观测**：全局层监听是否覆盖**子代理**会话的 run_code；量法：派一个带 `run_code` 的子代理（经 `delegate` 的 `tools` 不能点名 `run_code` —— 平台保留名会当场抛错，所以量法是**在子代理会话里让模型直接调 run_code**：PTC 模式下它本就直呼 run_code），看它的成功结果有没有说明块。
 - **未观测**：平台后续版本是否会给 assistant tool_use 的 `arguments` 提供改写点（那才是"源码完全不进上下文"的真正入口）；量法：升级 dsh 后重读 `dsh-tool-cordis` 的事件目录与 `dsh-agent-loop` 的 `appendToolCall`，看有没有新增投影或事件。
 - **未观测**：与 `dsh-spill-policy` 同时安装时的最终正文顺序（谁前置在谁后面）；量法：两插件都装，跑一次输出超过 spill 预算的 run_code，看说明块落在 spill 预览之前还是之后。

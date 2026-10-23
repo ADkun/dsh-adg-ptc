@@ -71,7 +71,7 @@ test('W3 调用：next() 的决策被策略改写（成功 run_code 补意图块
   assert.equal(nextCalled, 1);
   assert.equal(out.kind, 'accept');
   assert.equal(out.content.length, 2);
-  assert.equal(out.content[0].text, '意图：d\n');
+  assert.equal(out.content[0].text, '已执行代码：d\n');
   assert.equal(out.content[1].text, '42');
 });
 
@@ -92,7 +92,7 @@ test('W3c 调用：意图与正文都缺失时只补意图块（不为空正文�
   const { handler } = ctx.listeners[0];
   const decision = { kind: 'accept' };
   const out = await handler(topExec, { isError: false }, async () => decision);
-  assert.deepEqual(out.content.map((b) => b.text), ['意图：d']);
+  assert.deepEqual(out.content.map((b) => b.text), ['已执行代码：d']);
 });
 
 test('W3d 接线层：下游空串拼接后意图与正文之间仍有换行', async () => {
@@ -101,7 +101,7 @@ test('W3d 接线层：下游空串拼接后意图与正文之间仍有换行', a
   const { handler } = ctx.listeners[0];
   const out = await handler(topExec, { isError: false, content: [{ type: 'text', text: '42' }] }, async () => ({ kind: 'accept' }));
   const joined = out.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-  assert.equal(joined, '意图：d\n42');
+  assert.equal(joined, '已执行代码：d\n42');
 });
 
 test('W4 调用：失败结果原样返回 next() 的决策', async () => {

@@ -16,7 +16,7 @@
 | D6 | 成功路径：意图块前置（文本以 `\n` 结尾）+ 原有正文，顺序与引用都不变 | `applyPolicy` 用例 | I4 / I9 | `[机检]` |
 | D7 | 意图块形状：恰好 `{type:'text', text}` 两个键；缺省不带尾换行 | `successPrefixBlocks` 用例 | I4 / I9 | `[机检]` |
 | D8 | 意图缺失且前缀为空时不出任何块，正文与平台默认逐字相同 | `applyPolicy` 用例 | I4 | `[机检]` |
-| D8b | 意图缺失时 `successPrefixBlocks` 返回空数组（不出现"意图："字样） | `successPrefixBlocks` 用例 | I4 | `[机检]` |
+| D8b | 意图缺失时 `successPrefixBlocks` 返回空数组（不出现"已执行代码："字样） | `successPrefixBlocks` 用例 | I4 | `[机检]` |
 | D9 | `result` 无 content 数组时只出意图块，不抛错 | 同上 | I6 | `[机检]` |
 | D10 | 失败路径：`isError:true` 原样返回，不加任何东西 | 同上 | I1 | `[机检]` |
 | D11 | 失败路径：即使上游决策已带 content 也逐块相等不动它 | 同上 | I1 | `[机检]` |
@@ -39,7 +39,7 @@
 | W5 | 调用：非 run_code 原样返回 | 同上 | I2 | `[机检]` |
 | W6 | 卸载：effect 返回的 disposer 移除监听器 | 同上 | I7 | `[机检]` |
 | W7 | 策略抛错时不外抛：落一条 warn 并返回 `next()` 的决策 | 同上 | I6 | `[机检]` |
-| M1 | 真实运行期：成功的 run_code 结果正文多出「意图：<当次 description>」一行（前缀句默认不出现） | 重启 dsh → 新 Adg 对话 → 让模型跑一次成功 run_code | I4 / design 未观测① | `[人]` |
+| M1 | 真实运行期：成功的 run_code 结果正文多出「已执行代码：<当次 description>」一行（前缀句默认不出现） | 重启 dsh → 新 Adg 对话 → 让模型跑一次成功 run_code | I4 / design 未观测① | `[人]` |
 | M2 | 真实运行期：失败的 run_code 结果与未装本插件时逐字相同 | 同一次会话里让模型跑一次会抛错的 run_code | I1 | `[人]` |
 | M3 | 子代理的 run_code 也被覆盖（全局层注册的预期行为） | 派一个子代理，让它在自己会话里跑成功 run_code | design 未观测② | `[人]` |
 | M4 | 其它工具的结果一个字节都没动 | 同一次会话里读文件 / 搜索，对比装前装后 | I2 | `[人]` |

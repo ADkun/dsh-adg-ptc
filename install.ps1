@@ -509,9 +509,9 @@ if ($SkipPackages) {
 # ── 2b-5. source-guard/ 插件（run_code 源码守卫）──────────────────────────────
 # 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 tools/post-execute（prepend）上监听，对**顶层 run_code** 的结果做
-# 成败分流 —— 成功时在最前面补一行当次执行意图（`意图：<description>`；那句「源码未随本结果重复」
+# 成败分流 —— 成功时在最前面补一行当次执行意图（`已执行代码：<description>`；那句「源码未随本结果重复」
 # 的说明句默认关闭，源码不进结果本来就是平台默认行为），失败时原样返回。
-# 漏装的症状是 run_code 的成功结果里没有多出那行「意图：」（不报错、不崩）。
+# 漏装的症状是 run_code 的成功结果里没有多出那行「已执行代码：」（不报错、不崩）。
 # 注意：它**不改** tool/call 的 arguments 那份源码 —— 平台没有那个挂载点（design.md 第 1 节）。
 $guardSrc = Join-Path $here 'source-guard'
 $guardDest = Join-Path $root 'plugins\adg-source-guard'
@@ -1024,9 +1024,9 @@ foreach ($name in $Profiles) {
 
   # 4c-10. adg-source-guard 插件（run_code 源码守卫）也装进这个 profile。
   # 与 4c-8 同形（file: 依赖 + reconcile）。漏装的后果：run_code 的成功结果里不会多出那行
-  # 「意图：<当次 description>」（不报错、不崩 —— 静默回到平台默认），所以同样要如实报告。
+  # 「已执行代码：<当次 description>」（不报错、不崩 —— 静默回到平台默认），所以同样要如实报告。
   if ($guardSkipped) {
-    $installNotes += "$name : adg-source-guard 未部署（$guardNote）—— run_code 的成功结果里不会多出「意图：」那行"
+    $installNotes += "$name : adg-source-guard 未部署（$guardNote）—— run_code 的成功结果里不会多出「已执行代码：」那行"
   } else {
     $guardInProfile = Join-Path $profileDir "node_modules\adg-source-guard\package.json"
     $guardNeedInstall = -not (Test-Path -LiteralPath $guardInProfile)
@@ -1067,7 +1067,7 @@ foreach ($name in $Profiles) {
     } elseif ($guardPkgName -eq 'adg-source-guard') {
       $installNotes += "$name : adg-source-guard 包在位，但 manifest 缺一格（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— 手工补上再重启"
     } else {
-      $installNotes += "$name : adg-source-guard **没装进 node_modules**（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— run_code 的成功结果里不会多出「意图：」那行"
+      $installNotes += "$name : adg-source-guard **没装进 node_modules**（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— run_code 的成功结果里不会多出「已执行代码：」那行"
     }
   }
 
@@ -1181,7 +1181,7 @@ Write-Host "  permission -> $permNote（set_child_permission 工具；只有调�
 Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / set_child_permission / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
 Write-Host "  skill-inject -> $injectNote（思考框架注入：把 skills\thinking-framework\SKILL.md 正文注入 Adg 调度者的系统提示词；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
-Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「意图：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
+Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「已执行代码：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
 Write-Host ""
@@ -1194,7 +1194,7 @@ Write-Host "（adg-permission 插件：同样要重启 dsh 才注册；它不进
 Write-Host "（adg-delegate 插件：同样要重启 dsh 才注册；它是唯一的委派入口 —— 没它调度者开不了子代理。）"
 Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有思考框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
-Write-Host "（adg-source-guard 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话里，顶层 run_code 的成功结果才会多出一行「意图：<当次 description>」（那句「源码未随本结果重复」说明句默认不出现）；失败结果永远逐字不变。注意它只改结果侧，tool/call 里那份入参源码平台没有挂载点可改。）"
+Write-Host "（adg-source-guard 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话里，顶层 run_code 的成功结果才会多出一行「已执行代码：<当次 description>」（那句「源码未随本结果重复」说明句默认不出现）；失败结果永远逐字不变。注意它只改结果侧，tool/call 里那份入参源码平台没有挂载点可改。）"
 Write-Host "（adg-ptc-parallel 插件：同样要重启 dsh 才注册 —— 而且 section 是在 agent 创建那一刻挂上的，所以运行中的旧会话不补挂：重启 dsh + 新建对话才看得到。子代理的 scope 同样会被判定，工具清单按每个 agent 当前可见的工具现算。）"
 if ($packageFailed) {
   Write-Host ""

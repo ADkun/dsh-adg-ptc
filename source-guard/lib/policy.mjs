@@ -58,7 +58,7 @@ export function intentOf(exec) {
 /**
  * 构造成功路径要加到结果正文前面的块。
  *
- * `SUCCESS_PREFIX` 为空（默认）时只出「意图：」一行；前缀与意图都空时返回
+ * `SUCCESS_PREFIX` 为空（默认）时只出「已执行代码：」一行；前缀与意图都空时返回
  * 空数组 —— 那次调用的结果正文与平台默认逐字相同（不硬塞一个空块）。
  *
  * `followedByBody` = true 表示这次意图块后面**还有正文**：此时块的文本以
@@ -74,7 +74,7 @@ export function successPrefixBlocks(intent, options = {}) {
   const { followedByBody = false } = options;
   const lines = [];
   if (SUCCESS_PREFIX.length > 0) lines.push(SUCCESS_PREFIX);
-  if (intent.length > 0) lines.push(`意图：${intent}`);
+  if (intent.length > 0) lines.push(`已执行代码：${intent}`);
   if (lines.length === 0) return [];
   // 换行写进字符串，不靠 text 块边界：下游（save-token 的 flattenPlainText、
   // pi-ai 的 flattenText）都会把多个 text 块用空串拼起来，块边界会被吃掉 ——
