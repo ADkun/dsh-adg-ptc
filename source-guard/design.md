@@ -101,7 +101,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 
 ## 6. 未观测项
 
-- **未观测**：真实运行期 `exec.arguments` 是否就是模型原始 arguments 对象（含 `description` 字段、值形态）；量法：装好后在新 Adg 会话里跑一次成功的 run_code，看结果正文是否多出「已执行代码：<当次 description>」一行。
-- **未观测**：全局层监听是否覆盖**子代理**会话的 run_code；量法：派一个带 `run_code` 的子代理（经 `delegate` 的 `tools` 不能点名 `run_code` —— 平台保留名会当场抛错，所以量法是**在子代理会话里让模型直接调 run_code**：PTC 模式下它本就直呼 run_code），看它的成功结果有没有说明块。
+- **已观测（2026-10-24，重启 dsh 后的 Adg PTC 会话，顶层 run_code）**：`exec.arguments.description` 取到的是**当次调用的 description 原值** —— 成功调用（description「探测运行期成功前缀文案」）的结果正文第一行是「已执行代码：探测运行期成功前缀文案」，与传参逐字一致。**仍未观测**：`exec.arguments` 是否就是模型原始 arguments 那个**对象本身**（值形态已证，引用同一性未测）；量法：临时在插件里比对 `exec.arguments` 与上游 payload 的引用（或看它是否被冻结），跑一次 run_code 打印结果。
+- **已观测（2026-10-24，本机 Adg PTC 会话派出的子代理 2b52f1f2 在它自己会话里自测）**：全局层监听**确实覆盖子代理会话**的 run_code —— 子代理的成功调用（description「子代理侧成功探针」）结果正文第一行是「已执行代码：子代理侧成功探针」、第二行 `child-ok`；失败调用（`throw new Error("child-probe-failure")`）正文首行直接是 `Error: code run failed (exception): Error: child-probe-failure`、末行 `File sandbox: danger-full-access.`，**没有任何前缀**。⇒ 成功补标签、失败零改动，在子代理侧与顶层同形。
 - **未观测**：平台后续版本是否会给 assistant tool_use 的 `arguments` 提供改写点（那才是"源码完全不进上下文"的真正入口）；量法：升级 dsh 后重读 `dsh-tool-cordis` 的事件目录与 `dsh-agent-loop` 的 `appendToolCall`，看有没有新增投影或事件。
 - **未观测**：与 `dsh-spill-policy` 同时安装时的最终正文顺序（谁前置在谁后面）；量法：两插件都装，跑一次输出超过 spill 预算的 run_code，看说明块落在 spill 预览之前还是之后。

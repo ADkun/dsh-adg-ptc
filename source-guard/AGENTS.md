@@ -54,4 +54,4 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 
 部署由 `install.ps1` / `install.sh` 的第 2b 步（把 `source-guard/` 拷到用户根的稳定副本）与第 4c / 4c-1 步（逐 profile `dsh plugin --profile <n> add file:<稳定副本>` + 读回断言）完成。
 
-**未观测**：重启 dsh 后监听器是否真的接到每次 run_code 上；量法：重启 dsh → 新建 Adg 对话 → 让模型跑一次成功的 run_code（结果正文应多出一行「已执行代码：<当次 description>」，前缀句默认不出现，且意图行与正文之间有换行）与一次失败的 run_code（结果正文应与未装本插件时逐字相同）。
+**已观测（2026-10-24，重启 dsh 之后的 Adg PTC 会话内自测）**：监听器确实接到每次顶层 run_code 上 —— 成功那次（description「探测运行期成功前缀文案」）的结果正文是两行：「已执行代码：探测运行期成功前缀文案」＋「probe-ok」，意图行自带换行、与正文分行，前缀句默认不出现；紧接着的失败那次（`throw new Error("probe-failure-path")`）结果正文与未装本插件时逐字相同（`Error: code run failed (exception): Error: probe-failure-path` ＋ 栈 ＋ `File sandbox: danger-full-access.`），没有任何前缀。
