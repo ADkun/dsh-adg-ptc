@@ -2,7 +2,7 @@
 title: delegate 设计
 owner: Adg preset 维护者
 status: current
-last_reviewed: 2026-10-19
+last_reviewed: 2026-10-23
 ---
 
 # design.md — delegate（`delegate` 工具）
@@ -152,6 +152,20 @@ last_reviewed: 2026-10-19
 `tools_note` 在"只保留 N 个"里点明它被保留的原因（不静默）。
 载体：D24–D27；`delegate/lib/delegate.mjs` 的 `CONTINUATION_TOOL` / `planToolFilter` / `toolsNote`。
 
+**I17b 那段续接提示与工具解耦：本插件在子代理自己的 scope 层注册一份不带平台标记的 `send_message` 克隆（影子注册）。**
+平台追加提示的判据是两个条件同时成立：`spec.delivery !== "caller"`，且 `isAdjacentAgentSendMessageTool(this.ctx.get("tools")?.get("send_message", child))` 为真。本插件派出的子代理传的是 `delivery: 'parent'`，第一个条件恒成立；平台也没有任何配置项能关掉这段追加（`delivery: 'caller'` 能跳过，但那样父代理连结算通知都收不到，不可用），所以只能从**标记这一侧**摘。
+判据读的不是名字、不是 schema，而是定义上的一个**非枚举** Symbol 标记：`@deepseek-ai/dsh-subagent` 的 `lib/types/internal.js` 里 `adjacentAgentSendMessageTool = Symbol.for('dsh.subagent.adjacentAgentSendMessageTool')`，由 `markAdjacentAgentSendMessageTool(definition)` 用 `Object.defineProperty(definition, adjacentAgentSendMessageTool, { value: true })` 打在平台注册的那份定义上（缺省 `enumerable: false`）。`get(name, scope)` 返回的是 `view(scope).visible` 里的那一份，而 `view(scope)` 对 scope **自己那层**的注册是直接覆盖继承层的（`@deepseek-ai/dsh-tools` 的 `view`）—— 于是本插件在能力面窗口里 `register({ ...原定义 })` 一份同名同 schema 的克隆，平台的 `get` 就只读得到克隆。
+五条不变量：
+1. **own-layer 遮蔽**：影子注册必须落在子代理**自己的 scope 层**（`child.ctx.tools.register`），不是全局层 —— 全局层那份是平台的、别人还要用；scope 隔离也保证了"只影响这一个子代理"，disposer 随子代理 scope 销毁自动失效。
+2. **展开即丢标记**：`defineTool()` 的产物是普通对象字面量，标记是非枚举 ⇒ `{ ...definition }` 只复制可枚举自有属性，克隆天然不带它。**不去 import 那个 Symbol**：本插件零额外依赖，也不需要知道标记长什么样。
+3. **行为逐字不变**：克隆的 `execute` / `output.render` 等一律是原定义的**同一个函数对象**（`execute` 闭包捕获的是全局层的 `ctx.subagents`，与 scope 无关）—— 摘掉的只有标记，不是能力。
+4. **缺件跳过、形状不符抛错**：读不到 `send_message` ⇒ 不注册也不报错（没有工具就没有那段提示，凭空造一个反而是给子代理开了一条它本来没有的通道）；`child.ctx.tools.get` / `register` 不是函数 ⇒ **抛错**（fail-closed：静默跳过等于让"提示该消失"这件事静默失效，而调用方看到的仍是成功）。抛出的错误由 `createChildFaces().applyFor` 吞下只记 `status='failed'`，再由 `take` 之后那一步报错并先 `dispose()`（I9），不在 `agent/created` 监听里往外抛。
+5. **重复注册即幂等**：同一个 scope 第二次 `register` 同名工具会被平台拒绝（`tool "send_message" is already registered in this scope`，出处是 `@deepseek-ai/dsh-tools` 的 `NamedEntries` 断言）。两条贴能力面的路径（`delegate()` 里的 `applied` / `pending`）本就互斥，但那是**调用方的时序**在替影子挡重复，不是影子自己的保证 —— 所以 `register` 抛出的错误消息命中 `/already registered in this scope/` 时按"影子已在"处理：吞掉、仍返回 `'shadowed'`，**别的错误一律照抛**（不拿幂等当挡箭牌去吞真实的注册失败）。**不**做成"注册前先探 own 层"：`@deepseek-ai/dsh-tools` 的 `layers` 是私有的，公开 API 只有混合了继承层的 `get` —— 照它判会把继承层那份**带标记**的原定义误当成自己已注册的影子。
+演练：`tools.restrict()` 只过滤 scope **继承**的层、不动 own layer，所以影子注册不会被 I17 的 allow 清单裁掉；两者先后不冲突，实现上排在工具面与 persona 之后收尾（fail-closed 的报错顺序与既有两条一致）。
+载体：D35–D41；`delegate/lib/delegate.mjs` 的 `shadowSendMessage` / `applyChildFace`。
+**行号口径**：这里引的平台行号（`lib/index.js:1460`、`lib/types/internal.js` 的标记符号）对应当前本机安装的那一版；dsh 升级后行号会漂，按 `withContinuableReturnGuidance` / `isAdjacentAgentSendMessageTool` 这两个符号名重新定位，别拿旧行号硬读。
+**未观测**：真实会话里那段提示是否真的不再出现、子代理是否真的不再先发一条中途 `send_message` —— 机制层只能证明"克隆已注册进子代理 scope 层且不带标记"；量法：重启 dsh 后新开一个会话，让调度者用一次 `delegate` 派一个子代理，读它的**首条** prompt 末尾（不该再出现 `Your parent agent id is` 那段），并核对父代理这一轮的结算通知只有一条、不是两条。
+
 **I18 本插件**预留**子代理的 `childId`，并核对平台回显的 id 与它一致。**
 `SubagentActivationSpec.childId` 是可选的预留身份（平台签名为 `SessionId`，实现是 `brandString` —— 运行期就是普通字符串），本插件用 `newChildId()`（`globalThis.crypto.randomUUID()`，与 `startLocal` 缺省生成同形）填它。理由：能力面要在**建立窗口**里贴上（I7b），而那个窗口（`agent/created`）拿不到 `startActivation` 的返回值 —— **预留的 id 是双方唯一都知道的那把钥匙**。`startActivation` 需要 `provider.prepareContinuable` 才允许预留 id（spawn 声明了它，`startActivation` 对缺这条能力的 provider 抛 `reserved child ids require a local backend`）。
 返回的 `childId` 与预留值不一致 ⇒ **抛错**（并清掉这次登记）：说明能力面被贴到了一个没有先验登记的对象上，这次委派的边界不可信。取不到 id 仍按 I9 抛错。
@@ -184,7 +198,7 @@ last_reviewed: 2026-10-19
 **库接口（`delegate/lib/delegate.mjs`，零 import）**
 
 常量：`TOOL_NAME` / `ASK_TOOL_NAME` / `SUBAGENT_PROVIDER`（`'spawn'`）/ `SUBAGENT_KINDS`（只含 `'continuable'`）/ `BUILTIN_DENY` / `RESERVED_PTC_NAME`（`'run_code'`）/ `PERSONA_SECTION`（`'deployment:persona-prefix'`）。
-函数：`assertCallerAgent(exec)` / `readRestrictableNames(parent)` / `planToolFilter(requested, knownNames)` / `toolsNote(plan)` / `buildRequest(args, parent)` / `continuableChildId(started)` / `buildFace(args, plan)`（persona 恒为字符串）/ `newChildId()`（预留 id）/ `createChildFaces()`（建立窗口的待贴表：`remember` / `applyFor` / `take`）/ `applyChildFace(child, face)` / `delegate(args, exec, deps)`；提问通道另有 `createOwnerIndex()` / `resolveAskOwner(caller, ownerId, agents)` / `questionRequest(questions, agent, signal)` / `answerResult(result)` / `askUser(questions, exec, deps)`。
+函数：`assertCallerAgent(exec)` / `readRestrictableNames(parent)` / `planToolFilter(requested, knownNames)` / `toolsNote(plan)` / `buildRequest(args, parent)` / `continuableChildId(started)` / `buildFace(args, plan)`（persona 恒为字符串）/ `newChildId()`（预留 id）/ `createChildFaces()`（建立窗口的待贴表：`remember` / `applyFor` / `take`）/ `applyChildFace(child, face)` / `shadowSendMessage(child)`（在子代理 scope 层注册不带平台标记的 `send_message` 克隆，返回 `'shadowed'` / `'absent'`；同 scope 重复注册按幂等处理）/ `delegate(args, exec, deps)`；提问通道另有 `createOwnerIndex()` / `resolveAskOwner(caller, ownerId, agents)` / `questionRequest(questions, agent, signal)` / `answerResult(result)` / `askUser(questions, exec, deps)`。
 
 **装配接口（`delegate/index.mjs`）**
 

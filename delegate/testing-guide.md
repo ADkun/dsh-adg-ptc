@@ -59,8 +59,15 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | D32 | `buildFace` / `newChildId` | persona **恒为字符串**：没给 = `''`、非字符串（如 `42`）= `''`、给了就是那段文本；`newChildId()` 是 36 位 uuid 且两次不同 | I7 | D32 |
 | D33 | `delegate` 的 persona 回显 | 给了非空字符串 ⇒ `out.persona === 'set'`；给空串或没给 ⇒ `'unset'`；**三种情况下 persona 段都注册了一次**（unset 时 `text === ''`，靠它遮蔽继承来的调度者 persona） | I7 | D33 |
 | D34 | `createChildFaces().applyFor` | 贴的时候抛错 ⇒ `applyFor` **不抛**、只把 `status` 记成 `failed` 并留存原始错误（`agent/created` 的派发方不该被本插件的失败拖垮）；没登记 / 已收口 / 传 `undefined` ⇒ 一律 `false` | I7b | D34 |
+| D35 | `delegate` 的建立窗口（影子注册） | 窗口内对子代理调了 `ctx.tools.register`，注册的定义 `name === 'send_message'`；同一次 `applyChildFace` 返回 `['toolFilter','persona','shadowSendMessage']`（三项在同一个窗口里做完） | I17b / I16 | D35 |
+| D36 | 影子克隆 vs 平台标记 | 原定义上 `Symbol.for('dsh.subagent.adjacentAgentSendMessageTool')` 为 `true` 且**不可枚举**；`{ ...原定义 }` 展开后读不到它；注册进子代理的那份也读不到，而原定义身上仍是 `true` | I17b | D36 |
+| D37 | 影子的行为一致性 | 克隆与原定义的 `description` / `parameters` / `output.schema` 相同，`execute` 是**同一个函数对象**（跑一次照样回传 `{messageId}`，闭包仍指向全局层） | I17b | D37 |
+| D38 | 读不到 `send_message` | `get` 回 `undefined` ⇒ `shadowSendMessage` 返回 `'absent'`、**零注册**、不抛错；`applyChildFace` 只返回 `['persona']`，建立窗口仍记 `applied`（没有工具就没有那段提示，凭空造一个是开了一条它本来没有的通道） | I17b | D38 |
+| D39 | `ctx.tools` 形状不符 | `child.ctx.tools.get` / `register` 缺一或不是函数 ⇒ `shadowSendMessage` 抛错（消息含「tools.get / register 不是函数」）；`createChildFaces().applyFor` **不抛**、`status` 记 `failed` 并留原始错误（与 D34 同一纪律，不许把「没遮蔽」当「已遮蔽」回报） | I17b / I9 | D39 |
+| D40 | 同 scope 重复注册（影子幂等） | 假 `register` 照真实现的样子在第二次同名注册时抛 `tool "send_message" is already registered in this scope` ⇒ `shadowSendMessage` 仍返回 `'shadowed'`，注册条目只有一条；同一次 `applyChildFace` 连贴两次都返回 `['toolFilter','persona','shadowSendMessage']`（第二次不降级成失败）；两次都真调了 `register`（幂等是吞重复注册，不是跳过调用） | I17b | D40 |
+| D41 | 注册抛别的错误 | 假 `register` 抛与重复注册无关的错误 ⇒ `shadowSendMessage` **照抛**（不拿幂等当挡箭牌）；`createChildFaces().applyFor` 仍不抛、`status` 记 `failed` 并留原始错误（与 D34 / D39 同一纪律） | I17b / I9 | D41 |
 
-**测试纪律**：造工具定义一律用**真的** `defineTool`（作者侧 schema 方言与 `output` 硬要求只有真实现判得了）；假件只替换服务、调用方与子代理运行时，**不**替换 schema 编译器。假 `subagents` 只实现 `startActivation`（平台唯一入口）并记录 `dispose`，它的 `onCreate` 回调模拟平台"装配子代理 → `agent/created` → 投递首条 prompt → 返回"的**建立窗口**；假子代理用 ledger 记下 `restrict` / `section` 的每次调用 —— persona / toolFilter 在建立窗口贴，测试就在这个窗口的**接收端**断言。用例之间不共享可变状态，所以可以任意顺序、并发跑。
+**测试纪律**：造工具定义一律用**真的** `defineTool`（作者侧 schema 方言与 `output` 硬要求只有真实现判得了）；假件只替换服务、调用方与子代理运行时，**不**替换 schema 编译器。假 `subagents` 只实现 `startActivation`（平台唯一入口）并记录 `dispose`，它的 `onCreate` 回调模拟平台"装配子代理 → `agent/created` → 投递首条 prompt → 返回"的**建立窗口**；假子代理用 ledger 记下 `restrict` / `section` / `registered` 的每次调用 —— persona / toolFilter / 影子注册都在建立窗口贴，测试就在这个窗口的**接收端**断言；假子代理的 `ctx.tools` 要成对给出 `get` / `register`（缺省让 `get` 一律回 `undefined`，老用例自然走影子注册的 `'absent'` 分支）。要造「带平台标记」的假 `send_message`，用真的 `defineTool` 再用 `Object.defineProperty(definition, Symbol.for('dsh.subagent.adjacentAgentSendMessageTool'), { value: true })` 补标记（缺省 `enumerable: false` 正是被测的那一点）—— 测试自己拼这个 Symbol，**不 import** 平台内部符号。用例之间不共享可变状态，所以可以任意顺序、并发跑。
 
 ## 迁移矩阵
 
@@ -74,6 +81,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 |---|---|
 | `SubagentRuntime.startActivation(spec)` 的 spec 键（`provider` / `label` / `childId` / `request` / `signal` / `delivery:'parent'`）与 `SubagentActivation.childId`（预留 id 必须原样回来） | D9 / D31 |
 | 能力面窗口：`agent/created` 活实例上的 `tools.restrict(filter)` / `systemPrompt.section('deployment:persona-prefix')`，兜底走 `AgentRegistry.get(childId)` | D22 / D23 / D28–D31 |
+| 窗口里的第三件事：`child.ctx.tools.get('send_message', child)` / `register({ ...definition })`（读不到 ⇒ 跳过；形状不符 ⇒ 抛；同 scope 重复注册 ⇒ 吞成 `'shadowed'`；前两者由 `applyFor` 吞成 `failed`） | D35–D41 |
 | `ToolRestriction{allow?, deny?}` 的两侧下发与"只减不增"的用法 | D2 / D3 / D5 |
 | `SubagentStartRequest` 的键集（只有 `prompt` / `parent`；**永不出现** `maxDepth`，也没有 persona / toolFilter 的位置） | D8 / D9 |
 | `tools.view(agent).restrictableNames`（含读不出时的 fail-closed 分支） | D11 |
@@ -88,6 +96,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 - **一条很容易踩的假证据**：用例里的 `subagents` 是假件 —— "D9 通过"只说明本插件**交给平台的 spec 形状**对，不说明平台接受了它。`startActivation` 的前置校验（parent 同一性、capabilities）、provider 是否放行那批名字，只有真实挂载（或一次真委派）能观测。
 - **第二条同样的假证据**：用例里的假子代理与假建窗回调都是本插件自造的 —— "D22 / D28 通过"只说明**调用形状与时点**对；`tools.restrict` 与 `systemPrompt.section` 在真子代理身上是不是活生效、平台的 `agent/created` 是否真在首轮装配之前（I7b），只有真会话能观测。
 - **第三条**：用例里的 `agents` / `userQuestions` 也是假件 —— "D15 通过"只说明**请求形状**对；用户提问服务的 `assertLiveRoot` 同一性判定、卡片的渲染与回收、答复走的耐久路径，只有真会话能观测。
+- **第四条（影子注册专有）**：D35–D41 里的 `ctx.tools` 是**假件** —— 它们只证明本插件在自己这一侧写对了："注册的是同名同 schema、丢了标记的克隆"，以及"缺件 / 形状不符 / 重复注册时按既定口径收口"。它们**不证明**平台注册表真的会让子代理 own 层那份遮蔽继承层那份、也不证明平台那句提示真的不再出现。遮蔽行为由**独立验证方在真机**的 `@deepseek-ai/dsh-tools` 上复现过（own 层同名注册无条件覆盖继承层、`restrict` 的 allow 与 deny 都裁不掉、`get('send_message', child)` 读到的是无标记克隆、子代理 `scope` 销毁后自动回收、兄弟子代理不受影响），那次复现没有落成仓库里的集成用例 —— 本模块不为它引入 `devDependency`。**复验办法**：dsh 升级后按 `view` / `register` 两个符号名读一遍当前安装的 `@deepseek-ai/dsh-tools`（看 own layer 那段是不是仍**无条件** `visible.set`），再照下面的人工 review 项在新会话里真派一次；两者都过才算机制仍成立。
 
 ## 人工 review 项
 
@@ -99,7 +108,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 **未观测**：并发多条委派时对照表读数的稳定性；量法：并发派两条，断言两条的 `tools` / `tools_note` 一致。
 **未观测**：`ask_user` 的登录墙端到端链路（子代理开有头窗口 → 直接问用户 → 用户在卡片上作答 → 答复回到子代理 → 它自己复核登录态并继续）；量法：在真站点登录墙前派一次带 `ask_user` 的浏览器委派，读转写：它这一轮调的是 `ask_user` 还是 `notify_user`、卡片落在哪个会话、拿到答复后有没有先复核登录态再继续。
 **未观测**：配对表跨越 dsh 重启 / 子代理被 `send_message` 续起之后还能不能取到活着的调度者（预期：重启后旧条目查不到活实例 ⇒ 抛错；续起同一进程内的子代理 ⇒ 仍能问）；量法：派一个带 `ask_user` 的子代理，让它先只报一句、用 `send_message` 续起后再问一次，观察是 `asked_as: 'scheduler'` 还是那条"委派你的调度者此刻不是活着的会话"。
-**未观测**：I17 在真实会话里的端到端效果 —— 平台是否真的按子代理继承到的 `send_message` 追加了续接提示、子代理首轮能否真的调到 `send_message` 并把结果回传（机制层只证明本插件保留了这个通道）；量法：新会话里让调度者用一次 `delegate`（给 `tools: []`），让子代理**首轮就**报告自己的工具面里有没有 `send_message`、并真的调一次 `send_message` 回传结果，与 `tools_note` 比对。
+**未观测**：I17 / I17b 在真实会话里的端到端效果 —— 那段续接提示是否真的不再出现在子代理**首条** prompt 末尾、子代理首轮能否真的调到 `send_message` 并把结果回传、父代理这一轮是否只收到一条结果（机制层只证明「子代理 scope 层里那份 `send_message` 不带平台标记」与「本插件保留了这个通道」）；量法：新会话里让调度者用一次 `delegate`（给 `tools: []`），让子代理**首轮就**报告自己的工具面里有没有 `send_message`、并真的调一次 `send_message` 回传结果，与 `tools_note` 比对；再把它的首条 prompt 末尾取出来，断言**没有** `Your parent agent id is` 那段，且父代理这一轮只收到一条结算、不是两条。
 
 ## 交付前的最小闭环
 

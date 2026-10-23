@@ -39,6 +39,7 @@ import {
   questionRequest,
   readRestrictableNames,
   resolveAskOwner,
+  shadowSendMessage,
   toolsNote,
 } from '../lib/delegate.mjs';
 
@@ -120,13 +121,17 @@ function fakeSubagents() {
  * `systemPrompt.section` 的每次调用 —— 能力面走建立窗口 / 创建后窗口，
  * 测试就在这个窗口的接收端断言。
  */
-function fakeChild() {
-  const ledger = { restrict: [], sections: [] };
+function fakeChild({ sendMessage } = {}) {
+  const ledger = { restrict: [], sections: [], registered: [] };
   const child = {
     id: 'child-session-1',
     ctx: {
       tools: {
         restrict: (filter) => ledger.restrict.push(filter),
+        // `get` / `register` 是影子注册要用的那一对：缺省让 `get` 一律回 undefined，
+        // 没传假件的用例就自然走 'absent' 分支（没有 send_message 就没有那段提示）。
+        get: (name) => (name === CONTINUATION_TOOL ? sendMessage : undefined),
+        register: (definition) => ledger.registered.push(definition),
       },
       systemPrompt: {
         getSectionOrder: (name) => `order-of-${name}`,
@@ -144,10 +149,10 @@ function fakeChild() {
  * `agent/created` 监听就把本次能力面贴上去（抢在首轮装配之前）；`false` 模拟"没赶上
  * 建立窗口"，此时 `delegate` 走创建后窗口的兜底路径（需要 agents 服务）。
  */
-function fixture({ names = KNOWN, establishment = true } = {}) {
+function fixture({ names = KNOWN, establishment = true, sendMessage } = {}) {
   const faces = createChildFaces();
   const subagents = fakeSubagents();
-  const { child, ledger } = fakeChild();
+  const { child, ledger } = fakeChild({ sendMessage });
   const agents = { get: (id) => (id === child.id ? child : undefined) };
   subagents.onCreate = (spec) => {
     child.id = spec.childId ?? child.id;
@@ -919,3 +924,200 @@ test('D27 tools_note 文案反映 send_message 被保留的原因', () => {
   assert.match(note, /只保留 3 个：Read、Bash、send_message/);
   assert.match(note, /send_message 是平台续接通道，不是任务能力，本次一并保留以便回传结果/);
 });
+// ── 影子注册：摘掉平台标记，让那段续接提示不再被追加（I17）──────────────────
+// 平台的判据是子代理**看得见**的 send_message 定义上的一个非枚举 Symbol 标记；本插件在子代理
+// 自己的 scope 层注册一份不带它的克隆来遮蔽。这几条钉住「标记丢了、行为没变、缺件不静默」。
+
+/** 平台判据读的那个 Symbol。测试自己拼，不 import 任何平台内部符号（真实字面量见 design.md 的 I17）。 */
+const ADJACENT_MARK = Symbol.for('dsh.subagent.adjacentAgentSendMessageTool');
+
+/**
+ * 造一份与平台同形的 `send_message` 假件：**真** `defineTool` 产物 + 用 `Object.defineProperty`
+ * 打上的非枚举 Symbol 标记（平台 `markAdjacentAgentSendMessageTool` 就是这两步）。
+ */
+function markedSendMessage(sent = []) {
+  const definition = defineTool({
+    name: CONTINUATION_TOOL,
+    description: '把一条消息发给另一个智能体（假件，形状照平台那份）。',
+    parameters: {
+      agent_id: { type: 'string', required: true, description: '收件智能体的会话 id' },
+      message: { type: 'string', required: true, description: '要送过去的内容' },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { messageId: { type: 'string', required: true, description: '这次投递的 id' } },
+      },
+      render: (_args, value) => [{ type: 'text', text: value.messageId }],
+    },
+    async execute(args) {
+      sent.push(args);
+      return { messageId: 'message-9' };
+    },
+  });
+  Object.defineProperty(definition, ADJACENT_MARK, { value: true });
+  return definition;
+}
+
+test('D35 建立窗口里给子代理注册了一份同名 send_message（影子注册发生在能力面窗口内）', async () => {
+  const fx = fixture({ sendMessage: markedSendMessage() });
+  await delegate({ ...BASE_ARGS }, { agent: fx.parent, signal: undefined }, fx.deps);
+
+  assert.equal(fx.ledger.registered.length, 1, '建立窗口里就该注册一次');
+  assert.equal(fx.ledger.registered[0].name, CONTINUATION_TOOL);
+  // 顺序：工具面 / persona 之后才补影子（三条都在同一个窗口里同步做完）
+  const { child, ledger } = fakeChild({ sendMessage: markedSendMessage() });
+  assert.deepEqual(applyChildFace(child, { persona: 'p', filter: { deny: ['delegate'] } }), [
+    'toolFilter',
+    'persona',
+    'shadowSendMessage',
+  ]);
+  assert.equal(ledger.registered.length, 1);
+});
+
+test('D36 克隆**不带**平台标记，而原定义**带**（本改动的全部意义）', () => {
+  const original = markedSendMessage();
+  // 前提：平台那个标记是非枚举的（`Object.defineProperty` 缺省 enumerable:false）
+  const descriptor = Object.getOwnPropertyDescriptor(original, ADJACENT_MARK);
+  assert.equal(descriptor.enumerable, false, '标记必须是非枚举的，展开才会丢');
+  assert.equal(original[ADJACENT_MARK], true);
+
+  // 展开一份：可枚举自有属性全带走，非枚举 Symbol 留下
+  const spread = { ...original };
+  assert.equal(spread[ADJACENT_MARK], undefined, '展开出来的克隆不许带标记');
+  assert.equal(original[ADJACENT_MARK], true, '原定义不受影响');
+
+  // 真正注册进子代理 scope 的就是这样一份：平台 `get("send_message", child)` 读不到标记 ⇒ 不追加提示
+  const { child, ledger } = fakeChild({ sendMessage: original });
+  assert.equal(shadowSendMessage(child), 'shadowed');
+  assert.equal(ledger.registered[0][ADJACENT_MARK], undefined);
+  assert.equal(original[ADJACENT_MARK], true);
+});
+
+test('D37 克隆与原定义同形：description / parameters / output.schema / execute 逐字一致（行为不变）', async () => {
+  const sent = [];
+  const original = markedSendMessage(sent);
+  const { child, ledger } = fakeChild({ sendMessage: original });
+  assert.equal(shadowSendMessage(child), 'shadowed');
+  const clone = ledger.registered[0];
+
+  assert.equal(clone.name, original.name);
+  assert.equal(clone.description, original.description);
+  assert.deepEqual(clone.parameters, original.parameters);
+  assert.deepEqual(clone.output.schema, original.output.schema);
+  // `execute` 是**同一个函数对象**：闭包捕获的是全局层的 ctx.subagents，与 scope 无关
+  assert.equal(clone.execute, original.execute);
+  const value = await clone.execute({ agent_id: 'parent-1', message: '结果' }, {});
+  assert.deepEqual(value, { messageId: 'message-9' });
+  assert.equal(sent.length, 1, '克隆执行一次就是原 execute 执行一次');
+  // render 也一并复用
+  assert.deepEqual(clone.output.render({}, value), original.output.render({}, value));
+});
+
+test('D38 子代理看不到 send_message ⇒ 不注册、不报错，状态记 absent', () => {
+  const { child, ledger } = fakeChild(); // get 一律回 undefined
+  assert.equal(shadowSendMessage(child), 'absent');
+  assert.equal(ledger.registered.length, 0, '没有原定义就不该凭空造一个');
+
+  // 走能力面也不报错：返回的项目里没有 shadowSendMessage，其余两项照旧
+  const bare = fakeChild();
+  assert.deepEqual(applyChildFace(bare.child, { persona: 'p' }), ['persona']);
+  assert.equal(bare.ledger.registered.length, 0);
+
+  // 建立窗口的结果仍是 applied（没有 send_message 就没有那段提示，无需影子）
+  const faces = createChildFaces();
+  faces.remember('child-z', { persona: 'p', filter: undefined });
+  assert.equal(faces.applyFor(bare.child), false, 'id 不匹配就不该动');
+  bare.child.id = 'child-z';
+  assert.equal(faces.applyFor(bare.child), true);
+  assert.equal(faces.take('child-z').status, 'applied');
+});
+
+test('D39 get / register 形状不符 ⇒ 抛错（fail-closed）；applyFor 仍吞下只记 failed（与 D34 同一纪律）', () => {
+  // 直接调：形状不符必须抛，绝不静默跳过（静默跳过 = 用户要的效果静默失效）
+  const noTools = { id: 'c', ctx: {} };
+  assert.throws(() => shadowSendMessage(noTools), /tools\.get \/ register 不是函数/);
+  assert.throws(() => shadowSendMessage(undefined), /tools\.get \/ register 不是函数/);
+  const onlyGet = { id: 'c', ctx: { tools: { get: () => undefined } } };
+  assert.throws(() => shadowSendMessage(onlyGet), /tools\.get \/ register 不是函数/);
+  const onlyRegister = { id: 'c', ctx: { tools: { register: () => {} } } };
+  assert.throws(() => shadowSendMessage(onlyRegister), /tools\.get \/ register 不是函数/);
+
+  // 走监听器：不抛给 agent/created 的派发方，只记 failed（由 take 之后那一步报错）
+  const faces = createChildFaces();
+  faces.remember('child-y', { persona: 'p', filter: undefined });
+  const broken = {
+    id: 'child-y',
+    ctx: {
+      tools: { restrict: () => {} }, // 没有 get / register
+      systemPrompt: { getSectionOrder: (name) => `order-of-${name}`, section: () => {} },
+    },
+  };
+  assert.equal(faces.applyFor(broken), true);
+  const entry = faces.take('child-y');
+  assert.equal(entry.status, 'failed');
+  assert.match(String(entry.error), /tools\.get \/ register 不是函数/);
+});
+
+test('D40 同 scope 重复注册按幂等处理：第二次仍返回 shadowed，注册条目只多一条', () => {
+  // 平台的真实行为（真机实测）：同 scope 第二次注册同名工具抛
+  // `tool "send_message" is already registered in this scope`。影子注册不靠调用方时序挡重复，
+  // 而是把这一条当成"影子已在"，所以能力面被贴两次也仍然算成功。
+  const registered = [];
+  let calls = 0;
+  const original = markedSendMessage();
+  const child = {
+    id: 'child-dup',
+    ctx: {
+      tools: {
+        restrict: () => {},
+        get: () => original,
+        register: (definition) => {
+          calls += 1;
+          if (registered.some((seen) => seen.name === definition.name)) {
+            throw new Error(`tool "${definition.name}" is already registered in this scope`);
+          }
+          registered.push(definition);
+        },
+      },
+      systemPrompt: { getSectionOrder: (name) => `order-of-${name}`, section: () => {} },
+    },
+  };
+  const face = { persona: 'p', filter: { deny: ['delegate'] } };
+
+  assert.deepEqual(applyChildFace(child, face), ['toolFilter', 'persona', 'shadowSendMessage']);
+  assert.deepEqual(applyChildFace(child, face), ['toolFilter', 'persona', 'shadowSendMessage'], '第二次不许变成失败');
+  assert.equal(registered.length, 1, '第二次不该再塞一份克隆');
+  assert.equal(calls, 2, '两次都真调了 register，幂等是吞重复注册、不是跳过调用');
+
+  // 直接调也一样：重复注册不抛，仍报 shadowed
+  assert.equal(shadowSendMessage(child), 'shadowed');
+  assert.equal(registered.length, 1);
+});
+
+test('D41 register 抛别的错误时照抛（不拿幂等当挡箭牌）；applyFor 仍只记 failed', () => {
+  const child = {
+    id: 'child-e',
+    ctx: {
+      tools: {
+        get: () => markedSendMessage(),
+        register: () => {
+          throw new Error('boom: scope closed');
+        },
+      },
+      systemPrompt: { getSectionOrder: (name) => `order-of-${name}`, section: () => {} },
+    },
+  };
+  // 直接调：与"已经注册过"无关的错误必须原样抛出去（否则遮蔽失败会被静默吞掉）
+  assert.throws(() => shadowSendMessage(child), /boom: scope closed/);
+
+  // 走监听器：仍旧不抛给 agent/created 的派发方，只记 failed（与 D34/D39 同一纪律）
+  const faces = createChildFaces();
+  faces.remember('child-e', { persona: 'p', filter: undefined });
+  assert.equal(faces.applyFor(child), true);
+  const entry = faces.take('child-e');
+  assert.equal(entry.status, 'failed');
+  assert.match(String(entry.error), /boom: scope closed/);
+});
+

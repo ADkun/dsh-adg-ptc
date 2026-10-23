@@ -72,6 +72,11 @@ export const RESERVED_PTC_NAME = 'run_code';
 
  * 条件化是必需的：不在 `knownNames` 里还强行并入，平台 `restrict()` 会抛
  * `names unknown global tool ...`，整次委派当场失败（根 AGENTS.md 红线 7 同源）。
+ *
+ * 工具在、那段提示却在用户这里成了噪音（子代理照着它先发一条中途消息，父代理于是收到两次
+ * 内容）。平台没有关掉追加的配置项，判据只认定义上的一个**非枚举** Symbol 标记 ——
+ * 所以本插件改在子代理自己的 scope 层注册一份**同名同 schema、但不带那个标记**的克隆来遮蔽它
+ * （见 `shadowSendMessage` 与 design.md 的 I17）。
  */
 export const CONTINUATION_TOOL = "send_message";
 
@@ -280,6 +285,63 @@ export function continuableChildId(started) {
 export const PERSONA_SECTION = 'deployment:persona-prefix';
 
 /**
+ * 在子代理**自己的 scope 层**注册一份**不带平台标记**的 `send_message` 克隆（影子注册）。
+ *
+ * 为什么要这一手：平台按 `send_message` 定义上的一个**非枚举** Symbol 标记
+ * （`Symbol.for('dsh.subagent.adjacentAgentSendMessageTool')`）判定"要不要在子代理首条 prompt
+ * 末尾追加『用 send_message 把结果回传给父代理』"，而子代理照那段话先发一条中途消息、再结束
+ * 本轮，父代理于是收到两次内容。平台没有关掉追加的配置项，工具又必须留着（见
+ * `CONTINUATION_TOOL` 的注释与 R15），所以改在这里把标记从子代理**看得见的那一份**上摘掉。
+ *
+ * 三条依据（都读自 `@deepseek-ai/dsh-tools` 的 `view(scope)` 与 `@deepseek-ai/dsh-tools`
+ * 的 `defineTool()`）：
+ * - scope **自己那层**的注册直接 `visible.set(name, definition)` 遮蔽继承层，而平台的判据读的
+ *   就是 `get("send_message", child)` ⇒ 读到的是我们的克隆（design.md 的 I17）；
+ * - 平台定义是 `defineTool()` 的普通对象字面量，那个标记用 `Object.defineProperty` 默认
+ *   **non-enumerable** 打上去的 ⇒ `{ ...definition }` 只复制可枚举自有属性，克隆天然不带它；
+ * - `execute` / `output.render` 等一律**复用原定义的函数**（闭包捕获的是全局层的
+ *   `ctx.subagents`，与 scope 无关）⇒ 行为与原来逐字一致，只是丢了标记。
+ *
+ * `tools.restrict()` 只过滤 scope **继承**的层、不动 own layer 的注册，所以影子不会被本次
+ * 下发的 allow 清单裁掉；注册返回的 disposer 随子代理 scope 销毁自动失效，不用自己收。
+ *
+ * **幂等**：同一个 scope 第二次注册同名工具会被平台拒绝（`tool "send_message" is already
+ * registered in this scope`，见 `@deepseek-ai/dsh-tools` 的 `NamedEntries` 断言）。做成窗口的两条
+ * 路径（`delegate()` 里的 applied / pending）本来是互斥的，但那是**调用方的时序**在替这里挡，
+ * 不是这里自己的保证 —— 所以重复注册一律按"影子已在"处理：注册抛出的错误消息命中
+ * `/already registered in this scope/` 就吞掉、仍返回 `'shadowed'`，**别的错误照抛**。
+ * （不做"注册前先探 own 层"：`@deepseek-ai/dsh-tools` 的 `layers` 是私有的，公开 API 只有
+ * 混合了继承层的 `get` —— 照它判会把继承层那份**带标记**的原定义误当成自己的影子。）
+ *
+ * 读不到 `send_message` ⇒ 返回 `'absent'`、什么都不做：没有工具就没有那段提示，无需影子。
+ * `get` / `register` 形状不符 ⇒ **抛错**（fail-closed）：静默跳过等于让用户要的效果静默失效。
+ *
+ * @param {object|undefined} child 子代理 Agent（建立窗口里是 `agent/created` 给的那个活实例）
+ * @returns {'shadowed'|'absent'} `'shadowed'` = 已在子代理 scope 层注册克隆；`'absent'` = 子代理看不到它
+ */
+export function shadowSendMessage(child) {
+  const tools = child?.ctx?.tools;
+  const get = tools?.get;
+  const register = tools?.register;
+  if (typeof get !== 'function' || typeof register !== 'function') {
+    throw new Error(
+      `${TOOL_NAME}: 子代理 ctx.tools.get / register 不是函数（API 形状变了）—— ` +
+        '影子注册下不去，平台仍会在首条 prompt 末尾追加续接提示；拒绝把「没遮蔽」当成「已遮蔽」回报',
+    );
+  }
+  const definition = get.call(tools, CONTINUATION_TOOL, child);
+  if (definition === undefined) return 'absent';
+  try {
+    register.call(tools, { ...definition });
+  } catch (error) {
+    // 影子已在（同 scope 重复注册）：本条子代理的遮蔽效果已经成立，按成功处理。
+    if (/already registered in this scope/.test(String(error?.message ?? error))) return 'shadowed';
+    throw error;
+  }
+  return 'shadowed';
+}
+
+/**
  * 本次委派该贴在子代理身上的能力面。**persona 恒为字符串**（调用方没给就是空串）：
  * 空串不是"跳过"，而是"用一段空段遮蔽掉子代理从 preset 继承来的调度者 persona"（见 I7）。
  *
@@ -308,9 +370,13 @@ export function buildFace(args, plan) {
  * 调度者的 persona 开工 —— 那正是本函数的调用窗口必须抢在首轮装配之前的原因（见 I7 的
  * 时点不变量与 I18 的预留 childId）。空段在渲染时被丢弃，效果就是"没有 persona 段"。
  *
+ * 另加一项**影子注册**（`shadowSendMessage`）：在子代理自己的 scope 层放一份不带平台标记的
+ * `send_message` 克隆，好让平台判定"要不要追加续接提示"时读不到标记（见 I17）。它读的就是
+ * `get("send_message", child)`，与 `restrict()` 之后的视图一致，所以放在工具面之后、persona 之后收尾。
+ *
  * @param {object|undefined} child 子代理 Agent（建立窗口里是 `agent/created` 给的那个活实例）
  * @param {{persona?: string, filter?: {allow?: string[], deny: string[]}}} face
- * @returns {string[]} 实际施加的项目（'toolFilter' / 'persona'）
+ * @returns {string[]} 实际施加的项目（'toolFilter' / 'persona' / 'shadowSendMessage'）
  */
 export function applyChildFace(child, { persona, filter } = {}) {
   if (child === undefined || child?.ctx === undefined) {
@@ -343,6 +409,11 @@ export function applyChildFace(child, { persona, filter } = {}) {
     text: typeof persona === 'string' ? persona : '',
   });
   applied.push('persona');
+  // 影子注册排在工具面与 persona 之后：`restrict()` 只裁 scope **继承**来的名字、不动 own layer，
+  // 先后并不冲突；放在最后是为了让"形状不符"的报错顺序与既有两条一致 —— 工具面与 persona 的
+  // fail-closed 判据先在旧位置炸，影子注册只补它自己那一条。它**无条件**跑（不看 filter）：
+  // 平台追加提示只看子代理看得见的那份定义，与本插件这次给不给清单无关。
+  if (shadowSendMessage(child) === 'shadowed') applied.push('shadowSendMessage');
   return applied;
 }
 
