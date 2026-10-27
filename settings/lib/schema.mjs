@@ -6,18 +6,18 @@
 //
 // 三条不变量（破了框架就不成立，见 settings/design.md）：
 //   I1 键名的真相只在本文件。读这些键的模块不 import 本包，只按文件契约读自己那几个键
-//      （当前唯一的消费方是 notify/lib/user-settings.mjs），它的自测里有一条漂移检查：
-//      核对它读的键都还在这张表里、默认值与界也一致。
+//      （消费方是 notify/lib/user-settings.mjs 与 skill-inject/lib/user-settings.mjs），
+//      它们的自测里各有一条漂移检查：核对读的键都还在这张表里、默认值与界也一致。
 //   I2 每个字段的 `default` 都必须能通过自己的 `validValue` —— 页面「恢复默认」与宿主的
 //      最后一层回退都指它，一个不合法或不合界的 default 会让设置页一开就是红的。
-//   I3 kind 只有这三种。新增一种要同时改宿主的 `validValue` / `refuseMessage` 与客户端
-//      的控件选择，属于「改框架」，不属于「加一项」。
+//   I3 kind 只有这四种（`boolean` / `string` / `integer` / `enum`）。新增一种要同时改宿主的
+//      `validValue` / `refuseMessage` 与客户端的控件选择，属于「改框架」，不属于「加一项」。
 //
 // 为什么登记表住宿主侧：页面能写哪些键、什么值算合法，必须由宿主说了算（客户端只是画
 // 控件）。一个手改过的设置文件、或一个越界的 POST，都不会把值带进系统。
 
 /** 支持的控件 / 校验类别。 */
-export const KINDS = Object.freeze(['boolean', 'string', 'integer']);
+export const KINDS = Object.freeze(['boolean', 'string', 'integer', 'enum']);
 
 /**
  * 字段登记表。数组顺序 = 页面顺序；`group` 相同的一组进同一张卡片。
@@ -27,6 +27,8 @@ export const KINDS = Object.freeze(['boolean', 'string', 'integer']);
  *   - `allowEmpty: true` —— 字符串允许空值（「留空 = 跟随默认」的语义由消费方定义）。
  *     不加这一条时，空串与全空白一律算非法值（I2 的默认值也必须能过自己的 validValue）。
  *   - `multiline: true` —— 客户端把它画成多行文本框（仍是 `kind: 'string'`，不是新 kind）。
+ *   - `allowValues: [...]` —— `kind: 'enum'` 的取值集合（冻结数组）。客户端按它画下拉选项，
+ *     宿主按它校验；两端都不另立一份界（R4）。
  */
 export const FIELDS = Object.freeze([
   Object.freeze({
@@ -67,6 +69,16 @@ export const FIELDS = Object.freeze([
     hintKey: 'field.skillInjectEnabled.hint',
   }),
   Object.freeze({
+    key: 'skillInjectFramework',
+    kind: 'enum',
+    group: 'skillInject',
+    default: 'execution',
+    allowValues: Object.freeze(['thinking', 'execution']),
+    consumer: 'adg-skill-inject',
+    labelKey: 'field.skillInjectFramework.label',
+    hintKey: 'field.skillInjectFramework.hint',
+  }),
+  Object.freeze({
     key: 'skillInjectSubagent',
     kind: 'boolean',
     group: 'skillInject',
@@ -102,6 +114,7 @@ export function fieldFor(key) {
 /** 一个不合法的值该说什么：宿主的 400 正文，客户端的本地校验用同一套界。 */
 export function refuseMessage(field) {
   if (field.kind === 'boolean') return `${field.key} must be true or false`;
+  if (field.kind === 'enum') return `${field.key} must be one of: ${field.allowValues.join(', ')}`;
   if (field.kind === 'integer') {
     return `${field.key} must be an integer between ${field.min} and ${field.max}`;
   }
@@ -132,6 +145,11 @@ export function validValue(field, raw) {
     if (raw === 'true') return true;
     if (raw === 'false') return false;
     return undefined;
+  }
+  if (field.kind === 'enum') {
+    // 严格相等：不折叠大小写、不 trim —— 内部值只有 allowValues 里那几个英文串。
+    if (typeof raw !== 'string') return undefined;
+    return field.allowValues.includes(raw) ? raw : undefined;
   }
   if (field.kind === 'integer') {
     const value = integerValue(raw);

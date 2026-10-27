@@ -6,13 +6,40 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** 思考框架技能的默认落点（install.ps1 / install.sh 第 1 节把仓库 skills/ 拷到用户技能根）。 */
-export const DEFAULT_SKILL_PATH = join(
-  process.env.DSH_HOME ?? join(process.env.HOME ?? process.env.USERPROFILE ?? '', '.dsh'),
-  'skills',
-  'thinking-framework',
-  'SKILL.md',
-);
+/**
+ * 两份可注入的用户技能：设置键 `skillInjectFramework` 的内部值 → 技能目录名。
+ * **唯一事实源** —— 路径拼装、导语标题、降级文案、index.mjs 的取值都从这里派生。
+ */
+export const FRAMEWORK_SKILLS = Object.freeze({
+  thinking: 'thinking-framework',
+  execution: 'execution-framework',
+});
+
+/** 出厂框架：与登记表（`settings/lib/schema.mjs` 的 `skillInjectFramework.default`）一致。 */
+export const DEFAULT_FRAMEWORK = 'execution';
+
+/** 用户技能根：按 `${DSH_HOME:-~/.dsh}` 逐级拼装（R9：这里不许出现任何本机绝对路径）。 */
+function skillsRoot() {
+  return join(process.env.DSH_HOME ?? join(process.env.HOME ?? process.env.USERPROFILE ?? '', '.dsh'), 'skills');
+}
+
+/** 认不出的框架名一律回落到出厂框架（设置文件的宽容口径与 lib/user-settings.mjs 一致）。 */
+export function frameworkOrDefault(value) {
+  return Object.prototype.hasOwnProperty.call(FRAMEWORK_SKILLS, value) ? value : DEFAULT_FRAMEWORK;
+}
+
+/** 框架 → 技能目录名。 */
+export function skillDirFor(framework) {
+  return FRAMEWORK_SKILLS[frameworkOrDefault(framework)];
+}
+
+/** 框架 → 那份技能的 SKILL.md 落点（install.ps1 / install.sh 第 1 节把仓库 skills/ 拷到用户技能根）。 */
+export function skillPathFor(framework = DEFAULT_FRAMEWORK) {
+  return join(skillsRoot(), skillDirFor(framework), 'SKILL.md');
+}
+
+/** 出厂框架那份技能的落点（等价于 `skillPathFor(DEFAULT_FRAMEWORK)`）。 */
+export const DEFAULT_SKILL_PATH = skillPathFor(DEFAULT_FRAMEWORK);
 
 /** section 名：每个 agent 的 scope 内唯一；重挂载时报重复注册是配置错误，不静默吞掉。 */
 export const SECTION_NAME = 'adg:thinking-framework';
@@ -36,35 +63,50 @@ export function stripFrontmatter(raw) {
   return text.slice(text.indexOf('\n', end + 1) + 1).replace(/^\n+/, '');
 }
 
-/** 缺文件 / 空文件时注入的降级短指令：框架正文拿不到，至少保住"先读再干活"的次序。 */
-export const FALLBACK_TEXT = [
-  '## 思考框架（正文缺失，降级指令）',
-  '',
-  '本会话的思考框架技能文件缺失，路径见下。开工先 `read` 它，按它组织你的思考再干活；',
-  '找不到就如实向用户报告缺失，不要假装读过。',
-].join('\n');
+/**
+ * 缺文件 / 空文件时注入的降级短指令：框架正文拿不到，至少保住"先读再干活"的次序。
+ * 提示的是**这次实际要找的那份**技能文件（thinking / execution 各说各的），不写死其中一份。
+ * @param {string} framework 框架内部值（认不出的按出厂框架处理）
+ */
+export function fallbackText(framework = DEFAULT_FRAMEWORK) {
+  const name = skillDirFor(framework);
+  const label = frameworkOrDefault(framework) === 'thinking' ? '思考框架' : '执行框架';
+  return [
+    `## ${label}（正文缺失，降级指令）`,
+    '',
+    `本会话的${label}技能文件（skills/${name}/SKILL.md）缺失，路径见下。开工先 \`read\` 它，按它组织你的思考再干活；`,
+    '找不到就如实向用户报告缺失，不要假装读过。',
+  ].join('\n');
+}
 
 /** 注入正文的导语：用户自定义正文与技能文件正文共用同一句（标题可换成自定义的）。 */
 function compose(customText, body) {
   return `${customText}\n\n以下全文是你在本会话的思考规范，按它组织每一次响应前的思考：\n\n${body}`;
 }
 
+/** 导语标题：技能文件那支随框架变，自定义正文那支固定。 */
+function frameworkTitle(framework) {
+  const value = frameworkOrDefault(framework);
+  return value === 'thinking' ? '# 思考框架（thinking-framework）' : '# 执行框架（execution-framework）';
+}
+
 /**
  * 从文件构造 section 正文。
  * @param {string} skillPath SKILL.md 绝对路径
+ * @param {string} [framework] 框架内部值（决定导语标题与降级文案）
  * @returns {{text: string, degraded: boolean}} 正文与是否降级
  */
-export function sectionTextFor(skillPath) {
-  if (!existsSync(skillPath)) return { text: FALLBACK_TEXT, degraded: true };
+export function sectionTextFor(skillPath, framework = DEFAULT_FRAMEWORK) {
+  if (!existsSync(skillPath)) return { text: fallbackText(framework), degraded: true };
   try {
     const body = stripFrontmatter(readFileSync(skillPath, 'utf8')).trim();
-    if (body.length === 0) return { text: FALLBACK_TEXT, degraded: true };
+    if (body.length === 0) return { text: fallbackText(framework), degraded: true };
     return {
-      text: compose('# 思考框架（thinking-framework）', body),
+      text: compose(frameworkTitle(framework), body),
       degraded: false,
     };
   } catch {
-    return { text: FALLBACK_TEXT, degraded: true };
+    return { text: fallbackText(framework), degraded: true };
   }
 }
 
@@ -74,19 +116,22 @@ export function sectionTextFor(skillPath) {
  * 用户填了正文就**原样注入**（不再读文件，也不再剥 frontmatter —— 那份文本不是技能文件）；
  * 留空 / 全空白算「跟随技能文件」，与设置页的「留空即默认」口径一致。
  *
- * @param {{customText?: string, skillPath?: string}} [options]
- * @returns {{text: string, degraded: boolean, source: 'custom' | 'skill'}}
+ * @param {{customText?: string, framework?: string, skillPath?: string}} [options]
+ * @returns {{text: string, degraded: boolean, source: 'custom' | 'skill', framework: string}}
  */
 export function resolveSectionText(options = {}) {
-  const { customText, skillPath = DEFAULT_SKILL_PATH } = options;
+  const framework = frameworkOrDefault(options.framework);
+  const skillPath = options.skillPath ?? skillPathFor(framework);
+  const { customText } = options;
   if (typeof customText === 'string' && customText.trim() !== '') {
     return {
       text: compose('# 思考框架（自定义注入）', customText.trim()),
       degraded: false,
       source: 'custom',
+      framework,
     };
   }
-  return { ...sectionTextFor(skillPath), source: 'skill' };
+  return { ...sectionTextFor(skillPath, framework), source: 'skill', framework };
 }
 
 /**

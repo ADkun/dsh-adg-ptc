@@ -1,4 +1,4 @@
-// adg-skill-inject 侧的「用户设置」：读 adg-settings 那一页写下的注入开关与注入正文。
+// adg-skill-inject 侧的「用户设置」：读 adg-settings 那一页写下的注入开关、注入框架与注入正文。
 //
 // 为什么直接读文件、不 import `adg-settings` 那个包：两者是各自独立的插件包，profile 里
 // 可能只装了其中一个（import 一个解析不到的包会在挂载期把整个插件炸掉）。设置文件是两个
@@ -6,7 +6,7 @@
 // 一次文件，不是热重载、也不需要重启 dsh。
 //
 // 键名与界的真相在 dsh-adg-ptc/settings/lib/schema.mjs（本文件只**读**、不定义）。
-// settings/test/settings.test.mjs 里有一条跨模块的漂移检查：核对本文件读的三个键都还在
+// settings/test/settings.test.mjs 里有一条跨模块的漂移检查：核对本文件读的四个键都还在
 // 登记表里、默认值与长度上限也一致。认不得的键、多出来的键一律忽略。
 
 import fs from 'node:fs';
@@ -20,12 +20,14 @@ export const STORE_NAME = 'adg-settings.json';
 export const MAX_TEXT_LENGTH = 20000;
 
 /**
- * 三项出厂默认：与登记表（`settings/lib/schema.mjs` 的 `DEFAULTS`）逐项一致。
- * `skillInjectText: ''` 指「跟随技能文件」（`DEFAULT_SKILL_PATH` 那份 SKILL.md）；
+ * 四项出厂默认：与登记表（`settings/lib/schema.mjs` 的 `DEFAULTS`）逐项一致。
+ * `skillInjectFramework: 'execution'` 指「用执行框架那份技能文件」（另一份是 thinking）；
+ * `skillInjectText: ''` 指「跟随选中的那份技能文件的正文」（非空时它优先，框架选择让位）；
  * `skillInjectSubagent: false` 指「只注入调度者，子代理不注入」（默认关）。
  */
 export const USER_DEFAULTS = Object.freeze({
   skillInjectEnabled: true,
+  skillInjectFramework: 'execution',
   skillInjectSubagent: false,
   skillInjectText: '',
 });
@@ -39,6 +41,9 @@ export function settingsFile() {
   return path.join(base, STORE_NAME);
 }
 
+/** 「注入哪个框架」的两个合法内部值（与登记表 `skillInjectFramework.allowValues` 一致）。 */
+const FRAMEWORKS = Object.freeze(['thinking', 'execution']);
+
 /** `true` / `false` 与它们的字符串写法都算；别的都算「没写这一项」。 */
 function validBoolean(value) {
   if (value === true || value === false) return value;
@@ -47,8 +52,13 @@ function validBoolean(value) {
   return undefined;
 }
 
+/** 框架名只认 `thinking` / `execution` 两个**严格相等**的串；大小写不同、带空白、别的类型都不算。 */
+function validFramework(value) {
+  return typeof value === 'string' && FRAMEWORKS.includes(value) ? value : undefined;
+}
+
 /**
- * 一份（可能被手改过的）设置文件里读得出来的三项；缺项 / 坏项一律回落到出厂默认。
+ * 一份（可能被手改过的）设置文件里读得出来的四项；缺项 / 坏项一律回落到出厂默认。
  *
  * 读不出来（文件不存在 / 不是 JSON / 不是对象）就是「页面还没保存过」，**不抛错**：
  * 注入本身才是主线，一份坏掉的设置文件不该让系统提示词组装挂掉。
@@ -67,6 +77,7 @@ export function readUserDefaults(file = settingsFile()) {
       : USER_DEFAULTS.skillInjectText;
   return {
     skillInjectEnabled: validBoolean(raw.skillInjectEnabled) ?? USER_DEFAULTS.skillInjectEnabled,
+    skillInjectFramework: validFramework(raw.skillInjectFramework) ?? USER_DEFAULTS.skillInjectFramework,
     skillInjectSubagent: validBoolean(raw.skillInjectSubagent) ?? USER_DEFAULTS.skillInjectSubagent,
     skillInjectText: text,
   };

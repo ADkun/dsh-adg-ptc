@@ -153,15 +153,16 @@ function request(route, method, body, headers = {}, path_ = '/settings') {
 // ── 框架不变量 ────────────────────────────────────────────────────────────────
 
 test('I1: 登记表自洽 —— 键唯一、kind 合法、必备字段齐全、界与 kind 配套', () => {
-  assert.deepEqual(KINDS, ['boolean', 'string', 'integer']);
+  assert.deepEqual(KINDS, ['boolean', 'string', 'integer', 'enum']);
   const keys = FIELDS.map((field) => field.key);
   assert.equal(new Set(keys).size, keys.length, '键不能重名');
-  // 键集合就是那六项（通知三项 + 注入三项），顺序即页面顺序。
+  // 键集合就是那七项（通知三项 + 注入四项），顺序即页面顺序。
   assert.deepEqual(keys, [
     'notifyTitle',
     'notifySound',
     'notifyPersist',
     'skillInjectEnabled',
+    'skillInjectFramework',
     'skillInjectSubagent',
     'skillInjectText',
   ]);
@@ -178,6 +179,17 @@ test('I1: 登记表自洽 —— 键唯一、kind 合法、必备字段齐全、
     if (field.kind === 'integer') {
       assert.ok(Number.isInteger(field.min) && Number.isInteger(field.max));
       assert.ok(field.min <= field.max);
+    }
+    if (field.kind === 'enum') {
+      // 界的真相在登记表里（R4）：客户端拿 allowValues 画下拉，宿主拿它判合法。
+      assert.ok(Object.isFrozen(field.allowValues), `${field.key}: allowValues 要是冻结数组`);
+      assert.ok(Array.isArray(field.allowValues) && field.allowValues.length >= 2, `${field.key}: 至少要两个选项`);
+      for (const value of field.allowValues) {
+        assert.equal(typeof value, 'string', `${field.key}: 选项值要是字符串`);
+        assert.equal(value.trim(), value, `${field.key}: 选项值不该带首尾空白`);
+      }
+      assert.equal(new Set(field.allowValues).size, field.allowValues.length, `${field.key}: 选项不能重复`);
+      assert.ok(field.allowValues.includes(field.default), `${field.key}: default 要在 allowValues 里`);
     }
   }
 });
@@ -230,13 +242,32 @@ test('validValue: 整数只收整数字面量（空串/小数/空白串都不算
   }
 });
 
-test('refuseMessage: 三种 kind 各一句可读的拒绝理由，且都点名是哪个键', () => {
+test('validValue: enum 只收与 allowValues 成员严格相等的字符串（不折叠大小写、不 trim）', () => {
+  const field = fieldFor('skillInjectFramework');
+  assert.deepEqual([...field.allowValues], ['thinking', 'execution']);
+  for (const good of field.allowValues) {
+    assert.equal(validValue(field, good), good, `${good} 是合法值`);
+  }
+  const bad = [
+    'Thinking', 'THINKING', 'Execution', 'EXECUTION',
+    ' thinking', 'thinking ', '\tthinking', 'thinking\n',
+    '', '   ', 'thinking-framework', 'execution-framework', 'skill', 'true', 'false',
+    0, 1, true, false, null, undefined, {}, [], ['thinking'],
+  ];
+  for (const value of bad) {
+    assert.equal(validValue(field, value), undefined, `${JSON.stringify(value)} 不该被接受`);
+  }
+});
+
+test('refuseMessage: 四种 kind 各一句可读的拒绝理由，且都点名是哪个键', () => {
   const text = { key: 'notifyTitle', kind: 'string', maxLength: 80 };
   const flag = { key: 'notifySound', kind: 'boolean' };
   const count = { key: 'notifyDelay', kind: 'integer', min: 0, max: 600000 };
+  const choice = fieldFor('skillInjectFramework');
   assert.match(refuseMessage(text), /^notifyTitle must be a non-empty string of at most 80 characters$/);
   assert.match(refuseMessage(flag), /^notifySound must be true or false$/);
   assert.match(refuseMessage(count), /^notifyDelay must be an integer between 0 and 600000$/);
+  assert.equal(refuseMessage(choice), 'skillInjectFramework must be one of: thinking, execution');
 });
 
 test('normalizeSettings: 认不得的键记在 unknown，非法值记在 dropped 并逐条警告', () => {
@@ -315,13 +346,18 @@ test('漂移: 设置页登记的 notify 三项与 adg-notify 真正读的键/默
   assert.equal(NOTIFY_STORE_NAME, STORE_NAME, '设置文件名是两个模块之间的契约');
 });
 
-test('漂移: 设置页登记的注入三项与 adg-skill-inject 真正读的键/默认值/界一致', () => {
+test('漂移: 设置页登记的注入四项与 adg-skill-inject 真正读的键/默认值/界一致', () => {
   const consumed = FIELDS.filter((field) => field.consumer === 'adg-skill-inject').map((field) => field.key);
   assert.deepEqual(consumed, Object.keys(INJECT_DEFAULTS), 'adg-skill-inject 读的键必须与登记表逐项对上');
   for (const field of FIELDS.filter((item) => item.consumer === 'adg-skill-inject')) {
     assert.deepEqual(INJECT_DEFAULTS[field.key], field.default, `${field.key} 的默认值两边不一致`);
   }
   assert.equal(fieldFor('skillInjectText').maxLength, MAX_TEXT_LENGTH);
+  assert.deepEqual(
+    [...fieldFor('skillInjectFramework').allowValues],
+    ['thinking', 'execution'],
+    '注入框架的界的真相在登记表，消费方与客户端都不另立一份',
+  );
   assert.equal(INJECT_STORE_NAME, STORE_NAME, '设置文件名是两个模块之间的契约');
 });
 
@@ -333,15 +369,31 @@ test('漂移: 注入插件读得懂设置页写的开关与自定义正文，空
     );
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: false,
+      skillInjectFramework: 'execution',
       skillInjectSubagent: false,
       skillInjectText: '自定义正文',
     });
     fs.writeFileSync(path.join(dir, STORE_NAME), JSON.stringify({ skillInjectText: '' }));
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: true,
+      skillInjectFramework: 'execution',
       skillInjectSubagent: false,
       skillInjectText: '',
     });
+  });
+});
+
+test('漂移: 注入框架的两条路径（thinking / execution / 键缺失与非法值回落）', () => {
+  withTempDir((dir) => {
+    const file = path.join(dir, STORE_NAME);
+    fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: 'thinking' }));
+    assert.equal(readInjectDefaults().skillInjectFramework, 'thinking', 'thinking 要被如实读出来');
+    fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: 'execution' }));
+    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', 'execution 要被如实读出来');
+    fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
+    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', '键缺失要回落出厂默认 execution');
+    fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: 'Thinking' }));
+    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', '非法值要回落出厂默认 execution');
   });
 });
 
@@ -668,6 +720,8 @@ test('R12/I13: 客户端 DICT 覆盖了每条登记项与分组的文案键（zh
     wanted.add(field.labelKey);
     wanted.add(field.hintKey);
     wanted.add(`group.${field.group}`);
+    // enum 的每个选项各要一条 option.<键>.<值>（R12：少一份页面就显示裸键）。
+    for (const value of field.allowValues ?? []) wanted.add(`option.${field.key}.${value}`);
   }
   for (const key of wanted) {
     const definitions = source.split(`'${key}':`).length - 1;

@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Adg 思考框架注入插件：把思考框架正文（设置页可自定义，默认取 thinking-framework 技能）注入 Adg 调度智能体的系统提示词（不依赖模型自觉 read；子代理不注入；输入框里有开关）",
+  "description": "Adg 框架注入插件：把框架正文（按设置键 skillInjectFramework 在 thinking-framework 与 execution-framework 两份技能之间选，出厂默认执行框架；设置页也可自定义）注入 Adg 调度智能体的系统提示词（不依赖模型自觉 read；子代理默认不注入；输入框里有开关）",
   "license": "MIT",
   "main": "./index.mjs",
   "exports": {
@@ -35,7 +35,8 @@
     "dsh-plugin",
     "cordis",
     "system-prompt",
-    "thinking-framework"
+    "thinking-framework",
+    "execution-framework"
   ],
   "dsh": {
     "bundle": {

@@ -3,8 +3,9 @@
  *
  * 一页把宿主的登记表（dsh-adg-ptc/settings/lib/schema.mjs）原样画出来：宿主 GET 回报
  * `fields[]`（key / kind / group / default / 界），本文件按 kind 选控件（boolean → 开关，
- * string → 单行输入，integer → 数字输入）、按 group 聚卡片、按 `origin` 标出每一格来自
- * 哪一层。所以**加一项不需要动这里的逻辑**，只补 DICT 里的 `field.<键>.label` / `.hint`。
+ * string → 单行输入，integer → 数字输入，enum → 下拉，选项就是宿主回报的 `allowValues`）、
+ * 按 group 聚卡片、按 `origin` 标出每一格来自哪一层。所以**加一项不需要动这里的逻辑**，
+ * 只补 DICT 里的 `field.<键>.label` / `.hint`（enum 再多一条 `option.<键>.<值>`）。
  *
  * 值写在同源路由 `/api/adg-settings/settings`；宿主把文件落在用户根，读它的插件
  * （当前是 adg-notify）每次调用时重读 —— 保存后立即生效，不需要重启 dsh。
@@ -44,19 +45,24 @@ window.__ModuleLoader__.load({
         'field.notifySound.hint': '关闭后通知静音弹出，只在屏幕上显示。',
         'field.notifyPersist.label': '通知常驻',
         'field.notifyPersist.hint': '开启时通知不自动消失，需要你自己关掉；关闭后约 8 秒自动消失。',
-        'group.skillInject': '思考框架注入',
-        'field.skillInjectEnabled.label': '注入思考框架',
+        'group.skillInject': '框架注入',
+        'field.skillInjectEnabled.label': '注入框架',
         'field.skillInjectEnabled.hint':
-          '开启后，Adg 调度智能体的系统提示词里会带上思考框架正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「超思」开关改的是同一个值。',
+          '开启后，Adg 调度智能体的系统提示词里会带上所选框架的正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「超思」开关改的是同一个值。',
+        'field.skillInjectFramework.label': '注入哪个框架',
+        'field.skillInjectFramework.hint':
+          '二选一：思考框架（thinking-framework）或执行框架（execution-framework）；出厂默认执行框架。这里选的是用哪份技能文件；下面的「注入正文」若填了内容，仍以那份自定义正文为准。',
+        'option.skillInjectFramework.thinking': '思考框架（thinking-framework）',
+        'option.skillInjectFramework.execution': '执行框架（execution-framework）',
         'field.skillInjectSubagent.label': '同时注入子代理',
         'field.skillInjectSubagent.hint':
-          '开启后，Adg 调度者派出的子代理也会拿到同一段思考框架；关闭时只注入调度者自己（出厂默认）。',
+          '开启后，Adg 调度者派出的子代理也会拿到同一段框架；关闭时只注入调度者自己（出厂默认）。',
         'field.skillInjectText.label': '注入正文',
         'field.skillInjectText.hint':
-          '留空就用技能文件（skills/thinking-framework/SKILL.md）的正文，改技能文件即改注入内容；填了就以这里的文本为准（不再读文件）。保存后下一次请求生效。',
+          '留空就用当前所选框架的技能文件（skills/<所选框架>/SKILL.md）的正文，改技能文件即改注入内容；填了就以这里的文本为准（不再读文件）。保存后下一次请求生效。',
         save: '保存',
         saving: '保存中…',
-        saved: '已保存，立即生效（通知在下一次 notify_user、思考框架在下一次请求）',
+        saved: '已保存，立即生效（通知在下一次 notify_user、框架在下一次请求）',
         reset: '恢复默认',
         resetting: '恢复中…',
         resetDone: '已删除设置文件，回到插件配置与内置默认',
@@ -74,10 +80,11 @@ window.__ModuleLoader__.load({
         unknown: '设置文件里有 {n} 个认不得的键（可能是旧版本留下的），本页不会动它们。',
         dropped: '设置文件里有 {n} 个不合法的值被忽略，宿主日志里有明细。',
         note: '这些项只影响本仓库第一方子插件的行为，保存后立即生效，不需要重启。',
-        useSkillFile: '留空即使用 skills/thinking-framework/SKILL.md 的正文',
+        useSkillFile: '留空即使用所选框架的技能文件（skills/<所选框架>/SKILL.md）的正文',
         emptyValue: '（空，跟随默认）',
         errText: '「{label}」不能为空，且最多 {max} 个字符',
         errInt: '「{label}」必须是 {min}–{max} 之间的整数',
+        errEnum: '「{label}」只能从下拉里选一个值',
         loading: '正在读取…',
         failed: '读取失败，无法连接插件后端',
         retry: '重试',
@@ -99,16 +106,21 @@ window.__ModuleLoader__.load({
         'field.notifyPersist.label': 'Keep the notification on screen',
         'field.notifyPersist.hint':
           'When on, the toast stays until you dismiss it; when off it disappears after about 8 seconds.',
-        'group.skillInject': 'Thinking-framework injection',
-        'field.skillInjectEnabled.label': 'Inject the thinking framework',
+        'group.skillInject': 'Framework injection',
+        'field.skillInjectEnabled.label': 'Inject the selected framework',
         'field.skillInjectEnabled.hint':
-          'When on, the Adg scheduler prompt carries the thinking-framework text; whether subagents also get it is decided by the toggle below (off by default). The “Thinking” chip in the composer flips the same value.',
+          'When on, the Adg scheduler prompt carries the selected framework text; whether subagents also get it is decided by the toggle below (off by default). The “Thinking” chip in the composer flips the same value.',
+        'field.skillInjectFramework.label': 'Which framework to inject',
+        'field.skillInjectFramework.hint':
+          'Pick one: the thinking framework (thinking-framework) or the execution framework (execution-framework); the execution framework ships as the default. This chooses which skill file is used; if “Injected text” below is filled in, that custom text still wins.',
+        'option.skillInjectFramework.thinking': 'Thinking framework (thinking-framework)',
+        'option.skillInjectFramework.execution': 'Execution framework (execution-framework)',
         'field.skillInjectSubagent.label': 'Also inject into subagents',
         'field.skillInjectSubagent.hint':
-          'When on, subagents spawned by the Adg scheduler get the same thinking-framework section; when off, only the scheduler does (the default).',
+          'When on, subagents spawned by the Adg scheduler get the same framework section; when off, only the scheduler does (the default).',
         'field.skillInjectText.label': 'Injected text',
         'field.skillInjectText.hint':
-          'Leave empty to use the skill file (skills/thinking-framework/SKILL.md); fill it in to inject exactly this text instead (the file is then ignored). Applies from the next request.',
+          'Leave empty to use the skill file of the selected framework (skills/<selected framework>/SKILL.md); fill it in to inject exactly this text instead (the file is then ignored). Applies from the next request.',
         save: 'Save',
         saving: 'Saving…',
         saved: 'Saved; live immediately (notifications on the next notify_user, the framework on the next request)',
@@ -129,10 +141,11 @@ window.__ModuleLoader__.load({
         unknown: 'The settings file has {n} key(s) this page does not know (an older version may have left them); nothing here touches them.',
         dropped: 'The settings file had {n} invalid value(s) that were ignored; the host log names them.',
         note: 'These options only affect this repository’s first-party plugins; saving takes effect immediately, with no restart.',
-        useSkillFile: 'Leave empty to use skills/thinking-framework/SKILL.md',
+        useSkillFile: 'Leave empty to use the skill file of the selected framework (skills/<selected framework>/SKILL.md)',
         emptyValue: '(empty — follows the default)',
         errText: '“{label}” cannot be empty and takes at most {max} characters',
         errInt: '“{label}” must be an integer between {min} and {max}',
+        errEnum: '“{label}” must be one of the values listed',
         loading: 'Reading…',
         failed: 'Could not reach the plugin backend',
         retry: 'Retry',
@@ -155,7 +168,10 @@ window.__ModuleLoader__.load({
       '.as_switch input:checked+.as_track .as_knob{transform:translateX(16px);background:var(--dsw-alias-bg-base)}',
       '.as_switch input:focus-visible+.as_track{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}',
       '.as_switch input:disabled+.as_track{opacity:.5}',
-      '.as_optText{display:flex;flex-direction:column;gap:3px;min-width:0}',
+      '.as_select{font:inherit;font-size:12.5px;box-sizing:border-box;width:100%;max-width:420px;padding:6px 9px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);cursor:pointer}',
+      '.as_select:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}',
+      '.as_select:disabled{opacity:.45;cursor:default}',
+      '.as_optText{display:flex;flex-direction:column;gap:7px;min-width:0}',
       '.as_optLabel{font-size:12.5px;font-weight:600}',
       '.as_field{display:flex;flex-direction:column;gap:6px}',
       '.as_fieldLabel{font-size:12.5px;font-weight:600}',
@@ -188,7 +204,7 @@ window.__ModuleLoader__.load({
       return String(text).replace(/\{(\w+)\}/g, (whole, key) => (key in values ? String(values[key]) : whole));
     }
 
-    /** 生效值 → 输入框里的草稿：布尔是布尔，其余一律先当字符串。 */
+    /** 生效值 → 控件里的草稿：布尔是布尔，其余（含 enum）一律先当字符串。 */
     function draftValue(field, value) {
       if (field.kind === 'boolean') return value === true;
       return value === undefined || value === null ? '' : String(value);
@@ -200,6 +216,11 @@ window.__ModuleLoader__.load({
      */
     function checkField(t, field, draft) {
       if (field.kind === 'boolean') return '';
+      if (field.kind === 'enum') {
+        // 界来自宿主回报的 `allowValues`，这里不写第二份界（R4）。
+        const values = Array.isArray(field.allowValues) ? field.allowValues : [];
+        return values.includes(String(draft ?? '')) ? '' : fill(t('errEnum'), { label: t(field.labelKey) });
+      }
       if (field.kind === 'integer') {
         const raw = String(draft ?? '').trim();
         const value = Number(raw);
@@ -218,20 +239,22 @@ window.__ModuleLoader__.load({
       return '';
     }
 
-    /** 一次 POST 的请求体：按 kind 还原类型（开关不能当字符串发出去）。 */
+    /** 一次 POST 的请求体：按 kind 还原类型（开关不能当字符串发出去；enum 就是那个字符串）。 */
     function requestBody(fields, draft) {
       const body = {};
       for (const field of fields) {
         if (field.kind === 'boolean') body[field.key] = draft[field.key] === true;
         else if (field.kind === 'integer') body[field.key] = Number(draft[field.key]);
+        else if (field.kind === 'enum') body[field.key] = String(draft[field.key] ?? '');
         else body[field.key] = String(draft[field.key] ?? '');
       }
       return body;
     }
 
-    /** 「当前生效」里的一个值：开关说开/关，别的原样。 */
+    /** 「当前生效」里的一个值：开关说开/关，enum 说选项文案，别的原样。 */
     function displayValue(t, field, value) {
       if (field.kind === 'boolean') return value === true ? t('on') : t('off');
+      if (field.kind === 'enum') return t(`option.${field.key}.${String(value ?? '')}`);
       const text = String(value ?? '');
       if (field.allowEmpty === true && text.trim() === '') return t('emptyValue');
       if (field.multiline === true && text.length > 120) return `${text.slice(0, 120)}…`;
@@ -358,7 +381,7 @@ window.__ModuleLoader__.load({
         const dropped = Array.isArray(payload.dropped) ? payload.dropped : [];
         const locked = busy !== '';
 
-        /** 一个字段的控件：三种 kind 三种画法，界与文案都来自宿主回报的 fields[]。 */
+        /** 一个字段的控件：四种 kind 四种画法，界与文案都来自宿主回报的 fields[]。 */
         const control = field => {
           const error = checkField(t, field, draft[field.key]);
           if (field.kind === 'boolean') {
@@ -372,9 +395,26 @@ window.__ModuleLoader__.load({
                   onChange: event => patch(field.key, event.target.checked),
                 }),
                 h('span', { className: 'as_track', 'aria-hidden': 'true' }, h('span', { className: 'as_knob' }))),
-              h('span', { className: 'as_optText' },
+              h('label', { className: 'as_optText' },
                 h('span', { className: 'as_optLabel' }, t(field.labelKey)),
                 h('span', { className: 'as_hint' }, t(field.hintKey))));
+          }
+          if (field.kind === 'enum') {
+            // 选项来自宿主回报的 `allowValues`（R4：客户端不自己定义界），文案走 option.<键>.<值>。
+            const values = Array.isArray(field.allowValues) ? field.allowValues : [];
+            return h('div', { className: 'as_opt', key: field.key },
+              h('select', {
+                className: error === '' ? 'as_select' : 'as_select as_inputBad',
+                value: draft[field.key] ?? '',
+                disabled: locked,
+                'aria-label': t(field.labelKey),
+                onChange: event => patch(field.key, event.target.value),
+              }, values.map(value =>
+                h('option', { key: value, value }, t(`option.${field.key}.${value}`)))),
+              h('label', { className: 'as_optText' },
+                h('span', { className: 'as_optLabel' }, t(field.labelKey)),
+                h('span', { className: 'as_hint' }, t(field.hintKey)),
+                error === '' ? null : h('span', { className: 'as_fieldErr', role: 'alert' }, error)));
           }
           const input = {
             className: error === '' ? 'as_input' : 'as_input as_inputBad',
