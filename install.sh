@@ -475,8 +475,9 @@ fi
 # 与 2b / 2b-1 / 2b-2 / 2b-3 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 agent 的 preset 是不是 adg-ptc"（判定只看
 # preset；子代理是否也注入由设置键 skillInjectSubagent 决定，默认关），是就在它自己的
-# agent.ctx 上注册一段系统提示词 section，正文取自
-# 用户技能根的 skills/thinking-framework/SKILL.md（本脚本第 1 节拷的那份）。漏装的症状是
+# agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectFramework 在用户技能根的
+# skills/thinking-framework/SKILL.md 与 skills/execution-framework/SKILL.md 之间选一份（两份都是
+# 本脚本第 1 节拷的；出厂默认执行框架）。漏装的症状是
 # 调度者的系统提示词里没有思考框架段（静默退回"靠模型自觉 read"的旧状态），不报错。
 inject_src="$here/skill-inject"
 inject_dest="$root/plugins/adg-skill-inject"
@@ -915,7 +916,7 @@ echo "  notify  -> $notify_note（notify_user 工具；每个 profile 的安装�
 echo "  delegate -> $delegate_note（delegate 工具 —— 唯一的委派入口；只有调度智能体拿得到，子代理拿不到。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 echo "  permission -> $permission_note（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
 echo "  settings -> $settings_note（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
-echo "  skill-inject -> $inject_note（思考框架注入：把 skills/thinking-framework/SKILL.md 正文注入 Adg 调度者的系统提示词；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
+echo "  skill-inject -> $inject_note（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 echo ""
 echo "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
 echo "（preset 走的是一条独立的 patch 层：dsh --profile <name> --dump-config 能确认它被读到，"

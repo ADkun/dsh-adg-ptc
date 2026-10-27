@@ -464,9 +464,10 @@ if ($SkipPackages) {
 # 与 2b / 2b-1 / 2b-2 / 2b-3 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 agent 的 preset 是不是 adg"（判定只看
 # preset；子代理是否也注入由设置键 skillInjectSubagent 决定，默认关），是就在它自己的
-# agent.ctx 上注册一段系统提示词 section，正文取自
-# 用户技能根的 skills\thinking-framework\SKILL.md（本脚本第 1 节拷的那份 —— 所以此插件的
-# 注入正文与技能文件永远来自同一次安装）。漏装的症状是调度者的系统提示词里没有思考框架段
+# agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectFramework 在用户技能根的
+# skills\thinking-framework\SKILL.md 与 skills\execution-framework\SKILL.md 之间选一份（两份都是
+# 本脚本第 1 节拷的 —— 所以此插件的注入正文与技能文件永远来自同一次安装；出厂默认执行框架）。
+# 漏装的症状是调度者的系统提示词里没有框架段
 # （退回"靠模型自觉 read"的旧状态），不报错。
 $injectSrc = Join-Path $here 'skill-inject'
 $injectDest = Join-Path $root 'plugins\adg-skill-inject'
@@ -1180,7 +1181,7 @@ Write-Host "  notify  -> $notifyNote（notify_user 工具；每个 profile 的�
 Write-Host "  permission -> $permNote（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
 Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / set_child_permission / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
-Write-Host "  skill-inject -> $injectNote（思考框架注入：把 skills\thinking-framework\SKILL.md 正文注入 Adg 调度者的系统提示词；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
+Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「已执行代码：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
