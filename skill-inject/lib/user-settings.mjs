@@ -21,13 +21,13 @@ export const MAX_TEXT_LENGTH = 20000;
 
 /**
  * 四项出厂默认：与登记表（`settings/lib/schema.mjs` 的 `DEFAULTS`）逐项一致。
- * `skillInjectFramework: 'execution'` 指「用执行框架那份技能文件」（另一份是 thinking）；
+ * `skillInjectFramework: 'elegant'` 指「用优雅框架那份技能文件」（另外两份是 thinking / execution）；
  * `skillInjectText: ''` 指「跟随选中的那份技能文件的正文」（非空时它优先，框架选择让位）；
  * `skillInjectSubagent: false` 指「只注入调度者，子代理不注入」（默认关）。
  */
 export const USER_DEFAULTS = Object.freeze({
   skillInjectEnabled: true,
-  skillInjectFramework: 'execution',
+  skillInjectFramework: 'elegant',
   skillInjectSubagent: false,
   skillInjectText: '',
 });
@@ -41,8 +41,8 @@ export function settingsFile() {
   return path.join(base, STORE_NAME);
 }
 
-/** 「注入哪个框架」的两个合法内部值（与登记表 `skillInjectFramework.allowValues` 一致）。 */
-const FRAMEWORKS = Object.freeze(['thinking', 'execution']);
+/** 「注入哪个框架」的三个合法内部值（与登记表 `skillInjectFramework.allowValues` 一致）。 */
+const FRAMEWORKS = Object.freeze(['elegant', 'thinking', 'execution']);
 
 /** `true` / `false` 与它们的字符串写法都算；别的都算「没写这一项」。 */
 function validBoolean(value) {
@@ -52,7 +52,7 @@ function validBoolean(value) {
   return undefined;
 }
 
-/** 框架名只认 `thinking` / `execution` 两个**严格相等**的串；大小写不同、带空白、别的类型都不算。 */
+/** 框架名只认 `elegant` / `thinking` / `execution` 三个**严格相等**的串；大小写不同、带空白、别的类型都不算。 */
 function validFramework(value) {
   return typeof value === 'string' && FRAMEWORKS.includes(value) ? value : undefined;
 }

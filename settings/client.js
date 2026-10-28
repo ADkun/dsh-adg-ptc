@@ -51,7 +51,8 @@ window.__ModuleLoader__.load({
           '开启后，Adg 调度智能体的系统提示词里会带上所选框架的正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「超思」开关改的是同一个值。',
         'field.skillInjectFramework.label': '注入哪个框架',
         'field.skillInjectFramework.hint':
-          '二选一：思考框架（thinking-framework）或执行框架（execution-framework）；出厂默认执行框架。这里选的是用哪份技能文件；下面的「注入正文」若填了内容，仍以那份自定义正文为准。',
+          '三选一：优雅框架（elegant-framework）、思考框架（thinking-framework）或执行框架（execution-framework）；出厂默认优雅框架。这里选的是用哪份技能文件；下面的「注入正文」若填了内容，仍以那份自定义正文为准。',
+        'option.skillInjectFramework.elegant': '优雅框架（elegant-framework）',
         'option.skillInjectFramework.thinking': '思考框架（thinking-framework）',
         'option.skillInjectFramework.execution': '执行框架（execution-framework）',
         'field.skillInjectSubagent.label': '同时注入子代理',
@@ -112,7 +113,8 @@ window.__ModuleLoader__.load({
           'When on, the Adg scheduler prompt carries the selected framework text; whether subagents also get it is decided by the toggle below (off by default). The “Thinking” chip in the composer flips the same value.',
         'field.skillInjectFramework.label': 'Which framework to inject',
         'field.skillInjectFramework.hint':
-          'Pick one: the thinking framework (thinking-framework) or the execution framework (execution-framework); the execution framework ships as the default. This chooses which skill file is used; if “Injected text” below is filled in, that custom text still wins.',
+          'Pick one of three: the elegance framework (elegant-framework), the thinking framework (thinking-framework) or the execution framework (execution-framework); the elegance framework ships as the default. This chooses which skill file is used; if “Injected text” below is filled in, that custom text still wins.',
+        'option.skillInjectFramework.elegant': 'Elegant framework (elegant-framework)',
         'option.skillInjectFramework.thinking': 'Thinking framework (thinking-framework)',
         'option.skillInjectFramework.execution': 'Execution framework (execution-framework)',
         'field.skillInjectSubagent.label': 'Also inject into subagents',

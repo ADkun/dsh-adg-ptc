@@ -244,14 +244,15 @@ test('validValue: 整数只收整数字面量（空串/小数/空白串都不算
 
 test('validValue: enum 只收与 allowValues 成员严格相等的字符串（不折叠大小写、不 trim）', () => {
   const field = fieldFor('skillInjectFramework');
-  assert.deepEqual([...field.allowValues], ['thinking', 'execution']);
+  assert.deepEqual([...field.allowValues], ['elegant', 'thinking', 'execution']);
   for (const good of field.allowValues) {
     assert.equal(validValue(field, good), good, `${good} 是合法值`);
   }
   const bad = [
-    'Thinking', 'THINKING', 'Execution', 'EXECUTION',
+    'Thinking', 'THINKING', 'Execution', 'EXECUTION', 'Elegant', 'ELEGANT',
     ' thinking', 'thinking ', '\tthinking', 'thinking\n',
-    '', '   ', 'thinking-framework', 'execution-framework', 'skill', 'true', 'false',
+    ' elegant', 'elegant ', '\telegant', 'elegant\n',
+    '', '   ', 'elegant-framework', 'thinking-framework', 'execution-framework', 'skill', 'true', 'false',
     0, 1, true, false, null, undefined, {}, [], ['thinking'],
   ];
   for (const value of bad) {
@@ -267,7 +268,7 @@ test('refuseMessage: 四种 kind 各一句可读的拒绝理由，且都点名�
   assert.match(refuseMessage(text), /^notifyTitle must be a non-empty string of at most 80 characters$/);
   assert.match(refuseMessage(flag), /^notifySound must be true or false$/);
   assert.match(refuseMessage(count), /^notifyDelay must be an integer between 0 and 600000$/);
-  assert.equal(refuseMessage(choice), 'skillInjectFramework must be one of: thinking, execution');
+  assert.equal(refuseMessage(choice), 'skillInjectFramework must be one of: elegant, thinking, execution');
 });
 
 test('normalizeSettings: 认不得的键记在 unknown，非法值记在 dropped 并逐条警告', () => {
@@ -355,7 +356,7 @@ test('漂移: 设置页登记的注入四项与 adg-skill-inject 真正读的键
   assert.equal(fieldFor('skillInjectText').maxLength, MAX_TEXT_LENGTH);
   assert.deepEqual(
     [...fieldFor('skillInjectFramework').allowValues],
-    ['thinking', 'execution'],
+    ['elegant', 'thinking', 'execution'],
     '注入框架的界的真相在登记表，消费方与客户端都不另立一份',
   );
   assert.equal(INJECT_STORE_NAME, STORE_NAME, '设置文件名是两个模块之间的契约');
@@ -369,31 +370,33 @@ test('漂移: 注入插件读得懂设置页写的开关与自定义正文，空
     );
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: false,
-      skillInjectFramework: 'execution',
+      skillInjectFramework: 'elegant',
       skillInjectSubagent: false,
       skillInjectText: '自定义正文',
     });
     fs.writeFileSync(path.join(dir, STORE_NAME), JSON.stringify({ skillInjectText: '' }));
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: true,
-      skillInjectFramework: 'execution',
+      skillInjectFramework: 'elegant',
       skillInjectSubagent: false,
       skillInjectText: '',
     });
   });
 });
 
-test('漂移: 注入框架的两条路径（thinking / execution / 键缺失与非法值回落）', () => {
+test('漂移: 注入框架的三条路径（elegant / thinking / execution / 键缺失与非法值回落）', () => {
   withTempDir((dir) => {
     const file = path.join(dir, STORE_NAME);
-    fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: 'thinking' }));
-    assert.equal(readInjectDefaults().skillInjectFramework, 'thinking', 'thinking 要被如实读出来');
-    fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: 'execution' }));
-    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', 'execution 要被如实读出来');
+    for (const framework of ['elegant', 'thinking', 'execution']) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: framework }));
+      assert.equal(readInjectDefaults().skillInjectFramework, framework, `${framework} 要被如实读出来`);
+    }
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
-    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', '键缺失要回落出厂默认 execution');
-    fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: 'Thinking' }));
-    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', '非法值要回落出厂默认 execution');
+    assert.equal(readInjectDefaults().skillInjectFramework, 'elegant', '键缺失要回落出厂默认 elegant');
+    for (const bad of ['Elegant', ' Thinking', 'thinking ']) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: bad }));
+      assert.equal(readInjectDefaults().skillInjectFramework, 'elegant', `非法值 ${JSON.stringify(bad)} 要回落出厂默认 elegant`);
+    }
   });
 });
 

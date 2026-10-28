@@ -7,16 +7,24 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * 两份可注入的用户技能：设置键 `skillInjectFramework` 的内部值 → 技能目录名。
+ * 三份可注入的用户技能：设置键 `skillInjectFramework` 的内部值 → 技能目录名。
  * **唯一事实源** —— 路径拼装、导语标题、降级文案、index.mjs 的取值都从这里派生。
  */
 export const FRAMEWORK_SKILLS = Object.freeze({
+  elegant: 'elegant-framework',
   thinking: 'thinking-framework',
   execution: 'execution-framework',
 });
 
+/** 框架 → 中文名（导语标题与降级文案共用；键集与 `FRAMEWORK_SKILLS` 一致）。 */
+const FRAMEWORK_LABELS = Object.freeze({
+  elegant: '优雅框架',
+  thinking: '思考框架',
+  execution: '执行框架',
+});
+
 /** 出厂框架：与登记表（`settings/lib/schema.mjs` 的 `skillInjectFramework.default`）一致。 */
-export const DEFAULT_FRAMEWORK = 'execution';
+export const DEFAULT_FRAMEWORK = 'elegant';
 
 /** 用户技能根：按 `${DSH_HOME:-~/.dsh}` 逐级拼装（R9：这里不许出现任何本机绝对路径）。 */
 function skillsRoot() {
@@ -65,12 +73,12 @@ export function stripFrontmatter(raw) {
 
 /**
  * 缺文件 / 空文件时注入的降级短指令：框架正文拿不到，至少保住"先读再干活"的次序。
- * 提示的是**这次实际要找的那份**技能文件（thinking / execution 各说各的），不写死其中一份。
+ * 提示的是**这次实际要找的那份**技能文件（elegant / thinking / execution 各说各的），不写死其中一份。
  * @param {string} framework 框架内部值（认不出的按出厂框架处理）
  */
 export function fallbackText(framework = DEFAULT_FRAMEWORK) {
   const name = skillDirFor(framework);
-  const label = frameworkOrDefault(framework) === 'thinking' ? '思考框架' : '执行框架';
+  const label = FRAMEWORK_LABELS[frameworkOrDefault(framework)];
   return [
     `## ${label}（正文缺失，降级指令）`,
     '',
@@ -86,8 +94,7 @@ function compose(customText, body) {
 
 /** 导语标题：技能文件那支随框架变，自定义正文那支固定。 */
 function frameworkTitle(framework) {
-  const value = frameworkOrDefault(framework);
-  return value === 'thinking' ? '# 思考框架（thinking-framework）' : '# 执行框架（execution-framework）';
+  return `# ${FRAMEWORK_LABELS[frameworkOrDefault(framework)]}（${skillDirFor(framework)}）`;
 }
 
 /**
