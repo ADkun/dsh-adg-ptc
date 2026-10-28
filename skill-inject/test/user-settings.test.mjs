@@ -34,10 +34,10 @@ function withTempDir(run) {
   }
 }
 
-test('USER_DEFAULTS: 出厂默认是「开着 + 优雅框架 + 不注入子代理 + 留空即跟随技能文件」', () => {
+test('USER_DEFAULTS: 出厂默认是「开着 + 执行框架 + 不注入子代理 + 留空即跟随技能文件」', () => {
   assert.deepEqual(USER_DEFAULTS, {
     skillInjectEnabled: true,
-    skillInjectFramework: 'elegant',
+    skillInjectFramework: 'execution',
     skillInjectSubagent: false,
     skillInjectText: '',
   });
@@ -80,14 +80,14 @@ test('readUserDefaults: 缺项 / 项坏只影响那一项（含字符串形式�
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: 'false' }));
     assert.deepEqual(readUserDefaults(), {
       skillInjectEnabled: false,
-      skillInjectFramework: 'elegant',
+      skillInjectFramework: 'execution',
       skillInjectSubagent: false,
       skillInjectText: '',
     });
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: 'yes', skillInjectText: '正文', extraKey: 1 }));
     assert.deepEqual(readUserDefaults(), {
       skillInjectEnabled: true,
-      skillInjectFramework: 'elegant',
+      skillInjectFramework: 'execution',
       skillInjectSubagent: false,
       skillInjectText: '正文',
     });
@@ -103,16 +103,16 @@ test('readUserDefaults: skillInjectFramework 的读出 / 非法回落 / 出厂�
       fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: good }));
       assert.equal(readUserDefaults().skillInjectFramework, good);
     }
-    // 缺项 / 类型不对 / 大小写不同 / 带空白 / 认不得的名字 —— 一律回落到优雅框架（出厂）。
+    // 缺项 / 类型不对 / 大小写不同 / 带空白 / 认不得的名字 —— 一律回落到执行框架（出厂）。
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
-    assert.equal(readUserDefaults().skillInjectFramework, 'elegant');
+    assert.equal(readUserDefaults().skillInjectFramework, 'execution');
     for (const bad of ['Elegant', 'ELEGANT', ' elegant', 'elegant ', 'Thinking', ' thinking', 'thinking ', 'THINKING', '', 'elegant-framework', 'thinking-framework', 'execution-framework', null, true, 1, {}, []]) {
       fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: bad }));
-      assert.equal(readUserDefaults().skillInjectFramework, 'elegant', JSON.stringify(bad));
+      assert.equal(readUserDefaults().skillInjectFramework, 'execution', JSON.stringify(bad));
     }
     // 文件读不出来（坏 JSON）也回落。
     fs.writeFileSync(file, '{ not json');
-    assert.equal(readUserDefaults().skillInjectFramework, 'elegant');
+    assert.equal(readUserDefaults().skillInjectFramework, 'execution');
   });
 });
 

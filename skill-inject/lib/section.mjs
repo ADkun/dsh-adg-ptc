@@ -24,7 +24,7 @@ const FRAMEWORK_LABELS = Object.freeze({
 });
 
 /** 出厂框架：与登记表（`settings/lib/schema.mjs` 的 `skillInjectFramework.default`）一致。 */
-export const DEFAULT_FRAMEWORK = 'elegant';
+export const DEFAULT_FRAMEWORK = 'execution';
 
 /** 用户技能根：按 `${DSH_HOME:-~/.dsh}` 逐级拼装（R9：这里不许出现任何本机绝对路径）。 */
 function skillsRoot() {

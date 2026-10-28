@@ -72,7 +72,7 @@ export const FIELDS = Object.freeze([
     key: 'skillInjectFramework',
     kind: 'enum',
     group: 'skillInject',
-    default: 'elegant',
+    default: 'execution',
     allowValues: Object.freeze(['elegant', 'thinking', 'execution']),
     consumer: 'adg-skill-inject',
     labelKey: 'field.skillInjectFramework.label',

@@ -21,13 +21,13 @@ export const MAX_TEXT_LENGTH = 20000;
 
 /**
  * 四项出厂默认：与登记表（`settings/lib/schema.mjs` 的 `DEFAULTS`）逐项一致。
- * `skillInjectFramework: 'elegant'` 指「用优雅框架那份技能文件」（另外两份是 thinking / execution）；
+ * `skillInjectFramework` 取值指明用哪份技能文件（'elegant' / 'thinking' / 'execution'），默认执行框架；
  * `skillInjectText: ''` 指「跟随选中的那份技能文件的正文」（非空时它优先，框架选择让位）；
  * `skillInjectSubagent: false` 指「只注入调度者，子代理不注入」（默认关）。
  */
 export const USER_DEFAULTS = Object.freeze({
   skillInjectEnabled: true,
-  skillInjectFramework: 'elegant',
+  skillInjectFramework: 'execution',
   skillInjectSubagent: false,
   skillInjectText: '',
 });

@@ -370,14 +370,14 @@ test('漂移: 注入插件读得懂设置页写的开关与自定义正文，空
     );
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: false,
-      skillInjectFramework: 'elegant',
+      skillInjectFramework: 'execution',
       skillInjectSubagent: false,
       skillInjectText: '自定义正文',
     });
     fs.writeFileSync(path.join(dir, STORE_NAME), JSON.stringify({ skillInjectText: '' }));
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: true,
-      skillInjectFramework: 'elegant',
+      skillInjectFramework: 'execution',
       skillInjectSubagent: false,
       skillInjectText: '',
     });
@@ -392,10 +392,10 @@ test('漂移: 注入框架的三条路径（elegant / thinking / execution / 键
       assert.equal(readInjectDefaults().skillInjectFramework, framework, `${framework} 要被如实读出来`);
     }
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
-    assert.equal(readInjectDefaults().skillInjectFramework, 'elegant', '键缺失要回落出厂默认 elegant');
+    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', '键缺失要回落出厂默认 execution');
     for (const bad of ['Elegant', ' Thinking', 'thinking ']) {
       fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: bad }));
-      assert.equal(readInjectDefaults().skillInjectFramework, 'elegant', `非法值 ${JSON.stringify(bad)} 要回落出厂默认 elegant`);
+      assert.equal(readInjectDefaults().skillInjectFramework, 'execution', `非法值 ${JSON.stringify(bad)} 要回落出厂默认 execution`);
     }
   });
 });
