@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Adg 框架注入插件：把框架正文（按设置键 skillInjectFramework 在 elegant-framework、thinking-framework 与 execution-framework 三份技能之间选，出厂默认优雅框架；设置页也可自定义）注入 Adg 调度智能体的系统提示词（不依赖模型自觉 read；子代理默认不注入；输入框里有开关）",
+  "description": "Adg 框架注入插件：把框架正文（按设置键 skillInjectFramework 在 elegant-framework、thinking-framework 与 execution-framework 三份技能之间选，出厂默认执行框架；设置页也可自定义）注入 Adg 调度智能体的系统提示词（不依赖模型自觉 read；子代理默认不注入；输入框里有开关）",
   "license": "MIT",
   "main": "./index.mjs",
   "exports": {

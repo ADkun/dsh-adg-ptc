@@ -22,7 +22,7 @@
 | `text` | 导语标题随框架变：`elegant` → `# 优雅框架（elegant-framework）`、`thinking` → `# 思考框架（thinking-framework）`、`execution` → `# 执行框架（execution-framework）`，后接选中那份 SKILL.md 的正文（frontmatter 剥掉）；或 `# 思考框架（自定义注入）` 导语（这一支**不随**框架变）+ 设置页填的正文；或降级指令；总开关关闭时是空串；**子代理且 `skillInjectSubagent` 关时也是空串** | `sectionTextNow()`（`index.mjs`）每次组装时求值：先读设置文件的开关与子代理闸门，再交给 `resolveSectionText()` |
 | 挂载层 | 每个 Adg 调度者 agent 自己的 `agent.ctx`（agent scope）；**子代理也会挂上这一段**（正文层再决定给不给） | `index.mjs` 的 `apply()` |
 
-**正文优先级**：设置页的 `skillInjectText` 非空白 → 用它（**不读文件**，也不剥 frontmatter —— 那不是技能文件）；留空 / 全空白 → 读**下拉选中那份**框架的 SKILL.md（`skillPathFor(framework)`；框架取 `skillInjectFramework`，出厂＝优雅框架）；文件缺失 / 空 / 读失败 → `fallbackText(framework)`（提示的是这次**实际要找的那份**框架文件）。开关 `skillInjectEnabled !== true` → 返回空串（空 section 渲染时被丢弃，等价于没有这一段）；**是子代理而 `skillInjectSubagent !== true` → 同样返回空串**（这一条就是「子代理要不要也背这份框架」的唯一判据，默认关 ＝ 与这条键引入前完全一致：只注入调度者）。正文优先级判据都在 `lib/section.mjs` 的 `resolveSectionText()` / `sectionTextFor()` 里，`index.mjs` 只做接线。
+**正文优先级**：设置页的 `skillInjectText` 非空白 → 用它（**不读文件**，也不剥 frontmatter —— 那不是技能文件）；留空 / 全空白 → 读**下拉选中那份**框架的 SKILL.md（`skillPathFor(framework)`；框架取 `skillInjectFramework`，出厂＝执行框架）；文件缺失 / 空 / 读失败 → `fallbackText(framework)`（提示的是这次**实际要找的那份**框架文件）。开关 `skillInjectEnabled !== true` → 返回空串（空 section 渲染时被丢弃，等价于没有这一段）；**是子代理而 `skillInjectSubagent !== true` → 同样返回空串**（这一条就是「子代理要不要也背这份框架」的唯一判据，默认关 ＝ 与这条键引入前完全一致：只注入调度者）。正文优先级判据都在 `lib/section.mjs` 的 `resolveSectionText()` / `sectionTextFor()` 里，`index.mjs` 只做接线。
 
 **order 的选取**：调度 persona 的 prefix 在 `DEPLOYMENT_PERSONA_PREFIX = 0`，plan 政策在 `PLAN_POLICY = 500`。`100` 让框架落在 persona 之后、一切 first-party 指引之前 —— 模型读到的次序是"你是谁 → 按什么方式思考 → 派遣规则"。
 
@@ -85,7 +85,7 @@ skill-inject/（仓库源） --install.* 第 2b-4 步--> ~/.dsh/plugins/adg-skil
 
 ## For Agents（未观测项）
 
-- **未观测**：`composedPreset()` 与会话头 `agentPreset` 在**冷恢复**（dsh 重启后 resume Adg 会话）场景是否都能取到 `'adg-ptc'`；量法：重启 dsh → resume 旧 Adg 会话 → 在系统提示词里确认框架段落仍在、且与下拉选中的框架一致（出厂＝「# 优雅框架（elegant-framework）」）。双写判定（运行期优先 + 会话头后备）就是对这条未观测的防御。
+- **未观测**：`composedPreset()` 与会话头 `agentPreset` 在**冷恢复**（dsh 重启后 resume Adg 会话）场景是否都能取到 `'adg-ptc'`；量法：重启 dsh → resume 旧 Adg 会话 → 在系统提示词里确认框架段落仍在、且与下拉选中的框架一致（出厂＝「# 执行框架（execution-framework）」）。双写判定（运行期优先 + 会话头后备）就是对这条未观测的防御。
 - **未观测**：`agent/created` 在 `setup` 阶段触发时 `agent.ctx.systemPrompt` 是否已可注册（契约上 setup 完成先于 `agent/created` 与首次组装，且 dsh-subagent 自己就在同一窗口注册 section —— 依据同形，未在本仓库实测）；量法：装好后看新 Adg 会话系统提示词里有没有框架段，没有则查 dsh 日志里 `agent/created` 的时序。
 - **未观测**：`conversation.input.left` 槽里 `order: 21` 与破限模式那颗 chip（`order: 20`）在真浏览器里的间距 / 换行 / 暗色对比度；量法：重启 dsh 打开聊天页看两颗 chip 是否同行不重叠（窄窗口再试一次），并用 `node -e` 列出该槽各插件注册的 `order` 比对。
 - **未观测**：`POST /api/adg-settings/settings` 在**没装 `adg-settings` 插件**的 profile 上返回 404 时 chip 的最终观感（代码路径：`!response.ok` → `setState({status:'failed'})` → chip `disabled` 且文案走 `ariaLoading`）；量法：在只装本插件的 profile 上重启，看 chip 是否停在禁用态、控制台是否只有一条 404。

@@ -36,7 +36,7 @@ last_reviewed: 2026-10-15
 | `allowEmpty`（string，可选） | `true` ＝ 空串 / 全空白算合法值（语义由消费方定义，如「留空＝跟随默认」） | 宿主校验、客户端 |
 | `multiline`（string，可选） | `true` ＝ 客户端画多行文本框（仍是 `kind: 'string'`，**不是**新 kind） | 客户端 |
 
-`FIELDS` 是这几条登记的冻结数组；`DEFAULTS` 由它派生。**现存七条、两个分组**：`notify` 组的 `notifyTitle`（string，`maxLength: 80`，默认 `DSH 通知`）、`notifySound`（boolean，默认 `true`）、`notifyPersist`（boolean，默认 `true`），`consumer` 都是 `adg-notify`；`skillInject` 组的 `skillInjectEnabled`（boolean，默认 `true`）、`skillInjectFramework`（enum，`allowValues: ['elegant', 'thinking', 'execution']`，默认 `'elegant'` ＝ 注入优雅框架那份技能文件）、`skillInjectSubagent`（boolean，默认 `false` ＝ 子代理不注入，与这条开关引入前的行为一致）、`skillInjectText`（string，`maxLength: 20000`、`allowEmpty: true`、`multiline: true`，默认 `''` ＝ 跟随技能文件），`consumer` 都是 `adg-skill-inject`。
+`FIELDS` 是这几条登记的冻结数组；`DEFAULTS` 由它派生。**现存七条、两个分组**：`notify` 组的 `notifyTitle`（string，`maxLength: 80`，默认 `DSH 通知`）、`notifySound`（boolean，默认 `true`）、`notifyPersist`（boolean，默认 `true`），`consumer` 都是 `adg-notify`；`skillInject` 组的 `skillInjectEnabled`（boolean，默认 `true`）、`skillInjectFramework`（enum，`allowValues: ['elegant', 'thinking', 'execution']`，默认 `'execution'` ＝ 注入执行框架那份技能文件）、`skillInjectSubagent`（boolean，默认 `false` ＝ 子代理不注入，与这条开关引入前的行为一致）、`skillInjectText`（string，`maxLength: 20000`、`allowEmpty: true`、`multiline: true`，默认 `''` ＝ 跟随技能文件），`consumer` 都是 `adg-skill-inject`。
 
 `allowEmpty` 与 `multiline` 是**修饰**，不是新的 `kind`：它们只影响「这个字符串允许什么值」与「客户端画成什么控件」，宿主的 `validValue` / `refuseMessage` 与客户端的控件选择都读同一条登记项 —— 所以加一个多行可空文本项仍然只是「加一条登记 + 两条文案」。
 
@@ -146,7 +146,7 @@ skill-inject/lib/user-settings.mjs:
 - **为什么显示 `origin`**：三层优先级的代价是"我改的为什么没生效"。把来源打在页面上，把排查变成看一眼。
 - **为什么未知键 400 而不是忽略**：一个旧页面写回一个已经删掉的键，静默吞掉会让用户以为保存成功；400 让 STS/页面当场报错。
 - **为什么消费方读文件而不是 import**：见 I1（profile 可能只装一半）。
-- **为什么 `skillInjectText` 用「空串＝跟随技能文件」而不是「空串＝不注入」**：两个诉求（"我要自己写框架"和"我想用仓库那份"）不该靠两套开关表达。空串是一个**合法值**（所以有 `allowEmpty`），语义由消费方定 —— 空串就去读**当前选中的那份**技能文件（`skillInjectFramework` 定，出厂＝`skills/elegant-framework/SKILL.md`）；要"完全不注入"用旁边那个布尔开关，"用哪一份"用下拉，三者语义都不重叠。
+- **为什么 `skillInjectText` 用「空串＝跟随技能文件」而不是「空串＝不注入」**：两个诉求（"我要自己写框架"和"我想用仓库那份"）不该靠两套开关表达。空串是一个**合法值**（所以有 `allowEmpty`），语义由消费方定 —— 空串就去读**当前选中的那份**技能文件（`skillInjectFramework` 定，出厂＝`skills/execution-framework/SKILL.md`）；要"完全不注入"用旁边那个布尔开关，"用哪一份"用下拉，三者语义都不重叠。
 - **为什么「子代理是否也注入」单独一条登记（`skillInjectSubagent`）而不是绑进 `skillInjectEnabled`**：两个诉求正交（我要不要注入 / 注入给谁），绑在一起就没法表达「我要注入，但只注入调度者」。它的出厂值落在 `false` ＝ 与这条开关引入前完全一致（只注入调度者），所以升级本身不改变任何人的行为；开关的语义与生效时机在消费方那侧（`adg-skill-inject` 的内容层闸门），本模块只负责把一个布尔暴露出来。
 - **为什么注入开关同时出现在设置页和输入框**：设置页是"我改配置"的入口，输入框 chip 是"这次我想临时关掉"的入口；两者都写同一个键、都走同一条 `POST`，所以不存在"两个开关打架"的第三种状态。
 - **为什么 `notifyPersist` 用布尔而不是毫秒数**：用户要的是"常驻 / 不常驻"这一个决定；毫秒数属于技术细节。关掉常驻时用的是**改成常驻之前的原有默认值** `8000ms`（`AUTO_DISMISS_MS`），不引入新的旋钮。
