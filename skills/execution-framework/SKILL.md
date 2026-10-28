@@ -109,9 +109,7 @@ description: "Provides an execution discipline framework for planning, executing
 2. 两个人看：外行三秒能拿到结论吗？内行追三层还站得住吗？
 3. 换个人接手：命名、结构、注释自洽到能维护吗？
 
----
-
-## 附录 A　自检清单（每个阶段结束前扫一遍，10 秒）
+## 自检清单（每个阶段结束前扫一遍）
 
 9 问，任一为「否」就回去补：
 
