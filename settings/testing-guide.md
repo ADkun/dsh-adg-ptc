@@ -37,10 +37,10 @@ node tools/check-preset.mjs                            # 仓库根：preset 静�
 | 11 | `settingsFile()` 的 env 口径 | R10 | `DSH_PROFILE_DIR` > `DSH_HOME` > `~/.dsh`，都拼 `${STORE_NAME}` |
 | 12 | 插件名与路由前缀是契约 | I12 | `name === 'adg-settings'`、`STORE_NAME === 'adg-settings.json'` |
 | 13 | 漂移: notify 三项的键 / 默认值 / 界 | I1 | 登记表里 `consumer === 'adg-notify'` 的键逐项等于 `USER_DEFAULTS` 的键且默认值相等；`maxLength` 等于消费方的 `MAX_TITLE_LENGTH`；两边 `STORE_NAME` 同名 |
-| 13b | 漂移: 注入四项的键 / 默认值 / 界 | I1 | 登记表里 `consumer === 'adg-skill-inject'` 的键逐项等于 `skill-inject/lib/user-settings.mjs` 的 `USER_DEFAULTS`（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`；`skillInjectFramework` 两边默认都是 `'execution'`，`skillInjectSubagent` 两边默认都是 `false`）；`skillInjectText.maxLength === MAX_TEXT_LENGTH`；两边 `skillInjectFramework.allowValues` 的成员一致；三份 `STORE_NAME` 同名 |
+| 13b | 漂移: 注入四项的键 / 默认值 / 界 | I1 | 登记表里 `consumer === 'adg-skill-inject'` 的键逐项等于 `skill-inject/lib/user-settings.mjs` 的 `USER_DEFAULTS`（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`；`skillInjectFramework` 两边默认都是 `'elegant'`，`skillInjectSubagent` 两边默认都是 `false`）；`skillInjectText.maxLength === MAX_TEXT_LENGTH`；两边 `skillInjectFramework.allowValues` 的成员一致；三份 `STORE_NAME` 同名 |
 | 13c | 漂移: 注入插件读得懂设置页写的文件 | I1 / I14 | 写一份文件 → `skill-inject` 的 `readUserDefaults()` 读出两个开关（含 `skillInjectSubagent`）与自定义正文；空正文仍是空串（＝跟随技能文件） |
 | 13d | 漂移: 子代理开关的两条路径 | I1 / I14 | 写一份文件且 `skillInjectSubagent: false` → `skill-inject` 的 `readUserDefaults()` 读出 `false`；同一份文件改成 `true` → 读出 `true`；键缺失 → 回落出厂默认 `false`（＝ 与这条键引入前一致：只注入调度者） |
-| 13d2 | 漂移: 注入框架的两条路径 | I1 / I14 | 写一份文件且 `skillInjectFramework: 'thinking'` → `skill-inject` 的 `readUserDefaults()` 读出 `'thinking'`，`resolveSectionText()` 的导语标题是 `# 思考框架（thinking-framework）`、读的技能文件是 `skills/thinking-framework/SKILL.md`；改成 `'execution'` → 标题变 `# 执行框架（execution-framework）`、文件变 `skills/execution-framework/SKILL.md`；键缺失 / 非法值（`'Thinking'`、`' thinking'`、`''`、`null`）→ 回落出厂默认 `'execution'` |
+| 13d2 | 漂移: 注入框架的三条路径 | I1 / I14 | 写一份文件且 `skillInjectFramework: 'thinking'` → `skill-inject` 的 `readUserDefaults()` 读出 `'thinking'`，`resolveSectionText()` 的导语标题是 `# 思考框架（thinking-framework）`、读的技能文件是 `skills/thinking-framework/SKILL.md`；改成 `'execution'` → 标题变 `# 执行框架（execution-framework）`、文件变 `skills/execution-framework/SKILL.md`；改成 `'elegant'` → 标题变 `# 优雅框架（elegant-framework）`、文件变 `skills/elegant-framework/SKILL.md`；键缺失 / 非法值（`'Thinking'`、`'Elegant'`、`' thinking'`、`''`、`null`）→ 回落出厂默认 `'elegant'` |
 | 13e | 漂移: patch config 出厂值与登记表 default 一致 | I1 | 行级读 `settings/cordis.patch.yml` 的 `config:` 块，逐键断言它在 `FIELDS` 里且值深等于 `field.default`（`'…'` 去引号、`true`/`false` 布尔、`''` 空串），锁住「改一处必须同时改另一处」 |
 | 14 | 漂移: 消费方能读设置页写的文件 | I1 / I14 | 写一份文件 → `readUserDefaults()` 读出三项 → `resolveRequest` 用上标题、静音、存活毫秒 |
 | 15 | 漂移: 没保存过时回落出厂默认 | I14 | `readUserDefaults()` 深等于 `USER_DEFAULTS`；请求形状里**不多写** `silent`/`disappearAfterMs` |
@@ -88,14 +88,14 @@ pwsh -File install.ps1            # 或 bash install.sh
 
 页面上的手动验证步骤（每次改完都值得走一遍）：
 
-1. 打开「Adg 设置」→ 七项显示**出厂默认**（标题「DSH 通知」、声音开、常驻开、注入开、**注入框架＝执行框架（execution-framework）**、同时注入子代理关、自定义正文空），「当前生效」的每格写「来自内置默认」。
+1. 打开「Adg 设置」→ 七项显示**出厂默认**（标题「DSH 通知」、声音开、常驻开、注入开、**注入框架＝优雅框架（elegant-framework）**、同时注入子代理关、自定义正文空），「当前生效」的每格写「来自内置默认」。
 2. 改标题 → 保存 → 提示「已保存」→ 刷新页面 → 值还在，来源变「设置文件」。
 3. 打开设置文件 → 只有你保存过的键。落点按 `settingsFile()` 的优先序：`${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json` —— 本机 `DSH_PROFILE_DIR` 是当前 profile 目录，所以文件**不在用户根**、在 `<profile>` 下。
 4. 让一个子代理弹一条**不带标题**的通知 → 标题就是你在页面上写的那句；关掉「响提示音」再弹一条 → 静音。
 5. 点「恢复默认」→ 文件消失 → 页面回到默认。
 6. 手工把文件改成 `{"notifySound":"nope","legacy":1}` → 刷新页面 → 不崩，值回落，页面提示"有认不得的键 / 有不合法的值被忽略"。
-7. 在「自定义注入正文」里填一段可辨认的文本 → 保存 → **不重启**、在同一会话里发下一条消息 → 调度者的系统提示词里出现「# 思考框架（自定义注入）」+ 那段文本；清空保存 → 下一轮回到下拉里选中那份框架的标题 + 技能正文（出厂＝「# 执行框架（execution-framework）」）。再顺手验一次下拉：把「注入哪个框架」切到思考框架 → 下一轮标题变成「# 思考框架（thinking-framework）」、正文换成另一份技能文件（不用重启）。
-8. 关掉「注入思考框架」→ 下一轮系统提示词里**没有**框架段；同时看聊天输入框那颗「超思」chip 是否也变成关闭态（两处是同一个值）。反向再点一次 chip，回设置页刷新看开关是否同步。
+7. 在「自定义注入正文」里填一段可辨认的文本 → 保存 → **不重启**、在同一会话里发下一条消息 → 调度者的系统提示词里出现「# 思考框架（自定义注入）」+ 那段文本；清空保存 → 下一轮回到下拉里选中那份框架的标题 + 技能正文（出厂＝「# 优雅框架（elegant-framework）」）。再顺手验一次下拉：把「注入哪个框架」切到思考框架 → 下一轮标题变成「# 思考框架（thinking-framework）」、正文换成那一份技能文件（不用重启）。
+8. 关掉「注入框架」→ 下一轮系统提示词里**没有**框架段；同时看聊天输入框那颗「超思」chip 是否也变成关闭态（两处是同一个值）。反向再点一次 chip，回设置页刷新看开关是否同步。
 9. 打开「同时注入子代理」→ 保存 → **不重启**、在同一会话里再派一个子代理 → 它的系统提示词里出现框架段；关掉该开关 → 下一次派出的子代理又没有这一段（调度者那侧始终有）。判据细则见 `skill-inject/testing-guide.md` 的 M 系列。
 
 ## 5. 已知限制与未观测

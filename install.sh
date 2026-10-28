@@ -471,14 +471,14 @@ else
   fi
 fi
 
-# ── 2b-4. skill-inject/ 插件（思考框架注入）──────────────────────────────────
+# ── 2b-4. skill-inject/ 插件（框架注入）──────────────────────────────────────
 # 与 2b / 2b-1 / 2b-2 / 2b-3 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 agent 的 preset 是不是 adg-ptc"（判定只看
 # preset；子代理是否也注入由设置键 skillInjectSubagent 决定，默认关），是就在它自己的
 # agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectFramework 在用户技能根的
-# skills/thinking-framework/SKILL.md 与 skills/execution-framework/SKILL.md 之间选一份（两份都是
-# 本脚本第 1 节拷的；出厂默认执行框架）。漏装的症状是
-# 调度者的系统提示词里没有思考框架段（静默退回"靠模型自觉 read"的旧状态），不报错。
+# skills/elegant-framework/SKILL.md、skills/thinking-framework/SKILL.md 与
+# skills/execution-framework/SKILL.md 之间选一份（三份都是本脚本第 1 节拷的；出厂默认优雅框架）。
+# 漏装的症状是调度者的系统提示词里没有框架段（静默退回"靠模型自觉 read"的旧状态），不报错。
 inject_src="$here/skill-inject"
 inject_dest="$root/plugins/adg-skill-inject"
 inject_note=""
@@ -810,10 +810,10 @@ for name in $profiles; do
         done
   fi
 
-  # 4c-8. adg-skill-inject 插件（思考框架注入）也装进这个 profile。同 4c-6 形。
-  # 漏装的后果：调度者系统提示词里没有思考框架段（静默退回"靠模型自觉"的旧状态），要如实报告。
+  # 4c-8. adg-skill-inject 插件（框架注入）也装进这个 profile。同 4c-6 形。
+  # 漏装的后果：调度者系统提示词里没有框架段（静默退回"靠模型自觉"的旧状态），要如实报告。
   if [ "$inject_skipped" -eq 1 ]; then
-    echo "  profile -> $name : adg-skill-inject 未部署（$inject_note）—— 调度者系统提示词里不会有思考框架段" >&2
+    echo "  profile -> $name : adg-skill-inject 未部署（$inject_note）—— 调度者系统提示词里不会有框架段" >&2
   else
     inject_in_profile="$profile_dir/node_modules/adg-skill-inject/package.json"
     if [ -f "$inject_in_profile" ]; then
@@ -916,7 +916,7 @@ echo "  notify  -> $notify_note（notify_user 工具；每个 profile 的安装�
 echo "  delegate -> $delegate_note（delegate 工具 —— 唯一的委派入口；只有调度智能体拿得到，子代理拿不到。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 echo "  permission -> $permission_note（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
 echo "  settings -> $settings_note（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
-echo "  skill-inject -> $inject_note（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
+echo "  skill-inject -> $inject_note（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认优雅框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 echo ""
 echo "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
 echo "（preset 走的是一条独立的 patch 层：dsh --profile <name> --dump-config 能确认它被读到，"
@@ -927,7 +927,7 @@ echo "（adg-notify 插件：装了之后必须重启 dsh 才注册 —— loade
 echo "（adg-delegate 插件：同样要重启 dsh 才注册；它是**唯一的委派入口** —— 没装它调度者手上就没有开子代理的工具。）"
 echo "（adg-permission 插件：同样要重启 dsh 才注册；它不进任何一次委派的 tools —— 只有调度智能体用。）"
 echo "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
-echo "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有思考框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
+echo "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
 if [ "$package_failed" -eq 1 ]; then
   echo ""
   echo "注意：至少有一步 pnpm 没成功，$bundle_name 可能还没装进 profile（上面的 profile 行里写明了）。" >&2

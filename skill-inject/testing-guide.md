@@ -18,24 +18,24 @@
 | U8 | 留空 / 全空白 → 回落技能文件（`source: 'skill'`）；留空且文件也缺 → 仍走降级 | `resolveSectionText` 用例组 | I2 / I3 | `[机检]` |
 | U9 | 子代理的正文两级闸门：总开关开 + `skillInjectSubagent` **关** → 子代理拿不到正文（空串）；同一文件里 `skillInjectSubagent` **开** → 子代理拿到正文；总开关关时两者都拿不到 | `sectionTextNow({ subagent: true/false })` 用例（设置文件写到临时目录） | R1 / I3 | `[机检]` |
 | U10 | `isSubagentHeader` 只认会话头的 `origin === 'subagent'`：子代理头为真，调度者头为假；缺 `origin` 视为非子代理 | `isSubagentHeader` 用例组 | R1 | `[机检]` |
-| U11 | 两份框架各自的降级文案提示的是**自己那份**技能文件（不写死 thinking） | `fallbackText('thinking')` / `fallbackText('execution')` 用例 | I3 | `[机检]` |
-| U12 | 框架切换端到端：`skillInjectFramework` 换一下，导语标题与命中的技能文件名都跟着换（走 `sectionTextNow()` + 仓库里那两份真 SKILL.md） | `section.test.mjs` 的「框架切换」用例 | I2 / I7 | `[机检]` |
-| S1 | 出厂默认 `{skillInjectEnabled: true, skillInjectFramework: 'execution', skillInjectSubagent: false, skillInjectText: ''}`、冻结、`STORE_NAME` / `MAX_TEXT_LENGTH` | `user-settings.test.mjs` | I7 | `[机检]` |
+| U11 | 三份框架各自的降级文案提示的是**自己那份**技能文件（不写死 thinking） | `fallbackText('elegant')` / `fallbackText('thinking')` / `fallbackText('execution')` 用例，各自断言不出现另外两份的路径 | I3 | `[机检]` |
+| U12 | 框架切换端到端：`skillInjectFramework` 换一下，导语标题与命中的技能文件名都跟着换（走 `sectionTextNow()` + 仓库里那三份真 SKILL.md；缺项与非法值都回落优雅框架） | `section.test.mjs` 的「框架切换」用例 | I2 / I7 | `[机检]` |
+| S1 | 出厂默认 `{skillInjectEnabled: true, skillInjectFramework: 'elegant', skillInjectSubagent: false, skillInjectText: ''}`、冻结、`STORE_NAME` / `MAX_TEXT_LENGTH` | `user-settings.test.mjs` | I7 | `[机检]` |
 | S2 | `settingsFile()` 与宿主同口径（`DSH_PROFILE_DIR` > `DSH_HOME`） | 同上 | I7 | `[机检]` |
 | S3 | 文件不存在 / 坏 JSON / 数组 / `null` → 出厂默认、不抛错 | 同上 | I7 | `[机检]` |
 | S4 | 缺项 / 坏项只影响那一项（含字符串形式的布尔） | 同上 | I7 | `[机检]` |
 | S5 | 正文长度上限：正好 20000 收、20001 回落空串 | 同上 | I7 | `[机检]` |
-| S6 | `skillInjectFramework` 的读出 / 非法回落：`'thinking'` / `'execution'` 收；`'Thinking'` / `' thinking'` / `'thinking '` / `'THINKING'` / `''` / `'thinking-framework'` / `null` / `true` / `1` / `{}` / `[]` 一律回落出厂默认 `'execution'` | 同上 | I7 | `[机检]` |
-| M1 | Adg 新会话的系统提示词里有框架段 | 重启 dsh → 新 Adg 会话，看系统提示词（会话日志/轨迹）开头附近出现与下拉选中那份框架一致的标题（出厂＝「# 执行框架（execution-framework）」）与正文首行 | I6 | `[人]` |
-| M2 | 子代理的系统提示词里**没有**框架段（`skillInjectSubagent` 默认关） | 同一次 Adg 会话里派一个子代理，看它的系统提示词（轨迹/会话日志）无该标题（出厂＝无「执行框架（execution-framework）」）；调度者那侧始终有 | R1 / R2 | `[人]` |
+| S6 | `skillInjectFramework` 的读出 / 非法回落：`'elegant'` / `'thinking'` / `'execution'` 收；`'Elegant'` / `'ELEGANT'` / `' elegant'` / `'elegant '` / `'Thinking'` / `' thinking'` / `'thinking '` / `'THINKING'` / `''` / `'elegant-framework'` / `'thinking-framework'` / `'execution-framework'` / `null` / `true` / `1` / `{}` / `[]` 一律回落出厂默认 `'elegant'` | 同上 | I7 | `[机检]` |
+| M1 | Adg 新会话的系统提示词里有框架段 | 重启 dsh → 新 Adg 会话，看系统提示词（会话日志/轨迹）开头附近出现与下拉选中那份框架一致的标题（出厂＝「# 优雅框架（elegant-framework）」）与正文首行 | I6 | `[人]` |
+| M2 | 子代理的系统提示词里**没有**框架段（`skillInjectSubagent` 默认关） | 同一次 Adg 会话里派一个子代理，看它的系统提示词（轨迹/会话日志）无该标题（出厂＝无「优雅框架（elegant-framework）」）；调度者那侧始终有 | R1 / R2 | `[人]` |
 | M3 | 其他 preset（standard / ptc / cordis）新会话没有框架段 | 新开一个 standard 会话，同 M1 的检查点 | R1 | `[人]` |
 | M4 | 技能文件更新后正文跟着换 | 改 SKILL.md → 重启 dsh → 新 Adg 会话看注入正文已是新版 | I2 | `[人]` |
 | M5 | 冷恢复：resume 旧 Adg 会话框架仍在 | 重启 dsh → resume 旧 Adg 会话 → 同 M1 检查点（这条同时是 design.md 的未观测项的量法） | design 未观测① | `[人]` |
 | M6 | 设置页改「自定义注入正文」→ 下一轮请求就换正文 | 设置页填一段可辨认的文本 → 保存 → 在同一条会话里发下一条消息，看系统提示词变成「# 思考框架（自定义注入）」+ 那段文本（**不用重启**） | I2 / I6 | `[人]` |
 | M7 | 输入框「超思」chip 关掉 → 框架段消失；再开 → 回来 | 点 chip 看它从「超思 开」变「超思 关」→ 发消息看系统提示词里没有框架段 → 再点回来 | I7 / R11 | `[人]` |
-| M8 | chip 与设置页是同一个值 | chip 点一下 → 刷新页面打开设置页，看「注入思考框架」开关是否同步；反向再试一次 | I7 / R11 | `[人]` |
-| M9 | 打开「同时注入子代理」→ **不重启**、下一轮派出的子代理系统提示词里出现框架段；关掉 → 又没有 | 设置页打开该开关并保存 → 在同一条会话里再派一个子代理，看它的系统提示词出现与选中框架一致的标题（出厂＝「执行框架（execution-framework）」）；关掉保存后再派一次确认消失（**不用重启**） | R1 / I6 | `[人]` |
-| M10 | 换框架：把「注入哪个框架」从执行框架切到思考框架 → **不重启**、下一轮系统提示词标题从「# 执行框架（execution-framework）」变成「# 思考框架（thinking-framework）」，正文换成 thinking-framework 那份 | 设置页切下拉并保存 → 在同一条会话里发下一条消息，看系统提示词那一段的标题与正文首行（**不用重启**）；再切回来确认能回去 | I2 / I6 / I7 | `[人]` |
+| M8 | chip 与设置页是同一个值 | chip 点一下 → 刷新页面打开设置页，看「注入框架」开关是否同步；反向再试一次 | I7 / R11 | `[人]` |
+| M9 | 打开「同时注入子代理」→ **不重启**、下一轮派出的子代理系统提示词里出现框架段；关掉 → 又没有 | 设置页打开该开关并保存 → 在同一条会话里再派一个子代理，看它的系统提示词出现与选中框架一致的标题（出厂＝「优雅框架（elegant-framework）」）；关掉保存后再派一次确认消失（**不用重启**） | R1 / I6 | `[人]` |
+| M10 | 换框架：把「注入哪个框架」从优雅框架切到思考框架 → **不重启**、下一轮系统提示词标题从「# 优雅框架（elegant-framework）」变成「# 思考框架（thinking-framework）」，正文换成 thinking-framework 那份 | 设置页切下拉并保存 → 在同一条会话里发下一条消息，看系统提示词那一段的标题与正文首行（**不用重启**）；再切回来确认能回去 | I2 / I6 / I7 | `[人]` |
 
 ## 沙箱注意
 
