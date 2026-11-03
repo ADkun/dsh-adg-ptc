@@ -61,7 +61,7 @@ whenToUse: 用户要压测一个方案或决策、要你「一直问到没有含
 
 ## 与 Adg 的分工
 
-- 本技能是**调度者自用**的：不要再把这份文件的路径转给子代理，子代理需要的是 `adg-delegation` / `adg-browser-use` / `adg-computer-use` / `adg-file-ops`。
+- 本技能是**调度者自用**的：不要再把这份文件的路径转给子代理，子代理需要的是 `adg-delegation` / `adg-browser-use` / `adg-computer-use`。
 - 访谈进行中你仍然只做调度与汇总：不碰文件、不改系统设置、不操作网页（唯一例外仍是「中转材料」允许的平台临时目录）。
 - 共识达成后的落地照常走 Adg 的委派流程（按能力带现给 `tools`）。
 

@@ -74,7 +74,7 @@ node tools/gen-preset-bundle.mjs
 
 **新建模块的登记义务**：在 Project Map 加一行（唯一的登记点），并按「三信号」判断要不要给新模块建 `AGENTS.md`（有独立命令 / 有模块特有红线 / 需要跨模块路由，三者有其一方建）。
 
-不给模块 `AGENTS.md` 的（三样信号都没有，建了就是噪音）：`skills/` 下的九份用户技能文档（`adg-delegation` / `adg-browser-use` / `adg-computer-use` / `adg-file-ops` / `adg-grill-me` / `adg-doc-criterion` / `elegant-framework` / `thinking-framework` / `execution-framework`，装到 `${DSH_HOME:-~/.dsh}/skills/` 下，均无独立命令；`elegant-framework` / `thinking-framework` / `execution-framework` 三份的正文由 `adg-skill-inject` 按设置键选一份注入调度者系统提示词（出厂默认执行框架）；`adg-grill-me` 另有 `/adg-grill-me` 这个用户入口）、`install.ps1` / `install.sh`（部署脚本，无模块红线）、仓库根 `README.md` 与 `AGENTS.md`。
+不给模块 `AGENTS.md` 的（三样信号都没有，建了就是噪音）：`skills/` 下的八份用户技能文档（`adg-delegation` / `adg-browser-use` / `adg-computer-use` / `adg-grill-me` / `adg-doc-criterion` / `elegant-framework` / `thinking-framework` / `execution-framework`，装到 `${DSH_HOME:-~/.dsh}/skills/` 下，均无独立命令；`elegant-framework` / `thinking-framework` / `execution-framework` 三份的正文由 `adg-skill-inject` 按设置键选一份注入调度者系统提示词（出厂默认执行框架）；`adg-grill-me` 另有 `/adg-grill-me` 这个用户入口）、`install.ps1` / `install.sh`（部署脚本，无模块红线）、仓库根 `README.md` 与 `AGENTS.md`。
 
 ## 版本区（文档目录入口）
 
@@ -85,7 +85,7 @@ node tools/gen-preset-bundle.mjs
 | `AGENTS.md`（本文件） | 根入口：路由（命令 / 红线 / 生效方式 / 模块地图 / 版本区 / 质量门） |
 | `README.md` | 人向总览：项目是什么、怎么装、怎么用、怎么排错 |
 | `preset/`、`tools/`、`browser/`、`desktop/`、`notify/`、`permission/`、`delegate/`、`settings/`、`skill-inject/`、`source-guard/`、`ptc-parallel/` 各自的 `AGENTS.md` → `design.md` → `testing-guide.md` | 模块三件套：路由 → 设计（不变量）→ 验证（用例全表与未观测项） |
-| `skills/adg-delegation/SKILL.md`（另有 `adg-browser-use` / `adg-computer-use` / `adg-file-ops` / `adg-grill-me` / `adg-doc-criterion` / `elegant-framework` / `thinking-framework` / `execution-framework`） | 九份用户技能：委派能力与工具面映射 / 浏览器 / 桌面 / 文件操作 / 方案压测访谈 / 文档工程师角色规范 / 优雅框架、思考框架、执行框架（这三份的正文由 `adg-skill-inject` 按设置键 `skillInjectFramework` 三选一注入调度者系统提示词，出厂默认执行框架，技能文件是正文的事实源） |
+| `skills/adg-delegation/SKILL.md`（另有 `adg-browser-use` / `adg-computer-use` / `adg-grill-me` / `adg-doc-criterion` / `elegant-framework` / `thinking-framework` / `execution-framework`） | 八份用户技能：委派能力与工具面映射 / 浏览器 / 桌面 / 方案压测访谈 / 文档工程师角色规范 / 优雅框架、思考框架、执行框架（这三份的正文由 `adg-skill-inject` 按设置键 `skillInjectFramework` 三选一注入调度者系统提示词，出厂默认执行框架，技能文件是正文的事实源） |
 | `docs-work/`（**临时工作目录，不在版本区**） | 过程件（changelog / handoff / pending / 工作稿 / 证据快照）；滚动更新、可被清理，任务交付前清空 |
 
 模块 `AGENTS.md` 的「版本区」一节指回本表，只登记本模块那三份，不另抄一份清单。

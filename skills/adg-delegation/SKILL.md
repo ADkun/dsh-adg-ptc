@@ -71,7 +71,7 @@ return [a.subagent_id, a.tools_note, b.subagent_id, b.tools_note]
 | 建议 persona 要点（【目标】/【要干什么】） | 文件与文档的全生命周期：按文件名 / 内容 / 时间 / 类型检索定位；深读 PDF、Word、Excel、PPT、图片并做自然语言问答；复制、移动、删除、重命名、批量归类；生成文档 / 表格 / 图表 / PPT；格式转换（PDF↔Word、图片转 PNG、Excel↔CSV 等） |
 | 建议 persona 要点（【不要干什么】） | 只处理文件与文档本身：工作区**代码**改动、需要跑编译或测试自证的活不是它的；不改系统设置、不操作软件界面、不做需要登录的网页交互 |
 | 建议 persona 要点（【验收标准】） | 给出改动路径与操作前后状态；批量操作给条数与失败清单；生成/转换出的文件给绝对路径；越界部分写明需要哪条能力带与已核实的最小事实 |
-| 深水区 | 给技能 `${DSH_HOME:-~/.dsh}/skills/adg-file-ops/SKILL.md` |
+| 深水区 | 无专门技能；口径内联进 `prompt` |
 
 **注意：① 与 ⑥ 的 `tools` 逐字相同。** 两者唯一的差别在你写的【目标】/【要干什么】/【不要干什么】：写清是「整理 / 转换 / 生成文档」还是「按已定方案改工作区代码并自证」。委派里不写这一句，子代理只能自己猜方向。
 
@@ -155,12 +155,12 @@ return [a.subagent_id, a.tools_note, b.subagent_id, b.tools_note]
 ## 技能怎么给：一个路径 + 一句话
 
 ```
-先 read `${DSH_HOME:-~/.dsh}/skills/adg-file-ops/SKILL.md` 再动手；它是这次干活的判据。
+先 read `${DSH_HOME:-~/.dsh}/skills/<技能名>/SKILL.md` 再动手；它是这次干活的判据。
 ```
 
 | 这一次委派是什么 | 给哪份技能路径 | 前提 |
 |---|---|---|
-| 文件 / 文档整理、转换、生成、图片理解（①） | `${DSH_HOME:-~/.dsh}/skills/adg-file-ops/SKILL.md` | 那次给了 `read` |
+| 文件 / 文档整理、转换、生成、图片理解（①） | 不给技能路径 | 那次给了 `read`；口径内联进 `prompt` |
 | 桌面 / 系统 / 应用操作（②） | `${DSH_HOME:-~/.dsh}/skills/adg-computer-use/SKILL.md` | 那次给了 `read` |
 | 网页交互（③） | `${DSH_HOME:-~/.dsh}/skills/adg-browser-use/SKILL.md` | 那次给了 `read` |
 | 联网检索（④）/ 本地检索（⑤）/ 编码改动（⑥）/ 对抗性审查（⑦） | 不给技能路径 | ⑤ 有 `read` 但无对应技能；④ 没有 `read`，给了也读不到 |
