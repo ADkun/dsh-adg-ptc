@@ -75,7 +75,7 @@ const THINKING_BODY = '---\nname: thinking-framework\n---\n\n# 思维规范框�
 const EXECUTION_BODY = '---\nname: execution-framework\n---\n\n### 执行框架 BEGIN ###\n\n00 工作循环\n';
 const ELEGANT_BODY = '---\nname: elegant-framework\n---\n\n# 优雅\n\n不多也不少。\n';
 
-test('sectionTextFor：真文件 → 正文带导语、不降级（导语标题随框架走）', () => {
+test('sectionTextFor：真文件 → 原样返回正文、不降级（不加标题/导语）', () => {
   const dir = mkdtempSync(join(tmpdir(), 'adg-skill-inject-'));
   try {
     const thinking = join(dir, 'thinking-framework', 'SKILL.md');
@@ -90,21 +90,21 @@ test('sectionTextFor：真文件 → 正文带导语、不降级（导语标题�
 
     const t = sectionTextFor(thinking, 'thinking');
     assert.equal(t.degraded, false);
-    assert.ok(t.text.startsWith('# 思考框架（thinking-framework）'));
+    assert.ok(t.text.startsWith('# 思维规范框架'), '注入正文就是文件正文本身');
     assert.ok(t.text.includes('# 思维规范框架'));
     assert.ok(t.text.includes('先全面思考。'));
     assert.ok(!t.text.includes('name: thinking-framework'), 'frontmatter 不该出现在注入正文里');
 
     const e = sectionTextFor(execution, 'execution');
     assert.equal(e.degraded, false);
-    assert.ok(e.text.startsWith('# 执行框架（execution-framework）'));
+    assert.ok(e.text.startsWith('### 执行框架 BEGIN ###'));
     assert.ok(e.text.includes('### 执行框架 BEGIN ###'));
     assert.ok(e.text.includes('00 工作循环'));
     assert.ok(!e.text.includes('name: execution-framework'), 'frontmatter 不该出现在注入正文里');
 
     const g = sectionTextFor(elegant, 'elegant');
     assert.equal(g.degraded, false);
-    assert.ok(g.text.startsWith('# 优雅框架（elegant-framework）'));
+    assert.ok(g.text.startsWith('# 优雅'));
     assert.ok(g.text.includes('# 优雅'));
     assert.ok(g.text.includes('不多也不少。'));
     assert.ok(!g.text.includes('name: elegant-framework'), 'frontmatter 不该出现在注入正文里');
@@ -113,7 +113,7 @@ test('sectionTextFor：真文件 → 正文带导语、不降级（导语标题�
   }
 });
 
-test('sectionTextFor：框架缺省时按出厂框架（execution）写导语标题', () => {
+test('sectionTextFor：框架名不影响正文（正文原样，与框架选择无关）', () => {
   const dir = mkdtempSync(join(tmpdir(), 'adg-skill-inject-'));
   try {
     const file = join(dir, 'SKILL.md');
@@ -121,7 +121,7 @@ test('sectionTextFor：框架缺省时按出厂框架（execution）写导语标
     for (const omitted of [undefined, 'nope', 'Thinking', 'Execution']) {
       const { text, degraded } = sectionTextFor(file, omitted);
       assert.equal(degraded, false);
-      assert.ok(text.startsWith('# 执行框架（execution-framework）'), String(omitted));
+      assert.equal(text, '### 执行框架 BEGIN ###\n\n00 工作循环', String(omitted));
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -282,12 +282,12 @@ test('resolveSectionText：填了正文 → 用它，忽略框架选择、不读
     });
     assert.equal(degraded, false);
     assert.equal(source, 'custom');
-    assert.ok(text.startsWith('# 思考框架（自定义注入）'), '自定义正文那支的标题固定不变');
+    assert.equal(text, '先想清楚再动手。', '自定义正文原样注入，无标题无导语');
     assert.ok(text.includes('先想清楚再动手。'));
   }
 });
 
-test('resolveSectionText：留空 / 全空白 → 回落到技能文件（标题随框架变）', () => {
+test('resolveSectionText：留空 / 全空白 → 回落到技能文件（正文原样）', () => {
   const dir = mkdtempSync(join(tmpdir(), 'adg-skill-inject-'));
   try {
     const thinking = join(dir, 'thinking-framework', 'SKILL.md');
@@ -304,21 +304,21 @@ test('resolveSectionText：留空 / 全空白 → 回落到技能文件（标题
       assert.equal(t.degraded, false);
       assert.equal(t.source, 'skill');
       assert.equal(t.framework, 'thinking');
-      assert.ok(t.text.startsWith('# 思考框架（thinking-framework）'));
+      assert.ok(t.text.startsWith('# 思维规范框架'));
       assert.ok(t.text.includes('# 思维规范框架'));
 
       const e = resolveSectionText({ customText, framework: 'execution', skillPath: execution });
       assert.equal(e.degraded, false);
       assert.equal(e.source, 'skill');
       assert.equal(e.framework, 'execution');
-      assert.ok(e.text.startsWith('# 执行框架（execution-framework）'));
+      assert.ok(e.text.startsWith('### 执行框架 BEGIN ###'));
       assert.ok(e.text.includes('### 执行框架 BEGIN ###'));
 
       const g = resolveSectionText({ customText, framework: 'elegant', skillPath: elegant });
       assert.equal(g.degraded, false);
       assert.equal(g.source, 'skill');
       assert.equal(g.framework, 'elegant');
-      assert.ok(g.text.startsWith('# 优雅框架（elegant-framework）'));
+      assert.ok(g.text.startsWith('# 优雅'));
       assert.ok(g.text.includes('# 优雅'));
     }
   } finally {
@@ -339,7 +339,7 @@ test('resolveSectionText：留空且文件也缺 → 仍走降级指令', () => 
 
 // ── 端到端：设置键换一下，注入正文真的换一份技能文件（用仓库自己那三份真文件）─────
 
-test('框架切换：skillInjectFramework 换一下，导语标题与技能文件名都跟着换', () => {
+test('框架切换：skillInjectFramework 换一下，注入的正文跟着换', () => {
   const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
   const savedHome = process.env.DSH_HOME;
   process.env.DSH_HOME = repoRoot;
@@ -351,26 +351,24 @@ test('框架切换：skillInjectFramework 换一下，导语标题与技能文�
     withSettingsDir({ skillInjectEnabled: true }, (dir) => {
       // 缺项 → 出厂框架：执行框架那份技能文件。
       const fallback = sectionTextNow();
-      assert.ok(fallback.startsWith('# 执行框架（execution-framework）'));
+      assert.ok(fallback.startsWith('### 执行框架 BEGIN'), '缺项 → 出厂执行框架那份文件正文');
       assert.ok(fallback.includes('执行'));
 
-      for (const [framework, title] of [
-        ['elegant', '# 优雅框架（elegant-framework）'],
-        ['execution', '# 执行框架（execution-framework）'],
-        ['thinking', '# 思考框架（thinking-framework）'],
+      for (const [framework, marker] of [
+        ['elegant', '你的标准不是'],
+        ['execution', '### 执行框架 BEGIN'],
+        ['thinking', '# 思维规范框架'],
       ]) {
         writeFileSync(join(dir, STORE_NAME), JSON.stringify({ skillInjectEnabled: true, skillInjectFramework: framework }));
         const text = sectionTextNow();
-        assert.ok(text.startsWith(title), framework);
-        assert.ok(
-          text.includes(skillDirFor(framework)) || readFileSync(skillPathFor(framework), 'utf8').includes('框架'),
-        );
+        assert.ok(text.startsWith(marker), framework);
+        assert.equal(text, stripFrontmatter(readFileSync(skillPathFor(framework), 'utf8')).trim(), framework);
       }
 
       // 非法值 → 回落到执行框架。
       for (const bad of ['Thinking', 'Elegant']) {
         writeFileSync(join(dir, STORE_NAME), JSON.stringify({ skillInjectEnabled: true, skillInjectFramework: bad }));
-        assert.ok(sectionTextNow().startsWith('# 执行框架（execution-framework）'), `非法值 ${bad} 回落到出厂框架`);
+        assert.ok(sectionTextNow().startsWith('### 执行框架 BEGIN'), `非法值 ${bad} 回落到出厂框架`);
       }
     });
   } finally {

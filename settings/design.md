@@ -93,7 +93,7 @@ skill-inject/lib/user-settings.mjs:
 - **I11 路由只认 `/settings`**（其余 404）、**方法只认 `GET` / `POST` / `DELETE`**（其余 405）。守卫：「路由表」用例。
 - **I12 `export const name` === `cordis.patch.yml` 的 `id` === 包名。** 行落全局层，重名注册会拖垮整个 profile。守卫：契约用例 + 仓库根 `node tools/check-preset.mjs`。
 - **I13 客户端 DICT 覆盖登记表里的每一条 `labelKey` / `hintKey`（zh 与 en 各一份），enum 还覆盖每个取值的 `option.<键>.<值>`。** 守卫：文本级计数用例。
-- **I14 设置生效不需要重启。** 保存后第二次 `GET` 就反映真相；`adg-notify` 的下一次调用、`adg-skill-inject` 的下一次系统提示词组装都读到新值 —— 翻 `skillInjectSubagent` 也不例外：下一次组装时子代理是否拿到正文就变了，不必重建会话；换 `skillInjectFramework` 同理 —— 下一轮组装就读到另一份技能文件、导语标题也跟着换。**输入框里那颗「超思」开关**（`skill-inject/client.js`）走的是同一个 `POST`，所以它和设置页是同一份真相的两个入口，不存在第二份开关状态。
+- **I14 设置生效不需要重启。** 保存后第二次 `GET` 就反映真相；`adg-notify` 的下一次调用、`adg-skill-inject` 的下一次系统提示词组装都读到新值 —— 翻 `skillInjectSubagent` 也不例外：下一次组装时子代理是否拿到正文就变了，不必重建会话；换 `skillInjectFramework` 同理 —— 下一轮组装就读到另一份技能文件的正文。**输入框里那颗「注入」开关**（`skill-inject/client.js`）走的是同一个 `POST`，所以它和设置页是同一份真相的两个入口，不存在第二份开关状态。
 
 ## 4. 接口
 

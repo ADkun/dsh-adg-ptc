@@ -3,7 +3,7 @@
 本模块是仓库的**第四枚第一方子插件**：包名 `adg-skill-inject`，在**全局层**注册一段系统提示词 section，把框架**正文**注入 **Adg 调度智能体**的系统提示词 —— 不依赖模型自觉去 `read`（persona 级的【思考框架闸门】已被证过不可靠，这正是本模块存在的理由）。注入的**是哪一份框架**由设置键 `skillInjectFramework` 在三份技能文件（`elegant-framework` / `thinking-framework` / `execution-framework`）之间选，**出厂默认执行框架**。
 装载形状与 `notify/` / `permission/` 同一种（稳定副本 + profile 的 `file:` 依赖 + `dsh.profile.bundles`）；它**不注册任何工具**，不占 `KNOWN_TOOLS` 名单。设计细节在 [design.md](design.md)，验证判据在 [testing-guide.md](testing-guide.md)。
 
-**正文与开关都是用户可配的**（两个入口、一份真相）：正文默认取**下拉选中那份**技能文件 —— `skillInjectFramework`（`'elegant'` | `'thinking'` | `'execution'`，**默认 `'execution'`**）指向 `skills/elegant-framework/SKILL.md`、`skills/thinking-framework/SKILL.md` 或 `skills/execution-framework/SKILL.md`；也可以在「设置 → Adg 设置」里写自定义正文（`skillInjectText`，留空＝跟随选中的技能文件）；开关有两个 —— `skillInjectEnabled`（要不要注入）与 `skillInjectSubagent`（子代理是否也注入同一段，**默认关** ＝ 与这条开关引入前完全一致：只注入调度者）。`skillInjectEnabled` 在设置页与**聊天输入框左侧那颗「超思」chip**（`client.js`，`conversation.input.left`、`order: 21`）都写同一个键；`skillInjectFramework` 与 `skillInjectSubagent` 只在设置页。四个键的登记在 `settings/lib/schema.mjs` 的 `FIELDS`，本模块只**读**设置文件（`lib/user-settings.mjs`），**不 import `adg-settings` 包**。
+**正文与开关都是用户可配的**（两个入口、一份真相）：正文默认取**下拉选中那份**技能文件 —— `skillInjectFramework`（`'elegant'` | `'thinking'` | `'execution'`，**默认 `'execution'`**）指向 `skills/elegant-framework/SKILL.md`、`skills/thinking-framework/SKILL.md` 或 `skills/execution-framework/SKILL.md`；也可以在「设置 → Adg 设置」里写自定义正文（`skillInjectText`，留空＝跟随选中的技能文件）；开关有两个 —— `skillInjectEnabled`（要不要注入）与 `skillInjectSubagent`（子代理是否也注入同一段，**默认关** ＝ 与这条开关引入前完全一致：只注入调度者）。`skillInjectEnabled` 在设置页与**聊天输入框左侧那颗「注入」chip**（`client.js`，`conversation.input.left`、`order: 21`）都写同一个键；`skillInjectFramework` 与 `skillInjectSubagent` 只在设置页。四个键的登记在 `settings/lib/schema.mjs` 的 `FIELDS`，本模块只**读**设置文件（`lib/user-settings.mjs`），**不 import `adg-settings` 包**。
 
 ## 命令
 
@@ -52,8 +52,8 @@ cd skill-inject && node --test --test-isolation=none test  # DSH 沙箱（worksp
 
 | 改了什么 | 怎么生效 | 怎么复核 |
 |---|---|---|
-| `skill-inject/` 任何文件 | 重装子插件（`install.*` 第 2b-4 / 4c-8 / 4c-9 步）+ **重启 dsh** + 新会话（section 在 agent 创建那一刻注册，运行中的旧 agent 不补挂） | `cd skill-inject && node --test test`；再在**新 Adg 会话**里核对系统提示词开头附近出现与下拉选中那份框架一致的段落（出厂＝「# 执行框架（execution-framework）」） |
-| 只改**设置页里的开关、框架选择或自定义正文**（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText` 的值） | **保存即生效、不用重启**（下一次组装系统提示词就读到新值）；输入框那颗「超思」chip 同理 | 设置页改一项 → 下一条消息就让调度者读系统提示词，看框架段是否变了；chip 点一下再刷新页面看设置页是否同步 |
+| `skill-inject/` 任何文件 | 重装子插件（`install.*` 第 2b-4 / 4c-8 / 4c-9 步）+ **重启 dsh** + 新会话（section 在 agent 创建那一刻注册，运行中的旧 agent 不补挂） | `cd skill-inject && node --test test`；再在**新 Adg 会话**里核对系统提示词开头附近出现下拉选中那份技能文件的正文（出厂＝执行框架正文首行「### 执行框架 BEGIN」） |
+| 只改**设置页里的开关、框架选择或自定义正文**（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText` 的值） | **保存即生效、不用重启**（下一次组装系统提示词就读到新值）；输入框那颗「注入」chip 同理 | 设置页改一项 → 下一条消息就让调度者读系统提示词，看框架段是否变了；chip 点一下再刷新页面看设置页是否同步 |
 | 本模块任何 `.md` 文档 | 立即生效（只是文件） | 按 `adg-doc-criterion` 技能的质量红线清单自检 |
 
 **未观测**：`agent/created` 监听里 `composedPreset(agent.ctx)` 在**冷恢复**（resume）场景的取值是否恒为 `'adg-ptc'`（运行期判定走 standing mount，会话头 `agentPreset` 字段是后备）；量法：重启 dsh 后 resume 一个旧的 Adg 会话，在系统提示词里确认框架段落仍在，再对照 `lib/section.mjs` 的 `shouldInjectFor` 用例逐条核。

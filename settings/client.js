@@ -48,7 +48,7 @@ window.__ModuleLoader__.load({
         'group.skillInject': '框架注入',
         'field.skillInjectEnabled.label': '注入框架',
         'field.skillInjectEnabled.hint':
-          '开启后，Adg 调度智能体的系统提示词里会带上所选框架的正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「超思」开关改的是同一个值。',
+          '开启后，Adg 调度智能体的系统提示词里会带上所选框架的正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「注入」开关改的是同一个值。',
         'field.skillInjectFramework.label': '注入哪个框架',
         'field.skillInjectFramework.hint':
           '三选一：优雅框架（elegant-framework）、思考框架（thinking-framework）或执行框架（execution-framework）；出厂默认执行框架。这里选的是用哪份技能文件；下面的「注入正文」若填了内容，仍以那份自定义正文为准。',

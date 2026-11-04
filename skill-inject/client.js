@@ -1,7 +1,7 @@
 /**
  * adg-skill-inject — browser half.
  *
- * 只做一件事：在聊天输入框的工具行里放一个「超思」开关（`conversation.input.left`），
+ * 只做一件事：在聊天输入框的工具行里放一个「注入」开关（`conversation.input.left`），
  * 控制思考框架是否注入 Adg 调度者的系统提示词。
  *
  * 它读写的是 adg-settings 那一页的同源路由 `/api/adg-settings/settings`（键 `skillInjectEnabled`）
@@ -27,8 +27,8 @@ window.__ModuleLoader__.load({
     /** 开关文案。 */
     const DICT = {
       zh: {
-        on: '超思 开',
-        off: '超思 关',
+        on: '注入 开',
+        off: '注入 关',
         ariaEnable: '开启框架注入',
         ariaDisable: '关闭框架注入',
         ariaLoading: '框架注入（读取中）',
@@ -36,8 +36,8 @@ window.__ModuleLoader__.load({
         titleDisable: '已关闭：不再注入框架正文。点击开启。',
       },
       en: {
-        on: 'Thinking on',
-        off: 'Thinking off',
+        on: 'Inject on',
+        off: 'Inject off',
         ariaEnable: 'Turn framework injection on',
         ariaDisable: 'Turn framework injection off',
         ariaLoading: 'Framework injection (loading)',

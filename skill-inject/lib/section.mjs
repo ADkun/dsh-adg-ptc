@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 /**
  * 三份可注入的用户技能：设置键 `skillInjectFramework` 的内部值 → 技能目录名。
- * **唯一事实源** —— 路径拼装、导语标题、降级文案、index.mjs 的取值都从这里派生。
+ * **唯一事实源** —— 路径拼装、降级文案、index.mjs 的取值都从这里派生。
  */
 export const FRAMEWORK_SKILLS = Object.freeze({
   elegant: 'elegant-framework',
@@ -16,7 +16,7 @@ export const FRAMEWORK_SKILLS = Object.freeze({
   execution: 'execution-framework',
 });
 
-/** 框架 → 中文名（导语标题与降级文案共用；键集与 `FRAMEWORK_SKILLS` 一致）。 */
+/** 框架 → 中文名（降级文案用；键集与 `FRAMEWORK_SKILLS` 一致）。 */
 const FRAMEWORK_LABELS = Object.freeze({
   elegant: '优雅框架',
   thinking: '思考框架',
@@ -87,20 +87,10 @@ export function fallbackText(framework = DEFAULT_FRAMEWORK) {
   ].join('\n');
 }
 
-/** 注入正文的导语：用户自定义正文与技能文件正文共用同一句（标题可换成自定义的）。 */
-function compose(customText, body) {
-  return `${customText}\n\n以下全文是你在本会话的思考规范，按它组织每一次响应前的思考：\n\n${body}`;
-}
-
-/** 导语标题：技能文件那支随框架变，自定义正文那支固定。 */
-function frameworkTitle(framework) {
-  return `# ${FRAMEWORK_LABELS[frameworkOrDefault(framework)]}（${skillDirFor(framework)}）`;
-}
-
 /**
- * 从文件构造 section 正文。
+ * 从文件构造 section 正文：**原样**返回 SKILL.md 的正文（frontmatter 剥掉），不加任何标题或导语。
  * @param {string} skillPath SKILL.md 绝对路径
- * @param {string} [framework] 框架内部值（决定导语标题与降级文案）
+ * @param {string} [framework] 框架内部值（只用于降级文案点名哪份文件）
  * @returns {{text: string, degraded: boolean}} 正文与是否降级
  */
 export function sectionTextFor(skillPath, framework = DEFAULT_FRAMEWORK) {
@@ -108,10 +98,7 @@ export function sectionTextFor(skillPath, framework = DEFAULT_FRAMEWORK) {
   try {
     const body = stripFrontmatter(readFileSync(skillPath, 'utf8')).trim();
     if (body.length === 0) return { text: fallbackText(framework), degraded: true };
-    return {
-      text: compose(frameworkTitle(framework), body),
-      degraded: false,
-    };
+    return { text: body, degraded: false };
   } catch {
     return { text: fallbackText(framework), degraded: true };
   }
@@ -132,7 +119,7 @@ export function resolveSectionText(options = {}) {
   const { customText } = options;
   if (typeof customText === 'string' && customText.trim() !== '') {
     return {
-      text: compose('# 思考框架（自定义注入）', customText.trim()),
+      text: customText.trim(),
       degraded: false,
       source: 'custom',
       framework,
