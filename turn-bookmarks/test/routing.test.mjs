@@ -218,3 +218,32 @@ test('轨道右键是收藏入口，且绝不接管左键跳转', () => {
   assert.equal(source.includes('preventDefault'), true, '右键必须先 preventDefault，别弹浏览器菜单');
   assert.equal(source.includes(clickListen), false, '左键跳转必须保持 dsh 原生行为：本插件不挂 click 监听');
 });
+
+test('星标绝对定位进操作栏行，其它 tail 子项（交付卡等）保持独占整行', () => {
+  const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
+  assert.equal(
+    source.includes('[data-turn-tail]{position:relative!important;flex-direction:column!important;align-items:stretch!important;gap:16px!important}'),
+    true,
+    'turnTail 根节点必须保持 column（只补 position:relative 当定位参照），绝不能整根改 row',
+  );
+  assert.equal(
+    source.includes('[data-turn-tail] .atb_star{position:absolute!important;left:0!important;bottom:0!important}'),
+    true,
+    '星标要绝对定位到 root 左下角，脱流后不再占一行，又与末行操作栏同一水平带',
+  );
+  assert.equal(
+    source.includes('[data-turn-tail]:has(.atb_star)>*:last-child{margin-left:36px!important}'),
+    true,
+    '有星标时把最后一个子项（原生操作栏）右移 36px，给星标让出 28px 位置 + 8px 间距',
+  );
+  assert.equal(
+    source.includes('.atb_star{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px'),
+    true,
+    '星标做成 28×28，与 dsh 原生 28×28 图标按钮同高',
+  );
+  assert.equal(
+    source.includes('flex-direction:row'),
+    false,
+    'turnTail 里出现 row 就会把交付卡等其它插件卡片挤到同一行——这条是本次回归的根因，必须守住',
+  );
+});

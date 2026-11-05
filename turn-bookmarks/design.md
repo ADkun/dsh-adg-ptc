@@ -44,6 +44,7 @@
 - **类名是构建期哈希**（如 `eGxaPq_mark`），每版可能变，一律不用；只用 `data-*` 属性这类语义契约。
 - **刻度按钮虚拟化**：只有可见的才在 DOM。所以上色必须随 scroll / resize / 子树变化重跑；用 rAF 合并 + 80ms 最小间隔节流，避免滚动时抖动。
 - **染色手段**：给按钮加 `data-adg-tb="1"`，用 CSS 覆盖它 `:before` 伪元素的 `background` / `opacity` / `transform`（`!important`，因为要压过内联/状态类）；给提问行加同一属性，用 `box-shadow: inset 3px 0 0 0` 画左侧竖线。**不改 dsh 的任何结构与跳转逻辑**。交互分工同一句：星标单击 / 轨道右键 = 收藏开关；轨道左键 = dsh 原生跳转，本插件不监听、不拦截。
+- **星标与原生操作栏同行（且不挤占交付卡）**：`conversation.chat.turnTail` 是共享槽，dsh 核心的交付卡（`dsh-client-ui-deliverables`）、计划卡、定时卡都把整块卡片塞进 `[data-turn-tail]` 根节点（默认 `flex-direction:column`）。所以**不能**把根节点改成 `row`——那会把「已编辑 N 个文件」交付卡和星标、操作栏挤成一行（曾犯此错）。本插件的做法是：根节点保持 `column`（只补 `position:relative` 当定位参照）；星标 `position:absolute;left:0;bottom:0`（28×28，脱流后不再独占一行，垂直正好落在末行操作栏 28px 高度带里）；再用 `[data-turn-tail]:has(.atb_star)>*:last-child{margin-left:36px}` 把末子项（原生操作栏）右移 36px（28 星宽 + 8 间距）让位。其它卡片子项不受影响、保持独占整行。真机读数（2026-11-06，本机 3080，用 150px 高的模拟交付卡验证）：有卡 root 740×198（卡 740×150 独占首行、星标 28×28 @ (485,724)、操作栏 @ x=521 同 y=724）；无卡 root 740×32，星标与操作栏仍同 y、x=485 / 521。`data-turn-tail` 是 dsh `TurnTailNodeView` 根节点属性（`dsh-client-ui-chat/lib/client.js:7017/7024`）。
 
 ## 5. 不变量
 
@@ -58,6 +59,7 @@
 - **I9** 同源栅栏与 `settings` 同源同规则（Host 回环 / `sec-fetch-site` / Origin-Referer 对齐 / `connection` 优先）。
 - **I10** 上限 `MAX_TURNS = 1000`，PUT 超限 400，不静默截断。
 - **I11** 收藏只有一个写入口 `toggle(turn)`（星标单击、轨道右键共用）；轨道 `click` 不监听、不 `preventDefault`，左键跳转保持 dsh 原生行为与原速。
+- **I12** 布局修正只走 CSS 覆盖（`[data-turn-tail]` 补 `position:relative`、`.atb_star` 绝对定位到左下、末子项 `margin-left:36px`）；**不得改 `[data-turn-tail]` 的 `flex-direction`**（该槽被交付卡/计划卡/定时卡共用，改 row 会挤坏它们），也不插入、不移动、不包裹 dsh 的任何 DOM 节点。
 
 ## 6. 失败模式与降级
 

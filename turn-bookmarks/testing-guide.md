@@ -7,7 +7,7 @@ node --test test                        # cwd = turn-bookmarks/；零依赖、�
 node --test --test-isolation=none test  # dsh 沙箱里加这个 flag
 ```
 
-期望：`tests 18 / pass 18 / fail 0`（用例增删时读数会变，别把读数当锚）。
+期望：`tests 19 / pass 19 / fail 0`（用例增删时读数会变，别把读数当锚）。
 
 ## 用例总表
 
@@ -38,6 +38,7 @@ node --test --test-isolation=none test  # dsh 沙箱里加这个 flag
 | connection 服务在场时以它的判定为准 | R9：401 直接生效，绕过本地栅栏 |
 | 跨半边漂移 | `client.js` 里的 factory id / `ROUTE` / DICT 的 zh-en 键与宿主一致 |
 | 轨道右键是收藏入口，且绝不接管左键跳转 | R12：源码有 `contextmenu` 监听 + `preventDefault`（含卸载时摘除），且没有 `addEventListener('click'` |
+| 星标进操作栏行、交付卡不挤占 | 源码里有 `[data-turn-tail]{…flex-direction:column…position:relative…}`、`.atb_star` 的 `position:absolute;left:0;bottom:0`、`[data-turn-tail]:has(.atb_star)>*:last-child{margin-left:36px}`、星标 `28px×28px`；且源码中不出现 `flex-direction:row`（回归根因护栏） |
 
 ## 测试测不到的（必须真机量）
 
@@ -45,7 +46,7 @@ node --test --test-isolation=none test  # dsh 沙箱里加这个 flag
 
 ## 已在真机 DOM 上验证（2026-11-06）
 
-未装插件，用 `~/.dsh/browser/cli.mjs`（默认无头）打开 `http://127.0.0.1:3080`，切到 26 轮会话后，把本插件那两条 CSS 规则原样注入页面读数：
+前 5 行是未装插件时、用 `~/.dsh/browser/cli.mjs`（默认无头）打开 `http://127.0.0.1:3080` 切到 26 轮会话后把等价 CSS 注入页面的读数；最后一行是插件已装、刷新页面后的实测：
 
 | 验证点 | 读数 |
 |---|---|
@@ -54,6 +55,7 @@ node --test --test-isolation=none test  # dsh 沙箱里加这个 flag
 | 提问行竖线 | 第 19 轮用户行：`box-shadow none` → `rgb(255,92,157) 3px 0px 0px 0px inset` |
 | 右键入口的选择器与拦截 | 同一 26 轮会话上按本插件逻辑派发一次 `contextmenu`：`marks:26`；命中 `aria-label="加载并跳转到第 2 轮"` → 轮次 2；`defaultPrevented:true` |
 | 单轮会话没有目录栏 | 单轮会话 `button[data-index]` = 0；源码 `items.length < 2 → return null`（`dsh-client-ui-chat/lib/client.js:419`）解释之 |
+| 星标与原生操作栏同行、交付卡独立整行（插件已装、刷新后） | `[data-turn-tail]` computed `flex-direction:column`；无卡 root 740×32、有卡 root 740×198（卡 740×150 独占整行）；星标 `position:absolute` 28×28，与原生操作栏同 y、x=485 / 操作栏 x=521。`data-turn-tail` 是 dsh `TurnTailNodeView` 根节点的属性（`dsh-client-ui-chat/lib/client.js:7017/7024`） |
 
 **边界**：这只证明「选择器、染色 CSS 与右键 `preventDefault` 在真机上成立」（探针用的是注入的等价逻辑，插件本身还没装），**不**证明「槽注册、书签读写、随滚动重染、右键真的切换收藏」——那几项仍要装插件后看。
 
@@ -63,7 +65,7 @@ node --test --test-isolation=none test  # dsh 沙箱里加这个 flag
 - **未观测**：右键刻度是否切换收藏、且不弹浏览器右键菜单；量法：重启 → 聊到 3 轮以上 → 右键第 2 条刻度，看它立刻变粉（再右键变回灰）且没有系统菜单弹出；随后**左键**点同一刻度，确认仍照常跳转。
 - **未观测**：点变粉的刻度是否跳到该轮；量法：同上，滚到别处后点那条刻度，确认视口滚到第 2 轮。**这一步是原生行为**，插件只染色；跳错说明轮次号映射错了（R5）。
 - **未观测**：装插件后，paint 是否把属性打到该提问行上（竖线 CSS 本身已在上表验证）；量法：收藏后看该轮用户提问气泡左侧边缘。
-- **未观测**：星标按钮是否出现在每轮回答末尾、且不挤压原有尾部内容；量法：看每轮末尾（`data-turn-tail` 区域）尾部是否多一颗 22px 的星，未收藏为空心、已收藏为实心并带 `aria-pressed="true"`。
+- **已观测布局、未观测交互**：星标位置与尺寸已在上表末行实测（同行、28px、不挤压）；尚未观测「点一下是否变实心并带 `aria-pressed="true"`、并落到 sidecar」。量法：重启 dsh → 新建会话 → 点某轮末尾星标，看星变实心、`aria-pressed` 变 `true`，刷新后仍为实心。
 - **未观测**：刷新页面 / 重启 dsh 后收藏是否还在；量法：收藏后刷新页面，看星标是否仍为实心、轨道是否仍为粉色（读的是 sidecar）。
 - **未观测**：悬停刻度弹出的问题预览（dsh 自带）是否不受影响；量法：鼠标悬停任一**未收藏**与**已收藏**的刻度，确认气泡仍正常出现、文字颜色未被粉色污染。
 - **未观测**：会话很多时上色是否可接受（虚拟化 + 节流够不够）；量法：开一个 100 轮以上的会话，快速滚动目录栏，看刻度染色是否跟得上、有无明显闪烁。
