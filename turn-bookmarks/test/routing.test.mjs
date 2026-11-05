@@ -227,14 +227,19 @@ test('星标进操作栏行（且仅在有操作栏时），交付卡不受挤�
     'turnTail 根节点必须保持 column（只补 position:relative 当定位参照），绝不能整根改 row',
   );
   assert.equal(
-    source.includes('[data-turn-tail]:has(>[data-clock]) .atb_star{position:absolute!important;inset-inline-start:0!important;bottom:0!important}'),
+    source.includes('[data-turn-tail][data-actions-reveal] .atb_star{position:absolute!important;inset-inline-start:0!important;bottom:0!important}'),
     true,
-    '星标必须门控在 has(>[data-clock]) 里才绝对定位；无操作栏的轮次（closing === null）不能被绝对定位浮起',
+    '星标必须门控在根节点 [data-actions-reveal] 里才绝对定位；该属性只在有操作栏的支路被设（closing === null 没有），否则星标会浮到正文/卡片上',
   );
   assert.equal(
-    source.includes('[data-turn-tail]:has(.atb_star):has(>[data-clock])>*:last-child{margin-inline-start:36px!important}'),
+    source.includes('[data-turn-tail][data-actions-reveal]:has(.atb_star)>*:last-child{margin-inline-start:calc(36px + var(--dsh-content-font-delta,0px))!important}'),
     true,
-    '只有操作栏存在时，才把最后子项（原生操作栏）按行内起点右移 36px；无操作栏时不许右移卡片',
+    '让位间距必须随 delta 缩放：写死 36px 时 delta>8 星标会压进操作栏（36-(28+δ)=8-δ）',
+  );
+  assert.equal(
+    source.includes('margin-inline-start:36px!important'),
+    false,
+    '别把让位间距写死 36px——星标宽度是 28+δ，间隙会变成 8-δ',
   );
   assert.equal(
     source.includes('width:calc(28px + var(--dsh-content-font-delta,0px))'),
