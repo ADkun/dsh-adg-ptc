@@ -2,7 +2,7 @@
 
 一份 DSH 自建 agent preset：**一个调度智能体 + 它按需派出的通用子代理**。你把需求说给调度智能体，它判断范围后自己用 `delegate` 在**每一次委派时现定**：这一次子代理干什么、给哪些工具、什么边界、什么验收标准。子代理做完把结果交回来由它汇总。**一跳可达**：子代理不能再开子代理（`delegate` 的内置 deny 名单 + 平台深度默认 1），带与带之间的越界也由调度者续派。
 
-另外九件一起装的东西：
+另外十件一起装的东西：
 
 - **`delegate/`** —— 仓库内部第一方子插件 `adg-delegate`，在**全局层**注册工具 `delegate`，而且**只有调度智能体拿得到**：它让调度者对**每一次委派**现定 `description` / `prompt` / `tools`（工具名数组；缺省＝让它继承全部）/ 可选 `persona`（平台语义是**遮蔽**该子代理的部署 persona，不是追加）/ `background`（缺省 `true` ＝ continuable 可续跑）。六个内置 deny 名**永不进子代理的工具面**：`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question`；`notify_user` **刻意可以**给子代理（单向提醒，让撞上登录墙的子代理自己喊人）。它同时注册**第二个工具 `ask_user`** —— 子代理的**提问通道**：子代理调用它时，问题以**派它的那个调度者**为 owner 交给用户提问服务，卡片就落在**你与调度者对话的这个会话**里；你答完，答案直接回到子代理手上、它当场接着干（不是"喊一声就停手"）。点名的未知名逐条写进返回的 `tools_note`；点名 `run_code` 当场抛错；
 - **`browser/`** —— 默认无头的 Chromium 系浏览器驱动（Chrome / Brave / Edge 探测）+ 最小 CDP 驱动，零第三方依赖，是**拿到浏览器工具链的那次委派**实际用的工具链；
@@ -12,6 +12,7 @@
 - **`settings/`** —— 仓库内部第一方子插件 `adg-settings`：在「设置」里注册一页 **Adg 设置**，把 `adg-notify` 的**三项行为**（**通知默认标题** / **响提示音** / **通知常驻**）与 `adg-skill-inject` 的**四项行为**（**注入框架** 开关 / **注入哪个框架**（优雅框架 / 思考框架 / 执行框架三选一，**默认执行框架**）/ **同时注入子代理** 开关（默认关）/ **自定义注入正文**）做成可配置项，改动写进 `${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`（优先当前 profile 目录；本机实际就是 `<profile>\adg-settings.json`），**保存后立即生效、不用重启**（没有这项设置时通知走出厂默认）。它同时是一套**登记表驱动的框架**：加一项配置只需在 `settings/lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `settings/client.js` 的 DICT 补两条文案（zh/en），宿主与客户端逻辑都不用改 —— 详见下方「设置页（Adg 设置）」一节；
 - **`skill-inject/`** —— 仓库内部第一方子插件 `adg-skill-inject`：把框架正文注入 **Adg 会话（调度智能体，以及开启「同时注入子代理」后的子代理）**的系统提示词 —— 不依赖模型自觉去 read（persona 级的"先读技能"指令已被证过不可靠），系统提示词不参与折叠，"不许压缩"由机制天然满足。正文默认取执行框架 `skills/execution-framework/SKILL.md`（可在「设置 → Adg 设置」里切到优雅框架 `skills/elegant-framework/SKILL.md` 或思考框架 `skills/thinking-framework/SKILL.md`），也可在那一页换成自定义正文；**输入框左侧那颗「注入」开关**控制开关（与设置页同一个值，点一下即写盘、下一轮请求生效）。**只在 Adg PTC 模式注入**：按 preset 身份（`adg-ptc`）逐 agent 判定，其他 preset 的会话一律不注入；子代理要不要也带这一段，由设置项「**同时注入子代理**」决定（默认关 —— 关着时只有调度者有）。不注册任何工具；
 - **`source-guard/`** —— 仓库内部第一方子插件 `adg-source-guard`：**不注册任何工具**，在全局层监听 `tools/post-execute`，只改写**顶层 `run_code`**（`parent` 为空）的结果正文 —— 成功时在正文最前面补一行当次执行意图（`已执行代码：<description>`；那句「源码未随本结果重复」的说明句默认关闭，源码不进结果本来就是平台默认行为，每次再解释一遍只是噪音），**失败时逐字不动**（失败信息与 `Captured output` 原样留下，便于定位）。它**只改结果侧**：模型自己写下的那段源码经 `tool/call` 的入参进上下文，平台没有那个改写点，所以它不是"源码完全不进上下文"的保证；细节与边界见 `source-guard/design.md`；
+- **`turn-bookmarks/`** —— 仓库内部第一方子插件 `adg-turn-bookmarks`：**不注册任何工具**，在每一轮回答末尾放一颗星标 —— 点一下把这一轮收藏，已收藏的轮次在**右侧目录栏的轨道条**上染成粉色、正文里该轮提问行左侧加一道粉线；再点一下取消（也可以直接在**轨道条上右键**切换收藏/取消，左键仍是 dsh 原生跳转，插件不拦）。跳转仍走 dsh 原生的轨道按钮（本插件只染色，不改目录栏组件）。书签存在**每个会话自己目录**下的 sidecar `adg-turn-bookmarks.json`（宿主半边一条同源栅栏路由读写它），所以删会话时书签跟着一起删；细节与边界见 `turn-bookmarks/design.md`；
 - **`skills/`** —— 九份技能，装到 `${DSH_HOME:-~/.dsh}/skills/`，按**渐进式披露**承载可复用经验（用法：调度者把技能文件的**绝对路径**写进委派 prompt，要子代理先 `read` 再动手）：
   - `adg-delegation` —— 给**调度智能体**看：能力带 → 建议工具面 / 建议 persona 要点 / 边界的映射表，以及怎么给 `tools` 与 `persona`、一跳可达、材料中转、验收判定；
   - `adg-browser-use` —— 给**拿到浏览器工具链的子代理**看：`cli.mjs` 用法、默认无头与换模式的不变量、登录墙人工协议、profile 是资产、标签页纪律、**必须完全权限**与三家浏览器的失败签名去哪看；
@@ -78,6 +79,7 @@ powershell -ExecutionPolicy Bypass -File $HOME\dsh-adg-ptc\install.ps1   # Windo
 | `settings/` | 稳定副本（`plugins/adg-settings/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-3 / 4c-6 / 4c-7 步做的就是这个） | **重启 dsh** 后设置里才出现「Adg 设置」那一页；**页面里的改动保存即生效，不用重启** |
 | `skill-inject/` | 稳定副本（`plugins/adg-skill-inject/`，9 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-4 / 4c-8 / 4c-9 步做的就是这个） | **重启 dsh** + 新 Adg 会话 |
 | `source-guard/` | 稳定副本（`plugins/adg-source-guard/`，7 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-5 / 4c-10 / 4c-11 步做的就是这个） | **重启 dsh** + 新 Adg 会话 |
+| `turn-bookmarks/` | 稳定副本（`plugins/adg-turn-bookmarks/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.ps1` 的 2b-7 / 4c-14 / 4c-15 步做的就是这个；`install.sh` 不管本模块） | **重启 dsh** + 新会话 |
 
 ## 味道：一份源文件，四种生成物
 

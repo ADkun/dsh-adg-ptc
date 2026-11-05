@@ -600,6 +600,50 @@ if ($SkipPackages) {
   }
 }
 
+# ── 2b-7. turn-bookmarks/ 插件（轮次书签）────────────────────────────
+# 与 2b / 2b-1..2b-6 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
+# 它不注册任何工具：浏览器半边在每轮回答末尾放一颗星标、把收藏的轮次在右侧目录栏
+# 轨道条上染成粉色并在正文提问行左侧加粉线（跳转仍走 dsh 原生轨道按钮）；宿主半边
+# 把书签存进该会话自己目录下的 sidecar adg-turn-bookmarks.json（删会话即一起删）。
+# 漏装的症状是每轮末尾没有星标、目录栏不会染色（退回旧样子），不报错。
+$tbSrc = Join-Path $here 'turn-bookmarks'
+$tbDest = Join-Path $root 'plugins\adg-turn-bookmarks'
+$tbNote = ''
+$tbSkipped = $false
+# 4c-14 / 4c-15 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
+$tbInProfile = ''
+if ($SkipPackages) {
+  $tbNote = '跳过（-SkipPackages）'
+  $tbSkipped = $true
+} elseif (-not (Test-Path -LiteralPath (Join-Path $tbSrc 'package.json'))) {
+  $tbNote = "未找到 $tbSrc，跳过 turn-bookmarks/ 插件部署"
+  $tbSkipped = $true
+} else {
+  # 本清单与 turn-bookmarks/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
+  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。有子目录 lib\，先建出来。
+  New-Item -ItemType Directory -Force -Path (Join-Path $tbDest 'lib') | Out-Null
+  $tbFiles = @('index.mjs', 'client.js', 'lib\bookmarks.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
+  $tbCopied = 0
+  $tbMissing = @()
+  foreach ($rel in $tbFiles) {
+    $from = Join-Path $tbSrc $rel
+    if (-not (Test-Path -LiteralPath $from)) { $tbMissing += $rel; continue }
+    $to = Join-Path $tbDest $rel
+    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
+    if ($same) { continue }
+    Copy-Item -Force -LiteralPath $from -Destination $to
+    $tbCopied += 1
+  }
+  if ($tbMissing.Count -gt 0) {
+    $tbNote = "turn-bookmarks/ 部署不完整：源里缺 $($tbMissing -join ', ')"
+    $tbSkipped = $true
+  } elseif ($tbCopied -gt 0) {
+    $tbNote = "turn-bookmarks/ 插件 -> $tbDest（本次更新 $tbCopied 个文件）"
+  } else {
+    $tbNote = "turn-bookmarks/ 插件 -> $tbDest（已是最新，无需拷贝）"
+  }
+}
+
 # ── 3. preset bundle：四种味道全部生成 → 各自落到自己的稳定位置（每 profile 只 link 一份）──
 # preset 是一个 **bundle**：仓库里的 preset\ 是唯一文本真相源，本脚本每次安装都重跑生成器
 # 把它编译成 bundle\adg-*\cordis.patch.yml，再拷进 $DSH_HOME\bundles\ 下的四个稳定目录。
@@ -1125,6 +1169,55 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-ptc-parallel **没装进 node_modules**（dependencies=$parallelDepLine / dsh.profile.bundles=$parallelListedLine）—— 平行委派 section 不生效"
     }
   }
+
+  # 4c-14. adg-turn-bookmarks 插件（轮次书签）也装进这个 profile。
+  # 与 4c-8 / 4c-10 / 4c-12 同形（file: 依赖 + reconcile）。漏装的后果：每轮末尾没有星标、
+  # 右侧目录栏不会被染色，不报错 —— 所以同样要如实报告。装了之后还要**重启 dsh**（客户端半边随 web 包加载）。
+  if ($tbSkipped) {
+    $installNotes += "$name : adg-turn-bookmarks 未部署（$tbNote）—— 每轮末尾不会有星标、目录栏不会染色"
+  } else {
+    $tbInProfile = Join-Path $profileDir "node_modules\adg-turn-bookmarks\package.json"
+    $tbNeedInstall = -not (Test-Path -LiteralPath $tbInProfile)
+    if (-not $tbNeedInstall) {
+      $installNotes += "$name : adg-turn-bookmarks 已经在 node_modules 里"
+    } elseif (-not $dshInvoke) {
+      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-turn-bookmarks 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$tbDest`""
+    } else {
+      Push-Location $profileDir
+      try {
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-10 / 4c-12：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        $tbLog = Join-Path $profileDir 'pnpm-adg-turn-bookmarks.log'
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$tbDest`" > `"$tbLog`" 2>&1"
+        $tbExit = $LASTEXITCODE
+      } finally { Pop-Location }
+      if (Test-Path -LiteralPath $tbInProfile) {
+        Remove-Item -LiteralPath $tbLog -Force -ErrorAction SilentlyContinue
+        $installNotes += "$name : 已装 adg-turn-bookmarks（dsh plugin add exit $tbExit）"
+      } else {
+        $installNotes += "$name : adg-turn-bookmarks 没装进 $profileDir（dsh plugin add exit $tbExit）—— 关掉 dsh 后重跑本脚本（日志 $tbLog）"
+        if (Test-Path -LiteralPath $tbLog) { Write-Host (Get-Content -LiteralPath $tbLog -Raw -Encoding UTF8) }
+      }
+    }
+  }
+
+  # 4c-15. 读回来断言 adg-turn-bookmarks 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-11 / 4c-13 一样）。
+  if (-not $tbSkipped) {
+    $tbReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    $tbDepLine = @($tbReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-turn-bookmarks' }).Count -gt 0
+    $tbListedLine = @($tbReread.dsh.profile.bundles) -contains 'adg-turn-bookmarks'
+    $tbPkgName = ''
+    if (Test-Path -LiteralPath $tbInProfile) {
+      $tbPkgName = (Get-Content -LiteralPath $tbInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
+    }
+    if ($tbPkgName -ne 'adg-turn-bookmarks') { $tbNeedInstall = $true }
+    if ($tbDepLine -and $tbListedLine -and ($tbPkgName -eq 'adg-turn-bookmarks')) {
+      $installNotes += "$name : adg-turn-bookmarks 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
+    } elseif ($tbPkgName -eq 'adg-turn-bookmarks') {
+      $installNotes += "$name : adg-turn-bookmarks 包在位，但 manifest 缺一格（dependencies=$tbDepLine / dsh.profile.bundles=$tbListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-turn-bookmarks **没装进 node_modules**（dependencies=$tbDepLine / dsh.profile.bundles=$tbListedLine）—— 星标与目录栏染色都不生效"
+    }
+  }
 }
 
 # 第 6 步：把脚本拷到用户根下的稳定副本。
@@ -1153,7 +1246,8 @@ foreach ($spec in @(
     @{ Pkg = 'adg-settings'; Dest = $settingsDest },
     @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
     @{ Pkg = 'adg-source-guard'; Dest = $guardDest },
-    @{ Pkg = 'adg-ptc-parallel'; Dest = $parallelDest })) {
+    @{ Pkg = 'adg-ptc-parallel'; Dest = $parallelDest },
+    @{ Pkg = 'adg-turn-bookmarks'; Dest = $tbDest })) {
   if (-not (Test-Path -LiteralPath $spec.Dest)) { continue }
   $expected = @()
   foreach ($f in Get-ChildItem -LiteralPath $spec.Dest -Recurse -File) {
@@ -1184,6 +1278,7 @@ Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯�
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
 Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「已执行代码：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
+Write-Host "  turn-bookmarks -> $tbNote（轮次书签：每轮末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线；跳转仍走 dsh 原生轨道按钮；书签存会话目录 sidecar，不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
 Write-Host ""
@@ -1198,6 +1293,7 @@ Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
 Write-Host "（adg-source-guard 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话里，顶层 run_code 的成功结果才会多出一行「已执行代码：<当次 description>」（那句「源码未随本结果重复」说明句默认不出现）；失败结果永远逐字不变。注意它只改结果侧，tool/call 里那份入参源码平台没有挂载点可改。）"
 Write-Host "（adg-ptc-parallel 插件：同样要重启 dsh 才注册 —— 而且 section 是在 agent 创建那一刻挂上的，所以运行中的旧会话不补挂：重启 dsh + 新建对话才看得到。子代理的 scope 同样会被判定，工具清单按每个 agent 当前可见的工具现算。）"
+Write-Host "（adg-turn-bookmarks 插件：同样要重启 dsh 才注册；浏览器那半随 web 客户端加载，重启后新建会话才看得到星标。收藏状态存在会话自己目录下的 adg-turn-bookmarks.json，删会话即一起删。）"
 if ($packageFailed) {
   Write-Host ""
   Write-Host "注意：至少有一步 pnpm 没成功，$bundleName 可能还没装进 profile（上面的 profile 行里写明了）。" -ForegroundColor Yellow

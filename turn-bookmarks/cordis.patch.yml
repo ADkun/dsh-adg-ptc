@@ -1,0 +1,14 @@
+# adg-turn-bookmarks 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 同一个包有两个半边：
+#   - 宿主半边（index.mjs）：注册一条同源读写路由 /api/adg-turn-bookmarks，把每个会话的
+#     书签列表落在**该会话自己的目录**下的 sidecar（adg-turn-bookmarks.json）—— 会话删了
+#     目录一起没，不留孤儿文件。
+#   - 浏览器半边（client.js）：在每轮回答末尾放一颗 ☆，并把被收藏的轮次在右侧目录栏
+#     轨道上染成粉色、在正文提问行上加标记。
+#
+# 行 id 必须等于 index.mjs 的 export const name；name 是包名（无版本）。
+# 本插件不注册任何工具，也不写进 preset/agent.cordis.yml（全局层同名注册会拖垮整个 profile）。
+- insert:
+    - id: adg-turn-bookmarks
+      name: adg-turn-bookmarks

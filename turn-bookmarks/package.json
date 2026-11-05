@@ -1,0 +1,48 @@
+{
+  "name": "adg-turn-bookmarks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 轮次书签插件：每轮回答末尾一颗星，收藏的轮次在右侧目录栏轨道上染成粉色、正文提问行加标记，点轨道即跳转；书签落在每个会话自己的目录里（sidecar），会话删了它跟着消失",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./lib/bookmarks.mjs": "./lib/bookmarks.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "client.js",
+    "lib/bookmarks.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "bookmarks",
+    "turn-navigation"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}
