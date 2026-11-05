@@ -219,7 +219,7 @@ test('轨道右键是收藏入口，且绝不接管左键跳转', () => {
   assert.equal(source.includes(clickListen), false, '左键跳转必须保持 dsh 原生行为：本插件不挂 click 监听');
 });
 
-test('星标绝对定位进操作栏行，其它 tail 子项（交付卡等）保持独占整行', () => {
+test('星标进操作栏行（且仅在有操作栏时），交付卡不受挤占', () => {
   const source = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8');
   assert.equal(
     source.includes('[data-turn-tail]{position:relative!important;flex-direction:column!important;align-items:stretch!important;gap:16px!important}'),
@@ -227,23 +227,33 @@ test('星标绝对定位进操作栏行，其它 tail 子项（交付卡等）�
     'turnTail 根节点必须保持 column（只补 position:relative 当定位参照），绝不能整根改 row',
   );
   assert.equal(
-    source.includes('[data-turn-tail] .atb_star{position:absolute!important;left:0!important;bottom:0!important}'),
+    source.includes('[data-turn-tail]:has(>[data-clock]) .atb_star{position:absolute!important;inset-inline-start:0!important;bottom:0!important}'),
     true,
-    '星标要绝对定位到 root 左下角，脱流后不再占一行，又与末行操作栏同一水平带',
+    '星标必须门控在 has(>[data-clock]) 里才绝对定位；无操作栏的轮次（closing === null）不能被绝对定位浮起',
   );
   assert.equal(
-    source.includes('[data-turn-tail]:has(.atb_star)>*:last-child{margin-left:36px!important}'),
+    source.includes('[data-turn-tail]:has(.atb_star):has(>[data-clock])>*:last-child{margin-inline-start:36px!important}'),
     true,
-    '有星标时把最后一个子项（原生操作栏）右移 36px，给星标让出 28px 位置 + 8px 间距',
+    '只有操作栏存在时，才把最后子项（原生操作栏）按行内起点右移 36px；无操作栏时不许右移卡片',
   );
   assert.equal(
-    source.includes('.atb_star{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px'),
+    source.includes('width:calc(28px + var(--dsh-content-font-delta,0px))'),
     true,
-    '星标做成 28×28，与 dsh 原生 28×28 图标按钮同高',
+    '星标尺寸必须跟随 --dsh-content-font-delta，否则字号放大后比原生按钮小且竖直不居中',
   );
   assert.equal(
-    source.includes('flex-direction:row'),
+    source.includes('width:28px;height:28px'),
     false,
-    'turnTail 里出现 row 就会把交付卡等其它插件卡片挤到同一行——这条是本次回归的根因，必须守住',
+    '别再写死 28px：dsh 原生按钮是 calc(28px + delta)',
+  );
+  assert.equal(
+    /\bflex-direction\s*:\s*row\b/.test(source),
+    false,
+    'turnTail 里出现 row（含带空格写法）就会把交付卡挤到同一行——回归根因，必须守住',
+  );
+  assert.equal(
+    /\bflex-flow\s*:\s*[^;}]*\brow\b/.test(source),
+    false,
+    'flex-flow:row 是 row 的变体，同样会把卡片挤成一行',
   );
 });
