@@ -237,9 +237,14 @@ test('星标进操作栏行（且仅在有操作栏时），交付卡不受挤�
     '让位间距必须随 delta 缩放：写死 36px 时 delta>8 星标会压进操作栏（36-(28+δ)=8-δ）',
   );
   assert.equal(
-    source.includes('margin-inline-start:36px!important'),
+    /\bmargin-inline-start\s*:\s*36px\s*!important/.test(source),
     false,
-    '别把让位间距写死 36px——星标宽度是 28+δ，间隙会变成 8-δ',
+    '别把让位间距写死 36px（含空格写法）——星标宽度是 28+δ，间隙会变成 8-δ',
+  );
+  assert.equal(
+    (source.match(/margin-inline-start/g) || []).length,
+    1,
+    'margin-inline-start 只允许出现一次：后追加同特异性覆盖规则会压掉 calc 让位、间隙静默变大且测试仍绿',
   );
   assert.equal(
     source.includes('width:calc(28px + var(--dsh-content-font-delta,0px))'),
