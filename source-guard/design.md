@@ -18,7 +18,7 @@ PTC 模式下模型经 `run_code` 干活，源码全文进上下文有**两条**
 
 所以本插件做的是：**在结果侧再确认一次"成功时不把源码从结果里带回来"**，并把平台不会渲染的当次执行意图补在最前面；失败路径**原样保留**，一个字都不加、一个字节都不删。
 
-**前缀句默认关闭**（`SUCCESS_PREFIX = ''`）：源码未随结果重复本来就是平台默认行为，每次成功都解释一遍只是噪音。默认只补「已执行代码：<description>」一行 —— 这才是平台不渲染、模型回读时真正需要的信息。想改回显式宣告就把 `lib/policy.mjs` 的 `SUCCESS_PREFIX` 设成非空串（失败路径不受影响，D18 钉住默认值为空串）。
+**前缀句默认关闭**（`SUCCESS_PREFIX = ''`）：源码未随结果重复本来就是平台默认行为，每次成功都解释一遍只是噪音。默认只补「已执行：<description>」一行 —— 这才是平台不渲染、模型回读时真正需要的信息。想改回显式宣告就把 `lib/policy.mjs` 的 `SUCCESS_PREFIX` 设成非空串（失败路径不受影响，D18 钉住默认值为空串）。
 
 **不许对外说成「源码完全不进上下文」**：`tool/call` 的 `arguments` 那份源码，平台目前没有挂载点能改（见 I7 的未观测项）。
 
@@ -62,7 +62,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 ```
 
 - `base` = `decision.content`（数组时）否则 `result.content`（数组时）否则 `[]`。默认 `next()` 不产 content，所以要保留的输出在 `result.content`。
-- 意图块 = `{type:'text', text: SUCCESS_PREFIX (+ '\n已执行代码：' + intent)}`，`intent` 取自 `exec.arguments.description`（平台必填项，trim 后可为空）。`SUCCESS_PREFIX` 默认为空串 ⇒ 默认只出「已执行代码：」一行；意图也缺失时不出块，结果正文与平台默认逐字相同。
+- 意图块 = `{type:'text', text: SUCCESS_PREFIX (+ '\n已执行：' + intent)}`，`intent` 取自 `exec.arguments.description`（平台必填项，trim 后可为空）。`SUCCESS_PREFIX` 默认为空串 ⇒ 默认只出「已执行：」一行；意图也缺失时不出块，结果正文与平台默认逐字相同。
 - 意图块的文本**在有正文时以 `\n` 结尾** —— 换行进字符串，不靠块边界（下游会把多个 text 块用空串拼起来，块边界到不了模型；见第 5 节的三条出处）。
 - `...decision` 保证 `additionalContexts` / `meta` 等字段透传，不被抹掉。
 
@@ -101,7 +101,7 @@ exec.name === 'run_code' && (exec.parent === undefined || exec.parent === null)
 
 ## 6. 未观测项
 
-- **已观测（2026-10-24，重启 dsh 后的 Adg PTC 会话，顶层 run_code）**：`exec.arguments.description` 取到的是**当次调用的 description 原值** —— 成功调用（description「探测运行期成功前缀文案」）的结果正文第一行是「已执行代码：探测运行期成功前缀文案」，与传参逐字一致。**仍未观测**：`exec.arguments` 是否就是模型原始 arguments 那个**对象本身**（值形态已证，引用同一性未测）；量法：临时在插件里比对 `exec.arguments` 与上游 payload 的引用（或看它是否被冻结），跑一次 run_code 打印结果。
-- **已观测（2026-10-24，本机 Adg PTC 会话派出的子代理 2b52f1f2 在它自己会话里自测）**：全局层监听**确实覆盖子代理会话**的 run_code —— 子代理的成功调用（description「子代理侧成功探针」）结果正文第一行是「已执行代码：子代理侧成功探针」、第二行 `child-ok`；失败调用（`throw new Error("child-probe-failure")`）正文首行直接是 `Error: code run failed (exception): Error: child-probe-failure`、末行 `File sandbox: danger-full-access.`，**没有任何前缀**。⇒ 成功补标签、失败零改动，在子代理侧与顶层同形。
+- **已观测（2026-10-24，重启 dsh 后的 Adg PTC 会话，顶层 run_code）**：`exec.arguments.description` 取到的是**当次调用的 description 原值** —— 成功调用（description「探测运行期成功前缀文案」）的结果正文第一行是「已执行：探测运行期成功前缀文案」，与传参逐字一致。**仍未观测**：`exec.arguments` 是否就是模型原始 arguments 那个**对象本身**（值形态已证，引用同一性未测）；量法：临时在插件里比对 `exec.arguments` 与上游 payload 的引用（或看它是否被冻结），跑一次 run_code 打印结果。
+- **已观测（2026-10-24，本机 Adg PTC 会话派出的子代理 2b52f1f2 在它自己会话里自测）**：全局层监听**确实覆盖子代理会话**的 run_code —— 子代理的成功调用（description「子代理侧成功探针」）结果正文第一行是「已执行：子代理侧成功探针」、第二行 `child-ok`；失败调用（`throw new Error("child-probe-failure")`）正文首行直接是 `Error: code run failed (exception): Error: child-probe-failure`、末行 `File sandbox: danger-full-access.`，**没有任何前缀**。⇒ 成功补标签、失败零改动，在子代理侧与顶层同形。
 - **未观测**：平台后续版本是否会给 assistant tool_use 的 `arguments` 提供改写点（那才是"源码完全不进上下文"的真正入口）；量法：升级 dsh 后重读 `dsh-tool-cordis` 的事件目录与 `dsh-agent-loop` 的 `appendToolCall`，看有没有新增投影或事件。
 - **未观测**：与 `dsh-spill-policy` 同时安装时的最终正文顺序（谁前置在谁后面）；量法：两插件都装，跑一次输出超过 spill 预算的 run_code，看说明块落在 spill 预览之前还是之后。
