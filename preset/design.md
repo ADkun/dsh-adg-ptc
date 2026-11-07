@@ -77,7 +77,7 @@ stateDiagram-v2
   - **I4**：改成本结论必须附前后对比数字（改动前后各按 `preset/testing-guide.md` 的「怎么重新测量」跑一次会话审计），且比较看**比例与量级**，不看绝对值。
   - **I5**：`validated` 的判据只能是 `node tools/check-preset.mjs` 退出 0；不能用"我看了一遍"代替。
   - **I6**：禁止在没有前后对比数字时改动体积旋钮（同 I4；旋钮自身见「非功能红线」）。
-  - **I7**：composition 里每个 `@deepseek-ai/*` 包名都必须对着**当前安装**核对 —— 包名会随 dsh 升级改名，沿用旧名不让挂载失败，而是让 registry 判**整份 preset `broken`**（`… never started`），模式在新会话直接不可用。**这条是本仓库关于"包名核对"的唯一规定本体**：`preset/testing-guide.md`、`preset/AGENTS.md` 与根 `AGENTS.md` 提到它时只写一行摘要 + 指针（怎么复核见 `preset/testing-guide.md` 的包名核对用例，怎么生效见 `preset/AGENTS.md` 的「生效方式」表）。
+  - **I7**：composition 里每个 `@deepseek-ai/*` 包名都必须对着**当前安装**核对 —— 包名会随 dsh 升级改名，沿用旧名不让挂载失败，而是让 registry 判**整份 preset `broken`**（`… never started`），模式在新会话直接不可用。**这条是本仓库关于"包名核对"的唯一规定本体**：`preset/testing-guide.md`、`preset/AGENTS.md` 与根 `AGENTS.md` 提到它时只写一行摘要 + 指针（怎么复核见 `preset/testing-guide.md` 的包名核对用例，怎么生效见 `preset/AGENTS.md` 的「生效方式」表）。已发生的实例（`@deepseek-ai/dsh@0.2.2-rc.1`）：`dsh-tool-subagent-control` 的 `list_agents` 已并入包 main entry（`lib/index.js` 的 `apply()` 内 `registerListAgents(ctx)`），`package.json` 的 `exports` 不再有 `./list-agents` —— 于是 `- id: tool-subagent-list-agents` / `name: '…/list-agents'` 这一行让整份 preset `broken`；正确形态是**只留 `- id: tool-subagent-control` 一行**（`send_message` / `interrupt_agent` / `list_agents` 三个工具都由它注册），不要再按旧版补子路径行。
 
 ### DelegationRow 与动态工具面（不可变值对象）
 

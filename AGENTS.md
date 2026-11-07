@@ -109,7 +109,7 @@ node tools/gen-preset-bundle.mjs
 
 | 依赖包名 | 解析命令（运行时取值） | 当前解析结果 | 引用形式示例 |
 |---|---|---|---|
-| `@deepseek-ai/dsh` | 版本：`dsh --version`；仓库句柄的 `<ref>`：`git ls-remote --tags https://github.com/deepseek-ai/deepseek-harness "dsh-v*"`（取输出**最后一条**的 tag 名） | 版本 `0.2.1-rc.2`；tag `dsh-v0.2.1-rc.2` | 版本：`@deepseek-ai/dsh@0.2.1-rc.2`；上游句柄：`deepseek-ai/deepseek-harness@dsh-v0.2.1-rc.2:<path>` |
+| `@deepseek-ai/dsh` | 版本：`dsh --version`；仓库句柄的 `<ref>`：`git ls-remote --tags https://github.com/deepseek-ai/deepseek-harness "dsh-v*"`（取输出**最后一条**的 tag 名） | 版本 `0.2.2-rc.1`；tag `dsh-v0.2.2-rc.1` | 版本：`@deepseek-ai/dsh@0.2.2-rc.1`；上游句柄：`deepseek-ai/deepseek-harness@dsh-v0.2.2-rc.1:<path>` |
 | `@deepseek-ai/dsh-*`（`dsh-subagent` / `dsh-tool-subagent` / `dsh-compaction-basic` …） | `node -p "require('<该 profile 的 node_modules>/@deepseek-ai/dsh-*/package.json').version"` | 与上面同一个值 | 正文只写契约名（如 `toolFilter.allow`、`restrict()`、`auto`），要写版本时写"同 `@deepseek-ai/dsh` 的解析结果" |
 
 - **ref 的派生规则**：上游 tag 名 = `dsh-v` + `dsh --version` 的值（**不是** `v<版本>` —— 形状实测全是 `dsh-v*`）。升级后按解析命令重取，不要手抄。
