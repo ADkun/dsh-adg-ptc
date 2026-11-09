@@ -263,11 +263,14 @@ skill_count=0
 for skill_dir in "$here"/skills/*/; do
   [ -f "$skill_dir/SKILL.md" ] || continue
   skill_name=$(basename "$skill_dir")
+  rm -rf "$root/skills/$skill_name"   # 先删后拷，清掉上一版本可能残留的附属文件
   mkdir -p "$root/skills/$skill_name"
-  cp "$skill_dir/SKILL.md" "$root/skills/$skill_name/SKILL.md"
+  # 整目录拷贝（不只是 SKILL.md）：技能可带附属文件（scripts/ 检查器、review-prompt.md 等），
+  # 只拷 SKILL.md 会让这些附属文件在安装后消失、技能里写的用法指向空。
+  cp -R "$skill_dir." "$root/skills/$skill_name/"
   skill_count=$((skill_count + 1))
 done
-skill_note="用户技能 -> $root/skills（$skill_count 份 SKILL.md）"
+skill_note="用户技能 -> $root/skills（$skill_count 个技能目录，整目录拷贝）"
 
 # ── 2. browser/ 工具链 ─────────────────────────────────────────────────────────
 # 它是普通文件、不是插件也不是 preset：重新跑一次本脚本就生效，**不需要重启 dsh**。

@@ -70,7 +70,7 @@ powershell -ExecutionPolicy Bypass -File $HOME\dsh-adg-ptc\install.ps1   # Windo
 | 仓库里的路径 | 安装到 | 生效方式 |
 |---|---|---|
 | `preset/`（preset 的源文件） | 先由 `tools/gen-preset-bundle.mjs` 生成 bundle（生成物落在被 `.gitignore` 排除的 `bundle/adg-<味道>/`，**产物不入库、不许手改**），再按味道拷到它的稳定目录 `${DSH_HOME:-~/.dsh}/bundles/dsh-adg-ptc`（以及 `...-bili` / `...-save-token` / `...-bili-save-token`），并把包名 `dsh-adg-ptc` 写进目标 profile 的 `dsh.profile.bundles` | **重启 dsh** + 新会话 |
-| `skills/`（`skills/<名字>/SKILL.md`） | `${DSH_HOME:-~/.dsh}/skills/<名字>/SKILL.md` | 用户技能根是热加载的，立即生效 |
+| `skills/`（`skills/<名字>/` 整目录：`SKILL.md` + 附属的 `scripts/`、`review-prompt.md` 等） | `${DSH_HOME:-~/.dsh}/skills/<名字>/`（整目录拷贝） | 用户技能根是热加载的，立即生效 |
 | `browser/` | `${DSH_HOME:-~/.dsh}/browser/` | 重跑安装脚本即生效，**不用重启** |
 | `desktop/` | `${DSH_HOME:-~/.dsh}/desktop/` | 重跑安装脚本即生效，**不用重启**（但**调用它的那一次会话**要驱动普通用户窗口必须是完全权限） |
 | `notify/` | 稳定副本 + `dsh plugin --profile <p> add "file:<稳定副本>"` | **重启 dsh** + 新会话 |
@@ -222,7 +222,7 @@ node "$env:DSH_HOME\browser\cli.mjs" close       # 唯一让登录态落盘的�
 
 ## 怎么加一份能力
 
-**没有智能体名册可加**：可复用的能力与经验都做成技能 —— 一个目录 `skills/<名字>/`，正文写在 `skills/<名字>/SKILL.md`，装到 `${DSH_HOME:-~/.dsh}/skills/<名字>/SKILL.md`。
+**没有智能体名册可加**：可复用的能力与经验都做成技能 —— 一个目录 `skills/<名字>/`，正文写在 `skills/<名字>/SKILL.md`；技能可带附属文件（如 `scripts/check-docs.mjs`、`review-prompt.md`），`install.*` 会把**整个技能目录**拷到 `${DSH_HOME:-~/.dsh}/skills/<名字>/`。
 
 技能按**渐进式披露**使用：调度智能体只把技能文件的**绝对路径**写进委派 prompt（不要内联、不要复述技能正文），子代理先 `read` 那份文件再动手 —— 技能正文因此不占调度者每次请求的固定前缀，谁用谁读。
 

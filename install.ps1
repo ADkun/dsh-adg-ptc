@@ -208,11 +208,13 @@ foreach ($skillDir in Get-ChildItem -LiteralPath $skillsSrc -Directory -ErrorAct
   $src = Join-Path $skillDir.FullName 'SKILL.md'
   if (-not (Test-Path -LiteralPath $src)) { continue }
   $dest = Join-Path $skillsRoot $skillDir.Name
+  if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }   # 先删后拷，清掉上一版本残留
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
-  Copy-Item -LiteralPath $src -Destination (Join-Path $dest 'SKILL.md') -Force
+  # 整目录拷贝（不只是 SKILL.md）：技能可带附属文件（scripts/ 检查器、review-prompt.md 等）
+  Copy-Item -Path (Join-Path $skillDir.FullName '*') -Destination $dest -Recurse -Force
   $skillCopied++
 }
-$skillNote = "用户技能 -> $skillsRoot（$skillCopied 份 SKILL.md）"
+$skillNote = "用户技能 -> $skillsRoot（$skillCopied 个技能目录，整目录拷贝）"
 
 # ── 2. browser/ 工具链 ─────────────────────────────────────────────────────────
 # 它是普通文件、不是插件也不是 preset：重新跑一次本脚本就生效，**不需要重启 dsh**。
