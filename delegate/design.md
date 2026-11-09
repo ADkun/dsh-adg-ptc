@@ -147,7 +147,7 @@ last_reviewed: 2026-10-23
 **未观测**：竞态 —— 建立窗口与子代理 loop claim inbox 的先后（I7b 那条未观测项是同一个问题，量法见那里）。
 
 **I17 `send_message` 是平台续接通道、不是任务能力：只要它在本次可用名里就必须留在 `allow` 里。**
-平台在 `startActivation` 时（`delivery !== "caller"`）会按子代理**继承到的**工具目录判定 `isAdjacentAgentSendMessageTool(this.ctx.get("tools")?.get("send_message", child))`；`send_message` 在，就在这次 prompt 末尾追加「用 send_message 把结果回传给父代理」的续接提示（`@deepseek-ai/dsh-subagent` `lib/index.js:1460`；内部标记见 `lib/types/internal.js:13-16`）。这个判定发生在本插件的创建后窗口**之前**——此刻子代理还没被 `tools.restrict` 裁过，所以提示被追加了。若随后的 `restrict({allow})` 把它剥掉（调用方在 `tools` 里没点名它、或给了空清单），子代理就会拿着"提示让你调 send_message"却没有这个工具，自相矛盾。
+平台在 `startActivation` 时（`delivery !== "caller"`）会按子代理**继承到的**工具目录判定 `isAdjacentAgentSendMessageTool(this.ctx.get("tools")?.get("send_message", child))`；`send_message` 在，就在这次 prompt 末尾追加「用 send_message 把结果回传给父代理」的续接提示（`@deepseek-ai/dsh-subagent` 的 `withContinuableReturnGuidance` / `isAdjacentAgentSendMessageTool`；内部标记见 `lib/types/internal.js` 的 `adjacentAgentSendMessageTool`）。这个判定发生在本插件的创建后窗口**之前**——此刻子代理还没被 `tools.restrict` 裁过，所以提示被追加了。若随后的 `restrict({allow})` 把它剥掉（调用方在 `tools` 里没点名它、或给了空清单），子代理就会拿着"提示让你调 send_message"却没有这个工具，自相矛盾。
 因此 `planToolFilter` 在 `knownNames.has(CONTINUATION_TOOL)` 时把它**无条件**并入最终 allow：不随调用方有没有点名它而变，`tools: []` 也照留；调用方点名过就不再重复追加。**条件化**是必需的：不在 `knownNames` 里还并入会让平台 `restrict()` 抛 `names unknown global tool ...`，整次委派当场失败（根 `AGENTS.md` 红线 7 同源）。`requested === undefined` 走纯 deny 分支，`send_message` 本来就在继承目录里，不动。它**不是**内置 deny 的一员，也不得替 `run_code` 开后门（I5 仍然成立）。
 `tools_note` 在"只保留 N 个"里点明它被保留的原因（不静默）。
 载体：D24–D27；`delegate/lib/delegate.mjs` 的 `CONTINUATION_TOOL` / `planToolFilter` / `toolsNote`。
@@ -163,7 +163,7 @@ last_reviewed: 2026-10-23
 5. **重复注册即幂等**：同一个 scope 第二次 `register` 同名工具会被平台拒绝（`tool "send_message" is already registered in this scope`，出处是 `@deepseek-ai/dsh-tools` 的 `NamedEntries` 断言）。两条贴能力面的路径（`delegate()` 里的 `applied` / `pending`）本就互斥，但那是**调用方的时序**在替影子挡重复，不是影子自己的保证 —— 所以 `register` 抛出的错误消息命中 `/already registered in this scope/` 时按"影子已在"处理：吞掉、仍返回 `'shadowed'`，**别的错误一律照抛**（不拿幂等当挡箭牌去吞真实的注册失败）。**不**做成"注册前先探 own 层"：`@deepseek-ai/dsh-tools` 的 `layers` 是私有的，公开 API 只有混合了继承层的 `get` —— 照它判会把继承层那份**带标记**的原定义误当成自己已注册的影子。
 演练：`tools.restrict()` 只过滤 scope **继承**的层、不动 own layer，所以影子注册不会被 I17 的 allow 清单裁掉；两者先后不冲突，实现上排在工具面与 persona 之后收尾（fail-closed 的报错顺序与既有两条一致）。
 载体：D35–D41；`delegate/lib/delegate.mjs` 的 `shadowSendMessage` / `applyChildFace`。
-**行号口径**：这里引的平台行号（`lib/index.js:1460`、`lib/types/internal.js` 的标记符号）对应当前本机安装的那一版；dsh 升级后行号会漂，按 `withContinuableReturnGuidance` / `isAdjacentAgentSendMessageTool` 这两个符号名重新定位，别拿旧行号硬读。
+**定位口径**：这里引的平台位置一律按符号名定位（`withContinuableReturnGuidance` / `isAdjacentAgentSendMessageTool`，以及 `lib/types/internal.js` 的 `adjacentAgentSendMessageTool`），行号随 dsh 版本漂移、不写进文档。
 **未观测**：真实会话里那段提示是否真的不再出现、子代理是否真的不再先发一条中途 `send_message` —— 机制层只能证明"克隆已注册进子代理 scope 层且不带标记"；量法：重启 dsh 后新开一个会话，让调度者用一次 `delegate` 派一个子代理，读它的**首条** prompt 末尾（不该再出现 `Your parent agent id is` 那段），并核对父代理这一轮的结算通知只有一条、不是两条。
 
 **I18 本插件**预留**子代理的 `childId`，并核对平台回显的 id 与它一致。**

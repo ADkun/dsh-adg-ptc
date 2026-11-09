@@ -1,3 +1,10 @@
+---
+title: ptc-parallel 模块测试指南
+owner: Adg preset 维护者
+status: current
+last_reviewed: 2026-11-10
+---
+
 # testing-guide.md — ptc-parallel（`adg-ptc-parallel` 并行执行提示插件）
 
 用例全表与未观测项。路由见 [AGENTS.md](AGENTS.md)，设计见 [design.md](design.md)。

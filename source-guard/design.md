@@ -1,3 +1,10 @@
+---
+title: source-guard 模块设计
+owner: Adg preset 维护者
+status: current
+last_reviewed: 2026-11-10
+---
+
 # design.md — source-guard（`adg-source-guard` 源码守卫插件）
 
 设计与不变量。路由见 [AGENTS.md](AGENTS.md)，验证见 [testing-guide.md](testing-guide.md)。

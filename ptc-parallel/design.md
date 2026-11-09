@@ -1,3 +1,10 @@
+---
+title: ptc-parallel 模块设计
+owner: Adg preset 维护者
+status: current
+last_reviewed: 2026-11-10
+---
+
 # design.md — ptc-parallel（`adg-ptc-parallel` 并行执行提示插件）
 
 设计与不变量。路由见 [AGENTS.md](AGENTS.md)，验证见 [testing-guide.md](testing-guide.md)。

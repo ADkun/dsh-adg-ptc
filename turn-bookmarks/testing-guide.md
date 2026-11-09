@@ -1,3 +1,10 @@
+---
+title: turn-bookmarks 模块测试指南
+owner: Adg preset 维护者
+status: current
+last_reviewed: 2026-11-10
+---
+
 # testing-guide.md — turn-bookmarks 验证
 
 ## 命令
@@ -54,9 +61,9 @@ node --test --test-isolation=none test  # dsh 沙箱里加这个 flag
 | 粉色压得住原生样式 | 第 1 格 `::before`：注入前 `background rgba(255,255,255,0.2)`、`scaleX(0.4)`、`opacity .6` → 加 `data-adg-tb="1"` 后 `rgb(255,92,157)`、`scaleX(1)`、`opacity 1` |
 | 提问行竖线 | 第 19 轮用户行：`box-shadow none` → `rgb(255,92,157) 3px 0px 0px 0px inset` |
 | 右键入口的选择器与拦截 | 同一 26 轮会话上按本插件逻辑派发一次 `contextmenu`：`marks:26`；命中 `aria-label="加载并跳转到第 2 轮"` → 轮次 2；`defaultPrevented:true` |
-| 单轮会话没有目录栏 | 单轮会话 `button[data-index]` = 0；源码 `items.length < 2 → return null`（`dsh-client-ui-chat/lib/client.js:419`）解释之 |
-| 星标与原生操作栏同行、交付卡独立整行（插件已装、刷新后） | `[data-turn-tail]` computed `flex-direction:column`；无卡 root 740×32，星标 28×28 @ (485,724)、操作栏 704×28 @ x=521，同 y，**水平间隙 8px**；给根节点设 `--dsh-content-font-delta:8px` 后星标 36×36、操作栏左缘移到 x=529，**间隙仍 8px**、中心 y 对齐（验证尺寸与让位同时跟随）。`data-turn-tail` 是 dsh `TurnTailNodeView` 根节点的属性（`dsh-client-ui-chat/lib/client.js:7017/7024`） |
-| 无操作栏的轮次（`closing === null`）不浮起（2026-11-06 合成 DOM） | 合成 `[data-turn-tail].TS9iAW_root`（无 `[data-actions-reveal]`、内含 150px 卡）：`display:flex` / `row-gap:16px`，root 740×194，卡 740×150 占首行且 `margin-inline-start:0`；星标 computed `position:static`，落在卡下方 y=1062（与卡间隙 16px），与卡无重叠。核心 `dsh-client-ui-chat/lib/client.js:7015-7019` 该支路只渲染 tail、不渲染操作栏 |
+| 单轮会话没有目录栏 | 单轮会话 `button[data-index]` = 0；源码 `items.length < 2 → return null`（`dsh-client-ui-chat/lib/client.js` 的 `TurnNavigatorRail`）解释之 |
+| 星标与原生操作栏同行、交付卡独立整行（插件已装、刷新后） | `[data-turn-tail]` computed `flex-direction:column`；无卡 root 740×32，星标 28×28 @ (485,724)、操作栏 704×28 @ x=521，同 y，**水平间隙 8px**；给根节点设 `--dsh-content-font-delta:8px` 后星标 36×36、操作栏左缘移到 x=529，**间隙仍 8px**、中心 y 对齐（验证尺寸与让位同时跟随）。`data-turn-tail` 是 dsh `TurnTailNodeView` 根节点的属性（见 `dsh-client-ui-chat/lib/client.js`） |
+| 无操作栏的轮次（`closing === null`）不浮起（2026-11-06 合成 DOM） | 合成 `[data-turn-tail].TS9iAW_root`（无 `[data-actions-reveal]`、内含 150px 卡）：`display:flex` / `row-gap:16px`，root 740×194，卡 740×150 占首行且 `margin-inline-start:0`；星标 computed `position:static`，落在卡下方 y=1062（与卡间隙 16px），与卡无重叠。核心 `dsh-client-ui-chat/lib/client.js` 的 `closing === null` 支路只渲染 tail、不渲染操作栏 |
 
 **边界**：这只证明「选择器、染色 CSS 与右键 `preventDefault` 在真机上成立」（探针用的是注入的等价逻辑，插件本身还没装），**不**证明「槽注册、书签读写、随滚动重染、右键真的切换收藏」——那几项仍要装插件后看。
 

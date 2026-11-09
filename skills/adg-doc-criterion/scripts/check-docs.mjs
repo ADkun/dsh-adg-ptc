@@ -99,7 +99,12 @@ for (const f of files) {
   const plain = stripFences(text);
 
   plain.forEach((l, i) => {
-    if (/(^|[^\/])([A-Za-z]:\\|\/Users\/|\/home\/)/.test(l)) add('ERROR', 'ABSPATH', rel, i + 1, '出现本机绝对路径（改同仓库相对路径，或跨仓库 URL+ref）');
+    // 反误报：先把「正则/URL 字面量里的转义 \/」还原成 /，再把「X:\Users\…」这类带省略号的检测模式示例抹掉；
+    // 这两类都不是本机真实路径（前者是转义写法，后者是示例），不应判 ABSPATH。
+    const abLine = l.replace(/\\\//g, '/')
+      .replace(/[A-Za-z]:\\[^\s`'"()]*…/g, ' ')
+      .replace(/\/(?:Users|home)\/[^\s`'"()]*…/g, ' ');
+    if (/(^|[^\/])([A-Za-z]:\\|\/Users\/|\/home\/)/.test(abLine)) add('ERROR', 'ABSPATH', rel, i + 1, '出现本机绝对路径（改同仓库相对路径，或跨仓库 URL+ref）');
   });
 
   // 行号引用：既查反引号段/链接目标，也查正文里的「文件.ext:行号」形态（先剥掉 URL，避免 http://host:port 误伤）

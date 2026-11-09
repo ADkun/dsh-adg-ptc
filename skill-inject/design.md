@@ -1,3 +1,10 @@
+---
+title: skill-inject 模块设计
+owner: Adg preset 维护者
+status: current
+last_reviewed: 2026-11-10
+---
+
 # design.md — skill-inject（`adg-skill-inject` 注入插件）
 
 设计、核心数据模型与不变量。路由见 [AGENTS.md](AGENTS.md)，用例全表见 [testing-guide.md](testing-guide.md)。

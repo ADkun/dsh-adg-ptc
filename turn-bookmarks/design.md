@@ -1,3 +1,10 @@
+---
+title: turn-bookmarks 模块设计
+owner: Adg preset 维护者
+status: current
+last_reviewed: 2026-11-10
+---
+
 # design.md — turn-bookmarks 设计与不变量
 
 ## 1. 两半怎么分工
@@ -39,12 +46,12 @@
 
 - **星标槽**：`conversation.chat.turnTail`（kind `list`、scope `session`），props `{ turn: TurnLocation, seq, openFile }`；会话级 slot 条目由框架补 `sessionId` / `useProjection` / `useAccess`（**没有 `useChat`**）。所以星标只读 `turn.turn`（轮次号）与 `turn.status`；`status === 'open'`（这一轮还没结束）不渲染。
 - **右侧轨道刻度**：每格是 `<button data-index="i">`，**没有 `data-turn`**；它是全应用唯一的 `data-index` 按钮（已 grep 确认），且 `aria-label` 恒含「轮」「turn」。`i` 是 `merge(navigation.items(), turnOutline)` 之后的<strong>合并下标</strong>，不等于轮次号。映射**首选**从该刻度自己的 `aria-label` 抽第一个数字（不依赖对齐，流式新轮次让 outline 短暂落后也染不错）；抽不到才回退成 `useProjection('turnOutline')` 的升序轮次列表 `turn = railTurns[i]`。
-  实机读数（2026-11-06，本机 3080 的 26 轮会话）：`button[data-index]` 共 26 个、`data-index` 0..25，未加载刻度 `aria-label="加载并跳转到第 N 轮"`、已加载为 `跳转到第 N 轮`。**目录栏只在 `items.length ≥ 2` 时渲染**（`TurnNavigatorRail` 在 `items.length < 2` 时 `return null`，本机 `dsh-client-ui-chat/lib/client.js:419`），单轮会话没有刻度可染，不是故障。同一会话上按本插件逻辑派发 `contextmenu`：命中 `aria-label="加载并跳转到第 2 轮"` → 轮次 2，`defaultPrevented: true`。
+  实机读数（2026-11-06，本机 3080 的 26 轮会话）：`button[data-index]` 共 26 个、`data-index` 0..25，未加载刻度 `aria-label="加载并跳转到第 N 轮"`、已加载为 `跳转到第 N 轮`。**目录栏只在 `items.length ≥ 2` 时渲染**（`TurnNavigatorRail` 在 `items.length < 2` 时 `return null`，见 `dsh-client-ui-chat/lib/client.js`），单轮会话没有刻度可染，不是故障。同一会话上按本插件逻辑派发 `contextmenu`：命中 `aria-label="加载并跳转到第 2 轮"` → 轮次 2，`defaultPrevented: true`。
 - **正文提问行**：包裹层同时带 `data-chat-turn` 与 `data-chat-flow-kind`；用户提问是 `data-chat-flow-kind="user"`。选择器 `[data-chat-turn][data-chat-flow-kind="user"]`。
 - **类名是构建期哈希**（如 `eGxaPq_mark`），每版可能变，一律不用；只用 `data-*` 属性这类语义契约。
 - **刻度按钮虚拟化**：只有可见的才在 DOM。所以上色必须随 scroll / resize / 子树变化重跑；用 rAF 合并 + 80ms 最小间隔节流，避免滚动时抖动。
 - **染色手段**：给按钮加 `data-adg-tb="1"`，用 CSS 覆盖它 `:before` 伪元素的 `background` / `opacity` / `transform`（`!important`，因为要压过内联/状态类）；给提问行加同一属性，用 `box-shadow: inset 3px 0 0 0` 画左侧竖线。**不改 dsh 的任何结构与跳转逻辑**。交互分工同一句：星标单击 / 轨道右键 = 收藏开关；轨道左键 = dsh 原生跳转，本插件不监听、不拦截。
-- **星标与原生操作栏同行（且不挤占交付卡）**：`conversation.chat.turnTail` 是共享槽，dsh 核心的交付卡（`dsh-client-ui-deliverables`）、计划卡、定时卡都把整块卡片塞进 `[data-turn-tail]` 根节点（默认 `flex-direction:column; align-items:stretch; gap:16px`）。所以**不能**把根节点改成 `row`——那会把「已编辑 N 个文件」交付卡和星标、操作栏挤成一行（曾犯此错）。本插件只做加性 CSS：根节点**显式重申** dsh 的默认 `column / stretch / gap:16`（用 `!important` 压过后续覆盖）并补 `position:relative` 当定位参照；**仅当原生操作栏存在**时（选择器 `[data-actions-reveal]`：核心只在 `closing !== null` 支路给根节点设该属性，见 `dsh-client-ui-chat/lib/client.js:7025`；`closing === null` 支路不设，见 `7015-7019`）才把星标绝对定位到根节点行内起点、贴底（`inset-inline-start:0; bottom:0`，尺寸 `calc(28px + var(--dsh-content-font-delta,0px))` 跟随 dsh 字号缩放），并用 `[data-turn-tail][data-actions-reveal]:has(.atb_star)>*:last-child{margin-inline-start:calc(36px + var(--dsh-content-font-delta,0px))}` 把末子项（原生操作栏）右移——间距恒为 8px：`(28+δ) + 8 = 36+δ`。**没有操作栏的轮次**（`closing === null`：被中断 / 报错 / 只调工具没收尾正文的完成轮，核心 `dsh-client-ui-chat/lib/client.js:7015-7019` 只渲染 tail、不渲染操作栏）星标留在正常流里、不绝对定位，既不浮到正文上、也不右移任何卡片。真机读数见 testing-guide.md §7。`data-turn-tail` 是 dsh `TurnTailNodeView` 根节点属性（`dsh-client-ui-chat/lib/client.js:7017/7024`）。
+- **星标与原生操作栏同行（且不挤占交付卡）**：`conversation.chat.turnTail` 是共享槽，dsh 核心的交付卡（`dsh-client-ui-deliverables`）、计划卡、定时卡都把整块卡片塞进 `[data-turn-tail]` 根节点（默认 `flex-direction:column; align-items:stretch; gap:16px`）。所以**不能**把根节点改成 `row`——那会把「已编辑 N 个文件」交付卡和星标、操作栏挤成一行（曾犯此错）。本插件只做加性 CSS：根节点**显式重申** dsh 的默认 `column / stretch / gap:16`（用 `!important` 压过后续覆盖）并补 `position:relative` 当定位参照；**仅当原生操作栏存在**时（选择器 `[data-actions-reveal]`：核心只在 `closing !== null` 支路给根节点设该属性，`closing === null` 支路不设；见 `dsh-client-ui-chat/lib/client.js` 的 `[data-actions-reveal]`）才把星标绝对定位到根节点行内起点、贴底（`inset-inline-start:0; bottom:0`，尺寸 `calc(28px + var(--dsh-content-font-delta,0px))` 跟随 dsh 字号缩放），并用 `[data-turn-tail][data-actions-reveal]:has(.atb_star)>*:last-child{margin-inline-start:calc(36px + var(--dsh-content-font-delta,0px))}` 把末子项（原生操作栏）右移——间距恒为 8px：`(28+δ) + 8 = 36+δ`。**没有操作栏的轮次**（`closing === null`：被中断 / 报错 / 只调工具没收尾正文的完成轮，核心 `dsh-client-ui-chat/lib/client.js` 的 `closing === null` 支路只渲染 tail、不渲染操作栏）星标留在正常流里、不绝对定位，既不浮到正文上、也不右移任何卡片。真机读数见 testing-guide.md §7。`data-turn-tail` 是 dsh `TurnTailNodeView` 根节点属性。
 
 ## 5. 不变量
 
@@ -59,7 +66,7 @@
 - **I9** 同源栅栏与 `settings` 同源同规则（Host 回环 / `sec-fetch-site` / Origin-Referer 对齐 / `connection` 优先）。
 - **I10** 上限 `MAX_TURNS = 1000`，PUT 超限 400，不静默截断。
 - **I11** 收藏只有一个写入口 `toggle(turn)`（星标单击、轨道右键共用）；轨道 `click` 不监听、不 `preventDefault`，左键跳转保持 dsh 原生行为与原速。
-- **I12** 布局修正只走加性 CSS 覆盖：`[data-turn-tail]` 补 `position:relative` 并显式重申 dsh 默认的 `column / stretch / gap:16`；**绝对定位必须门控在 `[data-actions-reveal]`（操作栏存在）之内**，星标才绝对定位、末子项才 `margin-inline-start:calc(36px + var(--dsh-content-font-delta,0px))`——因为 `closing === null` 的轮次没有操作栏，不门控会让星标浮到正文/卡片上、或把卡片右移（核心 `dsh-client-ui-chat/lib/client.js:7015-7019`）。**不得把 `flex-direction` 改成 `row`**（该槽被交付卡/计划卡/定时卡共用，改 row 会挤坏它们），也不插入、不移动、不包裹 dsh 的任何 DOM 节点。
+- **I12** 布局修正只走加性 CSS 覆盖：`[data-turn-tail]` 补 `position:relative` 并显式重申 dsh 默认的 `column / stretch / gap:16`；**绝对定位必须门控在 `[data-actions-reveal]`（操作栏存在）之内**，星标才绝对定位、末子项才 `margin-inline-start:calc(36px + var(--dsh-content-font-delta,0px))`——因为 `closing === null` 的轮次没有操作栏，不门控会让星标浮到正文/卡片上、或把卡片右移（见 `dsh-client-ui-chat/lib/client.js` 的 `closing === null` 支路）。**不得把 `flex-direction` 改成 `row`**（该槽被交付卡/计划卡/定时卡共用，改 row 会挤坏它们），也不插入、不移动、不包裹 dsh 的任何 DOM 节点。
 
 ## 6. 失败模式与降级
 
