@@ -22,16 +22,13 @@ export const inject = ['tools'];
 export { ASK_TOOL_NAME, TOOL_NAME };
 
 /**
- * 工具描述。写给「一眼判断何时该用、以及它做到了平台自带的 subagent 工具做不到的那件事」：
- * 平台每个 subagent 实例的 toolFilter 在**挂载期**写死，而本工具在**每一次委派**时现给。
+ * 工具描述。只说模型判断所需的事：何时该用（派遣子代理），以及会改变调用方式的硬规则
+ * （`tools` 的取值语义、内置 deny 名单）。
  */
 const DESCRIPTION = [
-  '派一个子代理去做一件事，并**在这一次委派**指定它拿到的工具集合与 persona（这是平台自带委派做不到的：那边的滤镜在挂载期就写死了）。要按任务现配能力面就用本工具，别用那条挂载期写死的静态委派工具。',
-  '`tools` 省略 = 不过滤，它拿到自己继承到的全部工具（再减去内置 deny 名单）；给了 = 只保留清单里那些；空数组 = 任务能力一个不给（平台续接通道 send_message 仍在，子代理要靠它回传结果）。',
-  '`persona` 省略 = 它没有 persona 段；给了 = 这一次用它遮蔽子代理本来带的 persona。',
-  '缺省（也是唯一）路径：派出的是 continuable 子代理，返回可接续、可 steer 的会话 id；`background: false` 在当前 dsh 版本不可用（平台 SubagentRuntime 只暴露 startActivation），给了会当场报错。',
-  '清单里不成立的名字**不会**让整次调用失败，会逐条出现在 `tools_note` 里；`run_code` 例外，点名它当场报错。',
-  '`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question` 永远不给子代理 —— 前四个都能再开子代理，这一步就是一跳可达；`notify_user`（单向提醒）与 `ask_user`（把子代理的问题问给用户：以你的名义进提问服务，卡片落在你这个会话里）都可以给。',
+  '派遣子代理。',
+  '`tools`不为空则子代理仅可使用指定的工具；为空则继承你可用的所有工具。',
+  '`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question` 恒不给子代理；`notify_user`（单向提醒）与 `ask_user`（子代理向用户提问的通道）可以给。',
 ].join(' ');
 
 /** 输出 schema：工具结果就是这六个字段。 */
