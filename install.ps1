@@ -510,53 +510,8 @@ if ($SkipPackages) {
   }
 }
 
-# ── 2b-5. source-guard/ 插件（run_code 源码守卫）──────────────────────────────
-# 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
-# 它不注册任何工具：在 tools/post-execute（prepend）上监听，对**顶层 run_code** 的结果做
-# 成败分流 —— 成功时在最前面补一行当次执行意图（`已执行：<description>`；那句「源码未随本结果重复」
-# 的说明句默认关闭，源码不进结果本来就是平台默认行为），失败时原样返回。
-# 漏装的症状是 run_code 的成功结果里没有多出那行「已执行：」（不报错、不崩）。
-# 注意：它**不改** tool/call 的 arguments 那份源码 —— 平台没有那个挂载点（design.md 第 1 节）。
-$guardSrc = Join-Path $here 'source-guard'
-$guardDest = Join-Path $root 'plugins\adg-source-guard'
-$guardNote = ''
-$guardSkipped = $false
-# 4c-10 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
-$guardInProfile = ''
-if ($SkipPackages) {
-  $guardNote = '跳过（-SkipPackages）'
-  $guardSkipped = $true
-} elseif (-not (Test-Path -LiteralPath (Join-Path $guardSrc 'package.json'))) {
-  $guardNote = "未找到 $guardSrc，跳过 source-guard/ 插件部署"
-  $guardSkipped = $true
-} else {
-  # 本清单与 source-guard/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
-  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。有子目录 lib\，先建出来。
-  New-Item -ItemType Directory -Force -Path (Join-Path $guardDest 'lib') | Out-Null
-  $guardFiles = @('index.mjs', 'lib\policy.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
-  $guardCopied = 0
-  $guardMissing = @()
-  foreach ($rel in $guardFiles) {
-    $from = Join-Path $guardSrc $rel
-    if (-not (Test-Path -LiteralPath $from)) { $guardMissing += $rel; continue }
-    $to = Join-Path $guardDest $rel
-    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
-    if ($same) { continue }
-    Copy-Item -Force -LiteralPath $from -Destination $to
-    $guardCopied += 1
-  }
-  if ($guardMissing.Count -gt 0) {
-    $guardNote = "source-guard/ 部署不完整：源里缺 $($guardMissing -join ', ')"
-    $guardSkipped = $true
-  } elseif ($guardCopied -gt 0) {
-    $guardNote = "source-guard/ 插件 -> $guardDest（本次更新 $guardCopied 个文件）"
-  } else {
-    $guardNote = "source-guard/ 插件 -> $guardDest（已是最新，无需拷贝）"
-  }
-}
-
 # ── 2b-6. ptc-parallel/ 插件（PTC 并行执行提示）────────────────────────────
-# 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 / 2b-5 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
+# 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 scope 是不是 PTC 呈现"（判据是
 # ctx.get('tools').get('run_code', agent) 不为 undefined），是就在那个 agent 自己的
 # agent.ctx 上注册一段系统提示词 section（调度者与子代理都算）。
@@ -1070,57 +1025,8 @@ foreach ($name in $Profiles) {
     }
   }
 
-  # 4c-10. adg-source-guard 插件（run_code 源码守卫）也装进这个 profile。
-  # 与 4c-8 同形（file: 依赖 + reconcile）。漏装的后果：run_code 的成功结果里不会多出那行
-  # 「已执行：<当次 description>」（不报错、不崩 —— 静默回到平台默认），所以同样要如实报告。
-  if ($guardSkipped) {
-    $installNotes += "$name : adg-source-guard 未部署（$guardNote）—— run_code 的成功结果里不会多出「已执行：」那行"
-  } else {
-    $guardInProfile = Join-Path $profileDir "node_modules\adg-source-guard\package.json"
-    $guardNeedInstall = -not (Test-Path -LiteralPath $guardInProfile)
-    if (-not $guardNeedInstall) {
-      $installNotes += "$name : adg-source-guard 已经在 node_modules 里"
-    } elseif (-not $dshInvoke) {
-      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-source-guard 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$guardDest`""
-    } else {
-      Push-Location $profileDir
-      try {
-        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
-        $guardLog = Join-Path $profileDir 'pnpm-adg-source-guard.log'
-        cmd /c "$dshInvoke plugin --profile $name add `"file:$guardDest`" > `"$guardLog`" 2>&1"
-        $guardExit = $LASTEXITCODE
-      } finally { Pop-Location }
-      if (Test-Path -LiteralPath $guardInProfile) {
-        Remove-Item -LiteralPath $guardLog -Force -ErrorAction SilentlyContinue
-        $installNotes += "$name : 已装 adg-source-guard（dsh plugin add exit $guardExit）"
-      } else {
-        $installNotes += "$name : adg-source-guard 没装进 $profileDir（dsh plugin add exit $guardExit）—— 关掉 dsh 后重跑本脚本（日志 $guardLog）"
-        if (Test-Path -LiteralPath $guardLog) { Write-Host (Get-Content -LiteralPath $guardLog -Raw -Encoding UTF8) }
-      }
-    }
-  }
-
-  # 4c-11. 读回来断言 adg-source-guard 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 一样）。
-  if (-not $guardSkipped) {
-    $guardReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
-    $guardDepLine = @($guardReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-source-guard' }).Count -gt 0
-    $guardListedLine = @($guardReread.dsh.profile.bundles) -contains 'adg-source-guard'
-    $guardPkgName = ''
-    if (Test-Path -LiteralPath $guardInProfile) {
-      $guardPkgName = (Get-Content -LiteralPath $guardInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
-    }
-    if ($guardPkgName -ne 'adg-source-guard') { $guardNeedInstall = $true }
-    if ($guardDepLine -and $guardListedLine -and ($guardPkgName -eq 'adg-source-guard')) {
-      $installNotes += "$name : adg-source-guard 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
-    } elseif ($guardPkgName -eq 'adg-source-guard') {
-      $installNotes += "$name : adg-source-guard 包在位，但 manifest 缺一格（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— 手工补上再重启"
-    } else {
-      $installNotes += "$name : adg-source-guard **没装进 node_modules**（dependencies=$guardDepLine / dsh.profile.bundles=$guardListedLine）—— run_code 的成功结果里不会多出「已执行：」那行"
-    }
-  }
-
   # 4c-12. adg-ptc-parallel 插件（PTC 并行执行提示）也装进这个 profile。
-  # 与 4c-8 / 4c-10 同形（file: 依赖 + reconcile）。漏装的后果：PTC 会话的系统提示词里
+  # 与 4c-8 同形（file: 依赖 + reconcile）。漏装的后果：PTC 会话的系统提示词里
   # 没有「## PTC 并行执行（一次 run_code 里多做）」段（模型回到"不知道 PTC 能并行"的旧状态），
   # 不报错、不崩 —— 所以同样要如实报告。装了之后还要**重启 dsh**（插件在 agent/created 时才注册）。
   if ($parallelSkipped) {
@@ -1135,7 +1041,7 @@ foreach ($name in $Profiles) {
     } else {
       Push-Location $profileDir
       try {
-        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-10：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $parallelLog = Join-Path $profileDir 'pnpm-adg-ptc-parallel.log'
         cmd /c "$dshInvoke plugin --profile $name add `"file:$parallelDest`" > `"$parallelLog`" 2>&1"
         $parallelExit = $LASTEXITCODE
@@ -1150,7 +1056,7 @@ foreach ($name in $Profiles) {
     }
   }
 
-  # 4c-13. 读回来断言 adg-ptc-parallel 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-11 一样）。
+  # 4c-13. 读回来断言 adg-ptc-parallel 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 一样）。
   if (-not $parallelSkipped) {
     $parallelReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
     $parallelDepLine = @($parallelReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-ptc-parallel' }).Count -gt 0
@@ -1173,7 +1079,7 @@ foreach ($name in $Profiles) {
   }
 
   # 4c-14. adg-turn-bookmarks 插件（轮次书签）也装进这个 profile。
-  # 与 4c-8 / 4c-10 / 4c-12 同形（file: 依赖 + reconcile）。漏装的后果：每轮末尾没有星标、
+  # 与 4c-8 / 4c-12 同形（file: 依赖 + reconcile）。漏装的后果：每轮末尾没有星标、
   # 右侧目录栏不会被染色，不报错 —— 所以同样要如实报告。装了之后还要**重启 dsh**（客户端半边随 web 包加载）。
   if ($tbSkipped) {
     $installNotes += "$name : adg-turn-bookmarks 未部署（$tbNote）—— 每轮末尾不会有星标、目录栏不会染色"
@@ -1187,7 +1093,7 @@ foreach ($name in $Profiles) {
     } else {
       Push-Location $profileDir
       try {
-        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-10 / 4c-12：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-12：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
         $tbLog = Join-Path $profileDir 'pnpm-adg-turn-bookmarks.log'
         cmd /c "$dshInvoke plugin --profile $name add `"file:$tbDest`" > `"$tbLog`" 2>&1"
         $tbExit = $LASTEXITCODE
@@ -1202,7 +1108,7 @@ foreach ($name in $Profiles) {
     }
   }
 
-  # 4c-15. 读回来断言 adg-turn-bookmarks 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-11 / 4c-13 一样）。
+  # 4c-15. 读回来断言 adg-turn-bookmarks 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-13 一样）。
   if (-not $tbSkipped) {
     $tbReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
     $tbDepLine = @($tbReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-turn-bookmarks' }).Count -gt 0
@@ -1247,7 +1153,6 @@ foreach ($spec in @(
     @{ Pkg = 'adg-delegate'; Dest = $delegateDest },
     @{ Pkg = 'adg-settings'; Dest = $settingsDest },
     @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
-    @{ Pkg = 'adg-source-guard'; Dest = $guardDest },
     @{ Pkg = 'adg-ptc-parallel'; Dest = $parallelDest },
     @{ Pkg = 'adg-turn-bookmarks'; Dest = $tbDest })) {
   if (-not (Test-Path -LiteralPath $spec.Dest)) { continue }
@@ -1279,7 +1184,6 @@ Write-Host "  permission -> $permNote（set_child_permission 工具；只有调�
 Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / set_child_permission / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
 Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
-Write-Host "  source-guard -> $guardNote（run_code 源码守卫：成功时在结果正文里前置一行当次执行意图「已执行：<description>」，那句「源码未随本结果重复」说明句默认关闭，失败时原样保留；不注册工具）"
 Write-Host "  turn-bookmarks -> $tbNote（轮次书签：每轮末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线；跳转仍走 dsh 原生轨道按钮；书签存会话目录 sidecar，不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
@@ -1293,7 +1197,6 @@ Write-Host "（adg-permission 插件：同样要重启 dsh 才注册；它不进
 Write-Host "（adg-delegate 插件：同样要重启 dsh 才注册；它是唯一的委派入口 —— 没它调度者开不了子代理。）"
 Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
-Write-Host "（adg-source-guard 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话里，顶层 run_code 的成功结果才会多出一行「已执行：<当次 description>」（那句「源码未随本结果重复」说明句默认不出现）；失败结果永远逐字不变。注意它只改结果侧，tool/call 里那份入参源码平台没有挂载点可改。）"
 Write-Host "（adg-ptc-parallel 插件：同样要重启 dsh 才注册 —— 而且 section 是在 agent 创建那一刻挂上的，所以运行中的旧会话不补挂：重启 dsh + 新建对话才看得到。子代理的 scope 同样会被判定，工具清单按每个 agent 当前可见的工具现算。）"
 Write-Host "（adg-turn-bookmarks 插件：同样要重启 dsh 才注册；浏览器那半随 web 客户端加载，重启后新建会话才看得到星标。收藏状态存在会话自己目录下的 adg-turn-bookmarks.json，删会话即一起删。）"
 if ($packageFailed) {

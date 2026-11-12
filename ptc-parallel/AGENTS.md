@@ -48,7 +48,7 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 |---|---|---|
 | 改判定口径 / section 名 / order | [design.md](design.md) 的「核心数据模型」 | [testing-guide.md](testing-guide.md) 的「用例总表」 |
 | 改正文 | `lib/guide.mjs` 的 `GUIDE_TEXT`（唯一事实源） | 本文件 R3 |
-| 改装载形状 | `install.ps1` 的第 2b-6 / 4c-12 / 4c-13 步 | `source-guard/design.md` 的 I8..I11（同一种装法） |
+| 改装载形状 | `install.ps1` 的第 2b-6 / 4c-12 / 4c-13 步 | （同一种装法：稳定副本 + `dsh plugin add` + 读回断言三格） |
 
 ## 版本区
 
@@ -64,6 +64,6 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 2. **被选没被选**：该 profile 的 `dependencies` 与 `dsh.profile.bundles` 里都有 `adg-ptc-parallel` —— **装了 ≠ 被选中**。
 3. **运行期注册没注册**：只有重启 dsh 之后才能观测。
 
-部署由 `install.ps1` 的第 2b-6 步（把 `ptc-parallel/` 拷到用户根的稳定副本）与第 4c-12 / 4c-13 步（逐 profile `dsh plugin --profile <n> add file:<稳定副本>` + 读回断言）完成。**注意 `install.sh` 不管本模块**（它连 `source-guard` 也没管）—— Windows 上装本模块走 `install.ps1`。
+部署由 `install.ps1` 的第 2b-6 步（把 `ptc-parallel/` 拷到用户根的稳定副本）与第 4c-12 / 4c-13 步（逐 profile `dsh plugin --profile <n> add file:<稳定副本>` + 读回断言）完成。**注意 `install.sh` 不管本模块**（它连 `turn-bookmarks` 也没管）—— Windows 上装本模块走 `install.ps1`。
 
 **未观测**：重启 dsh 后，本段是否真的出现在 PTC 会话的系统提示词里（子代理那侧尤其要验）；量法：重启 dsh → 新建 Adg 对话 → 让调度者读一次自己的系统提示词，确认里面有「## PTC 并行执行（一次 run_code 里多做）」段；再派一个子代理，看它的系统提示词里**也有**这一段。

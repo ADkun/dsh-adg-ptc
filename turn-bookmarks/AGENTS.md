@@ -54,7 +54,7 @@ node --test --test-isolation=none test  # dsh 沙箱（workspace-write）里必�
 | 改轨道上色 / 正文标记的选择器 | [design.md](design.md) 的「DOM 契约」 | [testing-guide.md](testing-guide.md) 的「未观测项」 |
 | 改存储形状 / 上限 / 路径 | `lib/bookmarks.mjs`（唯一规则源） | [design.md](design.md) 的「核心数据模型」 |
 | 改路由或同源栅栏 | `index.mjs`（栅栏写法与 `settings/index.js` 同源） | [testing-guide.md](testing-guide.md) 的「用例总表」 |
-| 改装载形状 | `install.ps1` 的 2b-7 / 4c-14 / 4c-15 步 | `source-guard/design.md` 的 I8..I11（同一种装法） |
+| 改装载形状 | `install.ps1` 的 2b-7 / 4c-14 / 4c-15 步 | （同一种装法：稳定副本 + `dsh plugin add` + 读回断言三格） |
 
 ## 版本区
 
@@ -70,6 +70,6 @@ node --test --test-isolation=none test  # dsh 沙箱（workspace-write）里必�
 2. **被选没被选**：该 profile 的 `dependencies` 与 `dsh.profile.bundles` 里都有 `adg-turn-bookmarks` —— **装了 ≠ 被选中**。
 3. **运行期生效没生效**：只有重启 dsh 之后才能观测。
 
-部署由 `install.ps1` 的第 2b-7 步（把 `turn-bookmarks/` 拷到用户根的稳定副本）与第 4c-14 / 4c-15 步（逐 profile `dsh plugin --profile <n> add file:<稳定副本>` + 读回断言）完成。**注意 `install.sh` 不管本模块**（它连 `source-guard` 也没管）—— Windows 上装本模块走 `install.ps1`。
+部署由 `install.ps1` 的第 2b-7 步（把 `turn-bookmarks/` 拷到用户根的稳定副本）与第 4c-14 / 4c-15 步（逐 profile `dsh plugin --profile <n> add file:<稳定副本>` + 读回断言）完成。**注意 `install.sh` 不管本模块**（它连 `ptc-parallel` 也没管）—— Windows 上装本模块走 `install.ps1`。
 
 **未观测**：重启 dsh 后，收藏一轮是否真的让右侧轨道条变粉、点它是否跳到该轮、正文提问行左侧是否出现粉线。其中**「选择器 + 染色 CSS + 右键 preventDefault 在真机上成立」已用无头浏览器在真实 3080 页面上验证**（读数见 [testing-guide.md](testing-guide.md) 的「已在真机 DOM 上验证」），仍待装插件后验的是槽注册、书签读写与随滚动的重染。量法见同文件「未观测项」。
