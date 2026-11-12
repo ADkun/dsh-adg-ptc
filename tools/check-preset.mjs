@@ -17,8 +17,9 @@
 //      调度智能体；要用技能就照常委派，但不内联、不复述技能正文，只把技能的**绝对路径**
 //      写进委派 prompt 并要它先 read（只有当时那条委派没给 read 的子代理才内联）——
 //      完整口径与三种例外见调度 persona 的【技能】段；理由见 preset/design.md；
-//   6. 文件顶部调度 persona 的「你手上的子代理」段里提到的委派工具名与委派行一一对应（双向，不能只加行
-//      不改名册）；子代理的 `tools` 名单是运行期动态值，静态扫描器看不见，不在这里校验；
+//   6. 文件顶部调度 persona 必须让调度者知道委派入口 —— 点名某个委派行的工具名，或提到唯一入口
+//      `delegate`（简化后的 persona 走后者）；名册里以 `agent_<name>` 形式提到的委派工具名都要有对应行
+//      （双向）；子代理的 `tools` 名单是运行期动态值，静态扫描器看不见，不在这里校验；
 //   6b. 顶部调度 persona **不设** `suffix` 字段行 —— 0.2.1-rc.2 起 `{{cwd}}` 不再是注册的
 //      prompt 变量（只有 `provider` / `model`），persona suffix section 没设 `interpolate:false`，
 //      走插值路径会抛 `unknown prompt variable "{{cwd}}"`；工作目录改由 `working-directory:current`
@@ -410,11 +411,17 @@ else {
     block.push(line)
   }
   const roster = block.join('\n')
+  // 调度 persona 只要让调度者知道「有委派入口」就算过：点名某个委派行的工具名，或提到唯一委派入口
+  // `delegate`（简化后的 persona 用一句「用 delegate 工具派出帮手」，不再逐个点名子代理行）。两者都
+  // 没有，调度者才真的不知道该派、怎么派 —— 那才是 ERROR。
+  const rosterTeachesDispatch = roster.includes('delegate')
   for (const toolName of declared) {
-    if (!roster.includes(toolName)) fail(`调度名册里没有 ${toolName}：委派行加了但 persona 名册没同步（调度智能体不会知道它存在）`)
+    if (!roster.includes(toolName) && !rosterTeachesDispatch) {
+      fail(`调度名册既没点名 ${toolName}，也没提到唯一委派入口 delegate：persona 没让调度者知道可以派子代理`)
+    }
   }
   // 名册里以 `agent_<name>` 形式提到的委派工具名必须都有对应的行。单实例叫 `agent`
-  // （不带下划线），所以它不会被这条正则逮住，靠上面那条"每个 declared 都要出现在名册里"兜住。
+  // （不带下划线），所以它不会被这条正则逮住，靠上面那条"调度者必须知道委派入口"兜住。
   //
   // `agent_id` 不是委派工具名，是 `delegate` / `send_message` / `set_child_permission` 共用的
   // **参数名**：PTC 版 persona 会写成 `await tools.send_message({ agent_id, message })`，
