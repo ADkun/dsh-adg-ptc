@@ -7,7 +7,7 @@ last_reviewed: 2026-10-05
 
 ## 职责与边界
 
-负责：对 `preset/agent.cordis.yml`（**仓库里的这一份就是唯一文本真相源**，没有"已安装的第二份文本"）做**零依赖的逐行静态扫描**，把"这些硬约束在文本上被破坏"的情形提前拦下来——行尾 / 末尾换行 / BOM、`delegation` 组里恰好一条委派行（形如 `    - id: agent`：4 空格缩进、`id` 以 `agent` 开头，不匹配的行会被解析器静默跳过）、该行字段齐全且 `toolName` 全局唯一、`allow`（若写）只写已注册工具名、不存在通用委派行、调度 persona 的「你手上的子代理」段提到的委派工具名与那条唯一的 `- id: agent` 委派行一一对应、`adg-delegate` 的 `BUILTIN_DENY` 覆盖六个入口（`agent` / `delegate` 缺 ⇒ ERROR；`workflow` / `ralph` / `set_child_permission` / `ask_user_question` 缺 ⇒ WARN）、`ask_user` 必须留在可给名单里（`MUST_BE_AVAILABLE_TO_CHILDREN`：它出现在 `BUILTIN_DENY` 里 ⇒ ERROR —— 那是子代理唯一的提问通道，被禁就等于把它打回"单向喊一声 + 轮询"）、`notify_user` 出现在名单里 ⇒ WARN、承载三组体积旋钮的三行结构完好（含"万一某键被写回时"的合法性）、**构建期注入组的名字没有被手写进源文件**；并在 stdout 打印两行生效值摘要。
+负责：对 `preset/agent.cordis.yml`（**仓库里的这一份就是唯一文本真相源**，没有"已安装的第二份文本"）做**零依赖的逐行静态扫描**，把"这些硬约束在文本上被破坏"的情形提前拦下来——行尾 / 末尾换行 / BOM、`delegation` 组里恰好一条委派行（形如 `    - id: agent`：4 空格缩进、`id` 以 `agent` 开头，不匹配的行会被解析器静默跳过）、该行字段齐全且 `toolName` 全局唯一、`allow`（若写）只写已注册工具名、不存在通用委派行、调度 persona 的「你手上的子代理」段提到的委派工具名与那条唯一的 `- id: agent` 委派行一一对应、`adg-delegate` 的 `BUILTIN_DENY` 覆盖六个入口（`agent` / `delegate` 缺 ⇒ ERROR；`workflow` / `ralph` / `ask_user_question` 缺 ⇒ WARN）、`ask_user` 必须留在可给名单里（`MUST_BE_AVAILABLE_TO_CHILDREN`：它出现在 `BUILTIN_DENY` 里 ⇒ ERROR —— 那是子代理唯一的提问通道，被禁就等于把它打回"单向喊一声 + 轮询"）、`notify_user` 出现在名单里 ⇒ WARN、承载三组体积旋钮的三行结构完好（含"万一某键被写回时"的合法性）、**构建期注入组的名字没有被手写进源文件**；并在 stdout 打印两行生效值摘要。
 
 不负责（逐条，防越权）：
 
@@ -37,7 +37,7 @@ last_reviewed: 2026-10-05
 
 - 属性：类别（`ERROR` / `WARN`）、文本（含出错行号与 `id`，便于直接跳到 composition 那一行）、所属不变量（下面是能被追溯到的那一条，供用例表对齐）。
 - 不变量：
-  - **I1**：**ERROR 的含义只有一个——这次委派必然抛错**（例如 `allow` 里写了未注册的工具名，`restrict()` 会抛 `names unknown global tool ...`）。策略性越界（`agent` / `delegate` / `set_child_permission`）与条件性注册（`bash` / `read_image` / `subagent_codex` / `subagent_claude_code`）**禁止**判成 ERROR，只能 WARN。`workflow` / `ralph` 不在 composition 的注册面里，落在"未注册名 ⇒ ERROR"那一侧（`restrict()` 确实会抛）。
+  - **I1**：**ERROR 的含义只有一个——这次委派必然抛错**（例如 `allow` 里写了未注册的工具名，`restrict()` 会抛 `names unknown global tool ...`）。策略性越界（`agent` / `delegate`）与条件性注册（`bash` / `read_image` / `subagent_codex` / `subagent_claude_code`）**禁止**判成 ERROR，只能 WARN。`workflow` / `ralph` 不在 composition 的注册面里，落在"未注册名 ⇒ ERROR"那一侧（`restrict()` 确实会抛）。
   - **I2**：**禁止**把"取值等于某个数"写成判错。本 preset 一律用插件出厂默认值，`FACTORY_DEFAULTS` 只在报告里当对照，不参与任何 `fail()` 分支。
 
 ### KnobRow（不可变值对象）

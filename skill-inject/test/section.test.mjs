@@ -1,6 +1,6 @@
 // adg-skill-inject 的单元测试：只测 lib/section.mjs 的纯函数（零依赖、不碰 cordis）。
-// index.mjs 的接线部分（ctx.on / agentCtx.systemPrompt.section 的调用形状）按
-// permission/testing-guide.md 的口径属于运行期行为，由真实挂载验证（根 README 的「真实挂载验证」）。
+// index.mjs 的接线部分（ctx.on / agentCtx.systemPrompt.section 的调用形状）属于运行期行为，
+// 由真实挂载验证（根 README 的「真实挂载验证」）。
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

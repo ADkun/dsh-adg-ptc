@@ -23,7 +23,7 @@ last_reviewed: 2026-10-23
 **不负责**
 
 - 不等待子代理跑完、不汇总它的输出 —— 子代理的结局由会话与 `subagent/catalog` 承担。
-- 不改任何既有状态：不动会话日志、不动文件权限、不动别的子代理（与 `permission/` 的边界正相反）。
+- 不改任何既有状态：不动会话日志、不动文件权限、不动别的子代理（只建立会话并投递；权限属于平台，不由本插件改）。
 - 不实现"前台一次性"路径（`background:false` 当场报错，见 I4），因此也不解析 `jobs` 服务。
 - 不写 persona 的内容、不校验 persona 模板里的 `{{…}}`（那是平台 `deployment:persona-prefix` 的事）。
 - 不给自己做装载：`install.ps1` / `install.sh` 的接线、以及 preset 侧要不要提到它，都不在本模块内。
@@ -57,17 +57,17 @@ last_reviewed: 2026-10-23
 
 ### 不变量
 
-**I1 内置 deny 名单是安全边界，这六个名字恒不给子代理。**
-`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question`，硬编码在 `BUILTIN_DENY`。
-前四个是**能再开子代理**的入口：`agent` 是 preset 里那条静态委派行的 toolName（子代理从祖先层继承得到它）、`delegate` 是本插件的动态版、`workflow` 与 `ralph` 是编排引擎（`ralph` 那行的 config 是 `subagentProvider: spawn`）—— 放进任何一个，"一跳可达"当场失效，孙代理对调度者不可见、不可 steer。后两个（`set_child_permission` / `ask_user_question`）只认 live runtime root。
+**I1 内置 deny 名单是安全边界，这五个名字恒不给子代理。**
+`agent` / `delegate` / `workflow` / `ralph` / `ask_user_question`，硬编码在 `BUILTIN_DENY`。
+前四个是**能再开子代理**的入口：`agent` 是 preset 里那条静态委派行的 toolName（子代理从祖先层继承得到它）、`delegate` 是本插件的动态版、`workflow` 与 `ralph` 是编排引擎（`ralph` 那行的 config 是 `subagentProvider: spawn`）—— 放进任何一个，"一跳可达"当场失效，孙代理对调度者不可见、不可 steer。后一个（`ask_user_question`）只认 live runtime root。
 `notify_user` **刻意不在名单里**：它是单向、不阻塞的提醒，`notify/design.md` 与 `preset/design.md` 的 R20 明确允许给子代理用，好让撞上登录墙的后台子代理自己第一时间喊人，不必等调度者中转。
 下发方式：调用方给了 `tools` ⇒ `{allow: <清单∩可用名>, deny: <内置名单∩可用名>}`；省略 `tools` ⇒ 只 `{deny: …}`（平台 `tools.restrict` 的语义是"先按 deny 去掉、再按 allow 只留"，两者都只减不增）。载体是创建后窗口（I16），不是平台 request。
 载体：D5；`delegate/lib/delegate.mjs` 的 `BUILTIN_DENY`。
 
 **I2 内置名单必须与本次可用名求交，禁止整体照发。**
-理由：名单里可能含本 profile 未注册的名字（没装 `adg-permission` 就没有 `set_child_permission`），而平台 `tools.restrict()` 对 allow 与 deny 里的未知名**都**校验（`tools.restrict() names unknown global tool "x"; known global tools: …`）—— 整体照发会让每次委派都当场失败（根 `AGENTS.md` 红线 7 / 10 同源）。
+理由：名单里可能含本 profile 未注册的名字（例如某 profile 没装 `adg-notify` 就没有 `notify_user`），而平台 `tools.restrict()` 对 allow 与 deny 里的未知名**都**校验（`tools.restrict() names unknown global tool "x"; known global tools: …`）—— 整体照发会让每次委派都当场失败（根 `AGENTS.md` 红线 7 / 10 同源）。
 载体：D2 的瘦 profile 断言。
-**未观测**：真实 profile 里这六个名字与本插件同装时的交集到底有几个；量法：装齐 `adg-permission` / `adg-notify` 后在新会话里委派一次，断言不抛 unknown-name 错，并在 `list_agents` 上确认该子代理的工具面里没有这六个名字。
+**未观测**：真实 profile 里这五个名字与本次可用名的交集到底有几个；量法：在新会话里委派一次（`tools` 里点名这五个名字），断言不抛 unknown-name 错，并在 `list_agents` 上确认该子代理的工具面里没有这五个名字。
 
 **I3 未知名与内置禁用名一律"剔除 + 回显"，不让整次调用失败。**
 `tools_note` 逐条列出 `名字（内置禁用）` / `名字（这次没有这个工具名）`，保持点名顺序。
@@ -182,7 +182,7 @@ last_reviewed: 2026-10-23
 | 输出 | `description` / `subagent_id` / `kind`（`continuable`）/ `tools` / `tools_note` / `persona`（`set` \| `unset`） |
 | render | 一行：`<description> → <kind> 子代理 <subagent_id>（<tools_note>）` |
 | 并发 | `isConcurrencySafe: () => true` —— 只建立会话并投递，不改既有状态（实参不成立时平台那层包装会保守地回 `false`） |
-| 超时 | `timeoutMs: 15000` —— 只等"建立 + 投递 + 能力面下发"（子代理 inbox 接受初始 prompt）。比 `permission/` 的 30 秒小，因为那边等的是另一个会话的一次完整读写往返 |
+| 超时 | `timeoutMs: 15000` —— 只等"建立 + 投递 + 能力面下发"（子代理 inbox 接受初始 prompt）。子代理真正的读写往返不在这段等待里 |
 
 **模型面（第二条工具：`ask_user`）**
 

@@ -1,7 +1,7 @@
 # AGENTS.md — skill-inject（`adg-skill-inject` 注入插件）
 
 本模块是仓库的**第四枚第一方子插件**：包名 `adg-skill-inject`，在**全局层**注册一段系统提示词 section，把框架**正文**注入 **Adg 调度智能体**的系统提示词 —— 不依赖模型自觉去 `read`（persona 级的【思考框架闸门】已被证过不可靠，这正是本模块存在的理由）。注入的**是哪一份框架**由设置键 `skillInjectFramework` 在三份技能文件（`elegant-framework` / `thinking-framework` / `execution-framework`）之间选，**出厂默认执行框架**。
-装载形状与 `notify/` / `permission/` 同一种（稳定副本 + profile 的 `file:` 依赖 + `dsh.profile.bundles`）；它**不注册任何工具**，不占 `KNOWN_TOOLS` 名单。设计细节在 [design.md](design.md)，验证判据在 [testing-guide.md](testing-guide.md)。
+装载形状与 `notify/` 同一种（稳定副本 + profile 的 `file:` 依赖 + `dsh.profile.bundles`）；它**不注册任何工具**，不占 `KNOWN_TOOLS` 名单。设计细节在 [design.md](design.md)，验证判据在 [testing-guide.md](testing-guide.md)。
 
 **正文与开关都是用户可配的**（两个入口、一份真相）：正文默认取**下拉选中那份**技能文件 —— `skillInjectFramework`（`'elegant'` | `'thinking'` | `'execution'`，**默认 `'execution'`**）指向 `skills/elegant-framework/SKILL.md`、`skills/thinking-framework/SKILL.md` 或 `skills/execution-framework/SKILL.md`；也可以在「设置 → Adg 设置」里写自定义正文（`skillInjectText`，留空＝跟随选中的技能文件）；开关有两个 —— `skillInjectEnabled`（要不要注入）与 `skillInjectSubagent`（子代理是否也注入同一段，**默认关** ＝ 与这条开关引入前完全一致：只注入调度者）。`skillInjectEnabled` 在设置页与**聊天输入框左侧那颗「注入」chip**（`client.js`，`conversation.input.left`、`order: 21`）都写同一个键；`skillInjectFramework` 与 `skillInjectSubagent` 只在设置页。四个键的登记在 `settings/lib/schema.mjs` 的 `FIELDS`，本模块只**读**设置文件（`lib/user-settings.mjs`），**不 import `adg-settings` 包**。
 
@@ -14,7 +14,7 @@ cd skill-inject && node --test test                        # 单元测试；纯�
 cd skill-inject && node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必须加这个 flag
 ```
 
-本模块不 import `@deepseek-ai/dsh-tools`，所以不依赖仓库根的 `node_modules/` 解析桥（与 notify/permission 不同）。
+本模块不 import `@deepseek-ai/dsh-tools`，所以不依赖仓库根的 `node_modules/` 解析桥（与 notify 不同）。
 
 ## 红线
 
@@ -30,7 +30,7 @@ cd skill-inject && node --test --test-isolation=none test  # DSH 沙箱（worksp
 | R6 | frontmatter 必须剥掉（`stripFrontmatter`）。 | 技能头的 name/description 是技能目录登记元数据，塞进系统提示词是噪音，还会让模型困惑"该不该调 skill 工具"。 | `test/section.test.mjs` 的 stripFrontmatter 用例组 |
 | R7 | section 的 `name` / `order` / 目标 preset 的常量**只写在 `lib/section.mjs` 一处**。 | `index.mjs`、测试、cordis.patch.yml 注释一律从那儿 import 或按名引用；另抄一份就是漂移源。 | `test/section.test.mjs` 的契约常量用例 |
 | R8 | `export const name` 必须等于 `cordis.patch.yml` insert 行的 `id`（`adg-skill-inject`）。 | 同名不匹配 = 插件加载失败或落错行。 | `skill-inject/cordis.patch.yml`；`skill-inject/index.mjs` |
-| R9 | 禁止写死任何本机绝对路径或用户根。 | 默认路径按 `${DSH_HOME:-~/.dsh}` 逐级拼装（`lib/section.mjs` 的 `skillsRoot()` 与 `skillPathFor(framework)`；`DEFAULT_SKILL_PATH` 只是出厂框架那份的便捷别名），由环境变量解析。 | D7 同款口径（permission 的 R11）；[评] 读 `lib/section.mjs` |
+| R9 | 禁止写死任何本机绝对路径或用户根。 | 默认路径按 `${DSH_HOME:-~/.dsh}` 逐级拼装（`lib/section.mjs` 的 `skillsRoot()` 与 `skillPathFor(framework)`；`DEFAULT_SKILL_PATH` 只是出厂框架那份的便捷别名），由环境变量解析。 | D7 同款口径（同 `notify/design.md` 的装载不变量）；[评] 读 `lib/section.mjs` |
 | R10 | 禁止为装插件杀进程或重启正在跑的 dsh。 | dsh 在跑时 pnpm 报 `os error 32` 是**预期**；安装脚本如实报告并继续。 | `install.ps1` / `install.sh` 第 2b-4 / 4c-8 / 4c-9 步 |
 | R11 | **禁止另存一份开关状态**：设置项的真相只有设置文件里那几个键（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`；设置页与输入框 chip 都走同一条 `POST /api/adg-settings/settings`）。 | 第二份状态（localStorage / 插件 config / 模块变量）会让两个入口各说各话，且宿主读不到。 | [评] `client.js` 只做 `fetch`，无本地持久化；`index.mjs` 每次组装都重读文件 |
 

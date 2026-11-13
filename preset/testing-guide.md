@@ -26,7 +26,7 @@ last_reviewed: 2026-10-15
 | PV9 | 包名核对 | composition 里每个 `@deepseek-ai/*` 包名都对着当前安装存在；用旧名会让 `agentPresets.resolve('adg-ptc').broken` 非空（报 `… never started`） | I7 | `[人]` 真实挂载 |
 | EV1 | 委派行的 `config.toolName` | 全文件唯一；active 行里恰好一条 `toolName: agent`（唯一委派入口，`provider: spawn` + `backgroundMode: continuable` 对它是硬要求）；重复报 `toolName "X" 重复…每个委派工具名必须全局唯一`，缺失报 `缺少 toolName` | I8 | `[机检]` |
 | EV2 | 工具面的合法名 | 委派行 `allow` 里的未注册名报 `allow 里的 "X" 不是本组合注册过的工具名——restrict() 会抛 "names unknown global tool"`；合法集来自脚本内 `KNOWN_TOOLS`，条件性注册名与调度者专属名只给 WARN；经 `delegate` 的 `tools` 点名的未知名由插件剔除后逐条写进 `tools_note`，`run_code` 当场抛错 | I9 / R8 | `[机检]` + `[人]` |
-| EV3 | 工具面语义 | 把 `agent` / `delegate` / `set_child_permission` 写进委派行 `allow` ⇒ WARN（策略越界）；把 `workflow` / `ralph` 写进 `allow` ⇒ ERROR（这两个名字不在 composition 的注册面里 ⇒ `names unknown global tool ...`）；在 `delegate` 的 `tools` 里点名 `agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question` ⇒ 都不进子代理工具面（`BUILTIN_DENY`）；点名 `ask_user` ⇒ 进（它是子代理唯一的提问通道，出现在 `BUILTIN_DENY` 里即 ERROR）；点名 `notify_user` ⇒ 进 | I10 / I16 / I17 / R5 / R12 | `[机检]` + `[评]` |
+| EV3 | 工具面语义 | 把 `agent` / `delegate` 写进委派行 `allow` ⇒ WARN（策略越界）；把 `workflow` / `ralph` 写进 `allow` ⇒ ERROR（这两个名字不在 composition 的注册面里 ⇒ `names unknown global tool ...`）；在 `delegate` 的 `tools` 里点名 `agent` / `delegate` / `workflow` / `ralph` / `ask_user_question` ⇒ 都不进子代理工具面（`BUILTIN_DENY`）；点名 `ask_user` ⇒ 进（它是子代理唯一的提问通道，出现在 `BUILTIN_DENY` 里即 ERROR）；点名 `notify_user` ⇒ 进 | I10 / I16 / I17 / R5 / R12 | `[机检]` + `[评]` |
 | EV4 | 新增已注册工具 | 新工具注册后忘了同步 `KNOWN_TOOLS` 会误报 ERROR（改名即可修）；反向的"该报没报"没有自动门，只能人工比对 | I9 | `[评]` |
 | EV5 | `backgroundMode` | 委派行不是 `continuable` ⇒ WARN；唯一委派入口那条不是 `continuable` ⇒ ERROR | I11 | `[机检]` |
 | EV6 | `maxDepth` | 交付前检索 `maxDepth`：委派行里出现即违规（当前唯一命中应是两条 disabled 行的 `maxDepth: provider-managed`）；`delegate` 也不给子代理传 `maxDepth` | I12 | `[机检]` + `[评]` |
@@ -37,7 +37,7 @@ last_reviewed: 2026-10-15
 | SV3 | 两个锚段在位 | `## 约束` 的 12 个顶级 `【…】` 段（全文 21 个 `【…】` 标记里，【目标】/【要干什么】/【不要干什么】/【验收标准】是「【拆解立目标】」段的子项，不是顶级段；【思考框架闸门】曾短暂在位，已由插件 `adg-skill-inject` 取代——persona 里**不该**再出现它）、`## 验收标准` 的验收判据那一段与 `## 回复内容` 的交付纪律段都还在。**没有脚本查这三个锚段**（`tools/check-preset.mjs` 是逐行文本扫描器，只扫委派行与 persona 段名），所以本用例靠对抗评审：逐段对照 `preset/agent.cordis.yml` 调度 persona 的原文，判有没有段被删、被合并或被改写 | I22 | `[评]` |
 | SV4 | 锚段语义 | 逐段读：不得出现预算 / 字数 / 次数上限；不得被改写成"先做 A 再做 B"的分步流程；不得删掉问用户、挂号、digest、接续、验收判据任何一条 | I23 / R4 / R14–R17 | `[评]` |
 | SV5 | 提问纪律 | `ask_user_question` 不进任何一次 `delegate` 的 `tools`（它同样在 `BUILTIN_DENY` 里）；给了 `ask_user` 的子代理撞上必须问人的岔路时**直接问用户**（卡片落在调度者与用户对话的那个会话里，答复回到它手上），不再走"停手 → 等调度者转达"；调度侧仍保留"不确定就问、一次问齐、不设次数上限" | I17 / R12 / R20 | `[机检]` + `[评]` |
-| SV6 | 权限闸门 | 调度侧保留"先确认文件策略、受限时先问用户"的措辞；浏览器那一段委派口径保留失败签名与"停手 + 如实报出"；两处都不得写成"权限强制"；切换权限后只能走 `set_child_permission` 或重派，不得写成"旧子代理自动就能用" | R10 / R11 | `[评]` |
+| SV6 | 权限闸门 | 调度侧保留"先确认文件策略、受限时先问用户"的措辞；浏览器那一段委派口径保留失败签名与"停手 + 如实报出"；两处都不得写成"权限强制"；切换权限后只能重派，不得写成"旧子代理自动就能用" | R10 / R11 | `[评]` |
 | SV7 | 登录入口 | 不存在"预先禁止登录"或把"请用户手动登录"写成失败的措辞 | R13 | `[评]` |
 | SV8 | 浏览器模式 | 保留"模式由**调度者**在派发前判定并写进委派"（确定不需要登录 / 验证码 → 无头；确定需要 → 有头；拿不准 → 先无头、真撞上登录墙 / 验证码再换成有头），且不再出现"派发前问用户有头 / 无头、每任务问一次"的措辞；工具层默认 `browser/lib/target.mjs` 的 `MODE_DEFAULT = 'headless'` 不得被改 | R19 | `[评]` + `[机检]` |
 | SV9 | 浏览器命令行契约 | 委派文本里给子代理的命令名与输出行（`profile` / `launch` / `status` / `text` / `eval` / `shot` / `close`、`STATE=` / `PORT=` / `PROFILE=`）与 `browser/lib/` 的实现一致。**没有脚本读 persona 文本**，所以本用例靠对抗评审：评审者当场跑 `cd browser && node cli.mjs help` 读出实际命令清单，再拿 persona 里出现的每个命令名与输出行逐项对照，多一个少一个都不算过 | R14 | `[评]` |
@@ -49,7 +49,7 @@ last_reviewed: 2026-10-15
 | BV2 | 真实生效 | 改一个可观察点（例如某次委派经 `delegate` 的 `tools` 少给一个工具），重启 dsh 后在新对话里委派一次，子代理报出的工具目录随之变化 | I2 / I18 | `[人]` 真实委派 |
 | BV3 | 成本结论 | 任何成本结论都附改动前后各一次的会话审计数字，且比较看比例与量级 | I4 / I6 | `[人]` 会话审计 |
 | DV1 | `delegate` 的动态工具面 | 调度者给的 `tools` 就是子代理那次可见的工具目录；未知名剔除后逐条落在 `tools_note`；`run_code` 当场抛错 | I9 / I16 / I18 | `[人]` 真实委派 |
-| DV2 | `BUILTIN_DENY` 的下发 | 在 `tools` 里点名 `agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question` ⇒ 都不进子代理工具面；点名 `ask_user` ⇒ 进（它是子代理唯一的提问通道，出现在 `BUILTIN_DENY` 里即 ERROR）；点名 `notify_user` ⇒ 进 | I16 / I17 / R5 / R12 | `[机检]` `cd delegate && node --test test` + `[人]` 真实委派 |
+| DV2 | `BUILTIN_DENY` 的下发 | 在 `tools` 里点名 `agent` / `delegate` / `workflow` / `ralph` / `ask_user_question` ⇒ 都不进子代理工具面；点名 `ask_user` ⇒ 进（它是子代理唯一的提问通道，出现在 `BUILTIN_DENY` 里即 ERROR）；点名 `notify_user` ⇒ 进 | I16 / I17 / R5 / R12 | `[机检]` `cd delegate && node --test test` + `[人]` 真实委派 |
 | NV1 | 未观测项的写法 | 每条未观测都写成一行 `**未观测**：<问题>；量法：<怎么测>`；不得写成实测，也不得写成"不可观测" | 全模块 | `[评]` |
 
 **未观测**：`check-preset.mjs` 对纯文本要求的假绿范围有多大；量法：故意改坏一个纯文本锚点（删一段纪律、删一个 `notify_user`），看脚本是否仍然退出 0 —— 它只应拦"这次委派必然抛错"的错误，文本语义靠本节的人工 review 项。

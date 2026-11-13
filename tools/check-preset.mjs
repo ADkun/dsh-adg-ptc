@@ -10,7 +10,7 @@
 //   4. `delegate` 的 `tools` 名单由调度者在委派时给，静态扫描器看不到 —— 这里只守
 //      「子代理不得拿到这些名字」：`agent` / `delegate` 必须出现在第一方插件
 //      `adg-delegate` 的内置 deny 名单里（`delegate/lib/delegate.mjs` 的 `BUILTIN_DENY`
-//      数组字面量），`workflow` / `ralph` / `set_child_permission` / `ask_user_question`
+//      数组字面量），`workflow` / `ralph` / `ask_user_question`
 //      应该有 —— 少了不会让哪次委派抛错，只会把调度者专属的工具面漏给子代理，所以判 WARN；
 //   5. 不存在通用 `subagent` / `subagent_fork` 委派行；
 //   5b. 技能面口径：委派行不再写 allow，所以这条只在 allow 存在时提示 —— 技能面只归
@@ -109,9 +109,6 @@ const KNOWN_TOOLS = new Set([
   'present',
   // adg-notify（本仓库的第一方插件包，profile 级安装）
   'notify_user',
-  // adg-permission（同为 profile 级安装的第一方插件包；只给调度智能体用 ——
-  // 它改的是"自己派出去的子代理"的权限，而子代理本来就不该有子代理）
-  'set_child_permission',
 ])
 
 /**
@@ -134,10 +131,6 @@ const CONDITIONAL_TOOLS = new Map([
 const SCHEDULER_ONLY = new Map([
   // `workflow` / `ralph` 已随 preset 摘掉注册行：它们不再是"策略越界"（曾在此列），
   // 而是**未知名** —— 落到下面的 KNOWN_TOOLS 之外、判 ERROR（`restrict()` 确实会抛）。
-  [
-    'set_child_permission',
-    '权限面只归调度智能体 —— 它改的是"自己派出去的子代理"的权限，而子代理本来就不该有子代理',
-  ],
   ['agent', '子代理拿到就能绕开一跳可达再开子代理（平台深度闸门会拒绝，但只有在它真去开的时候才报错）'],
   ['delegate', '同上一条：它是同一个委派入口的动态版，子代理拿到就能自己配能力面开下一层'],
 ])
@@ -334,7 +327,6 @@ const DENIED_FOR_CHILDREN = new Set(['agent', 'delegate'])
 const EXPECTED_DENIED_FOR_CHILDREN = new Set([
   'workflow',
   'ralph',
-  'set_child_permission',
   'ask_user_question',
 ])
 
@@ -423,7 +415,7 @@ else {
   // 名册里以 `agent_<name>` 形式提到的委派工具名必须都有对应的行。单实例叫 `agent`
   // （不带下划线），所以它不会被这条正则逮住，靠上面那条"调度者必须知道委派入口"兜住。
   //
-  // `agent_id` 不是委派工具名，是 `delegate` / `send_message` / `set_child_permission` 共用的
+  // `agent_id` 不是委派工具名，是 `delegate` / `send_message` 共用的
   // **参数名**：PTC 版 persona 会写成 `await tools.send_message({ agent_id, message })`，
   // 若不过滤，这条启发式会把一个参数名判成"名册提到不存在的委派行"。
   const ROSTER_NOT_A_TOOL = new Set(['agent_id'])

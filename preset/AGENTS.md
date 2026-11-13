@@ -30,7 +30,7 @@ node tools/has-bundle.mjs ~/.dsh/profiles web               # 每 profile 一行
 node tools/has-bundle.mjs ~/.dsh/profiles web --package=dsh-plugin-save-token
 node tools/resolve-flavor.mjs --billion-context --save-token                 # → `<味道键>\t<稳定目录名>\t<gen 旗标>`
 
-# 首装或重装（技能 + preset bundle + browser / desktop 工具链 + notify / permission / delegate / settings 四枚子插件）
+# 首装或重装（技能 + preset bundle + browser / desktop 工具链 + notify / delegate / settings / skill-inject 四枚子插件）
 sh install.sh                                                     # macOS / Linux
 powershell -ExecutionPolicy Bypass -File .\install.ps1            # Windows
 # 只给某个 profile 用 bili 注入版：sh install.sh --billion-context=on web  /  ... -BillionContext on -Profiles web
@@ -67,7 +67,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1            # Windows
 | 16 | `preset/design.md` 的「非功能红线」R26（`preset/agent.cordis.yml` 是 UTF-8 无 BOM） |
 | 17 | 根 `AGENTS.md`「关键红线」第 2 条（工具面是能力边界，不是提示） |
 
-**编号不重排**：本表只列 preset 独有的三类（#3 / #4 / #15），编号沿用原表编号 —— 外部文档（`permission/AGENTS.md` 的 R9、`desktop/design.md`）按编号引用本表，重排会让那些引用指错；被移走的各条按原编号列在上表，跟着编号仍能找到。原 #3 这一条同时覆盖两项判据（体积旋钮写回 + 交付侧证据落点判据），两项都要照做，不要拆成两条。
+**编号不重排**：本表只列 preset 独有的三类（#3 / #4 / #15），编号沿用原表编号 —— 外部文档（`desktop/design.md`、`skills/adg-delegation/SKILL.md`）按编号引用本表，重排会让那些引用指错；被移走的各条按原编号列在上表，跟着编号仍能找到。原 #3 这一条同时覆盖两项判据（体积旋钮写回 + 交付侧证据落点判据），两项都要照做，不要拆成两条。
 
 **未观测**：不重启 dsh 时新开的会话会不会直接加入重注册后的声明；量法：改一次源文件、重装 bundle，不重启就新开一个会话，读 `agentPresets.resolve('adg-ptc')` 的解析结果与调度 persona 名册是否已是新版。
 
@@ -79,7 +79,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1            # Windows
 | 改浏览器那一段委派口径（模式 / 登录态 / 权限闸门） | `preset/design.md` 的「SchedulerPersona」 | `browser/AGENTS.md`（它消费的命令行契约）→ 根 `README.md` 的「浏览器工具链与登录态资产」一节 |
 | 改 composition 的 tool 行 / 体积旋钮 | `preset/design.md` 的「非功能红线」 | `tools/design.md`（判错口径） |
 
-其余各条见根 `AGENTS.md` 的「Context Loading」表（全仓路由主表）：改 `delegate` 插件本身 / 改调度 persona 名册 / 通知子插件 / 权限插件 / 只想弄懂怎么装到本机 —— 此处不另抄。
+其余各条见根 `AGENTS.md` 的「Context Loading」表（全仓路由主表）：改 `delegate` 插件本身 / 改调度 persona 名册 / 通知子插件 / 只想弄懂怎么装到本机 —— 此处不另抄。
 
 ## 版本区
 
@@ -98,6 +98,6 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1            # Windows
 | 只切换注入组 / 味道（同一份源文件分四种味道、四个稳定落点） | 重新生成 + 重装 bundle + 重启 dsh + 新会话 | 先看该 profile 的 `node_modules/dsh-adg-ptc` 链接的是哪一份稳定目录，再用 `node tools/check-bundle-flavor.mjs <那份文件> <味道键>` 断言那一份（`install.*` 装完已经这么断言）；再在新会话里用 `delegate` 派一个子代理，让它报工具目录里看得见注入的那几个名字 |
 | composition 里写的 `@deepseek-ai/*` 包名 | 包名会随 dsh 升级改名，改完必须真实挂载 | `agentPresets.resolve('adg-ptc')` 的 `.broken` 为空；用旧名会报 `… never started` |
 
-其余各类（`notify/` / `permission/` / `delegate/` / `browser/` / `desktop/` / 本仓库任何 `.md`）的生效口径与复核指针见根 `AGENTS.md` 的「生效方式」表与各自模块 `AGENTS.md` 的对应节 —— 此处不另抄。`@deepseek-ai/*` 包名那行留在本表里，因为本文件「红线」#15 指的就是它。
+其余各类（`notify/` / `delegate/` / `settings/` / `skill-inject/` / `ptc-parallel/` / `turn-bookmarks/` / `browser/` / `desktop/` / 本仓库任何 `.md`）的生效口径与复核指针见根 `AGENTS.md` 的「生效方式」表与各自模块 `AGENTS.md` 的对应节 —— 此处不另抄。`@deepseek-ai/*` 包名那行留在本表里，因为本文件「红线」#15 指的就是它。
 
 **已知限制**：dsh 正在运行时 `pnpm` 会因文件被占用而失败（`os error 32` / `ERR_PNPM_PACKAGE_MANAGER_REMOVE_MODULES_DIR`），脚本会如实报告并继续；包已在位时不算失败。要真正装/换依赖先关掉 dsh。

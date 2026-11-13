@@ -350,49 +350,8 @@ else
   fi
 fi
 
-# ── 2b-1. permission/ 插件（set_child_permission 工具）─────────────────────────
-# 与 2b 同形（普通插件包、file: 依赖、用户根下的稳定副本），消费方不同：这个工具只给
-# 调度智能体用，永远不会出现在子代理的工具面里（它在 delegate 的内置 deny 名单里）。漏装的后果
-# 不是派发时报 names unknown global tool，而是调度者需要改权限时调到一个不存在的工具 ——
-# 同样必须装，同样必须重启 dsh 才注册。
-permission_src="$here/permission"
-permission_dest="$root/plugins/adg-permission"
-permission_note=""
-permission_skipped=0
-# 4c-3 的断言要用它；在这里初始化，免得 set -u 下某个分支没赋值就展开而整个脚本退出。
-permission_in_profile=""
-if [ ! -f "$permission_src/package.json" ]; then
-  permission_note="未找到 $permission_src，跳过 permission/ 插件部署"
-  permission_skipped=1
-else
-  # 本清单与 permission/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
-  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。本插件没有 cli.mjs。
-  mkdir -p "$permission_dest/lib"
-  permission_copied=0
-  for permission_rel in index.mjs lib/permission.mjs cordis.patch.yml \
-    package.json AGENTS.md design.md testing-guide.md; do
-    if [ ! -f "$permission_src/$permission_rel" ]; then
-      permission_note="permission/ 部署不完整：源里缺 $permission_rel"
-      permission_skipped=1
-      break
-    fi
-    if [ -f "$permission_dest/$permission_rel" ] && cmp -s "$permission_src/$permission_rel" "$permission_dest/$permission_rel"; then
-      continue
-    fi
-    cp "$permission_src/$permission_rel" "$permission_dest/$permission_rel"
-    permission_copied=$((permission_copied + 1))
-  done
-  if [ "$permission_skipped" -eq 0 ]; then
-    if [ "$permission_copied" -gt 0 ]; then
-      permission_note="permission/ 插件 -> $permission_dest（本次更新 $permission_copied 个文件）"
-    else
-      permission_note="permission/ 插件 -> $permission_dest（已是最新，无需拷贝）"
-    fi
-  fi
-fi
-
 # ── 2b-2. delegate/ 插件（`delegate` 工具）─────────────────────────────────────
-# 与 2b / 2b-1 同形（普通插件包、file: 依赖、用户根下的稳定副本）。它是**唯一的委派入口**：
+# 与 2b 同形（普通插件包、file: 依赖、用户根下的稳定副本）。它是**唯一的委派入口**：
 # preset 里那条委派行只是"子代理后端"（toolName `agent`），调度者真正用来开子代理、并给那一次
 # 指定目标 / 工具面 / persona 的是本插件的 `delegate`。漏装的后果比另两个更重 —— 调度者手上会
 # 没有任何委派工具（`agent` 在它自己的内置 deny 名单里，子代理永远拿不到它）。同样必须重启 dsh 才注册。
@@ -666,25 +625,6 @@ for name in $profiles; do
     fi
   fi
 
-  # 4c-2. adg-permission 插件（set_child_permission）也装进这个 profile。
-  # 与 4c 同形（file: 依赖 + reconcile），但它**不是**任何委派的依赖：这个工具只给调度智能体用，
-  # 永远不会进子代理的工具面（delegate 的内置 deny 名单里有它）。所以漏装的后果不是派发时抛
-  # names unknown global tool，而是 persona 让调度者去调一个不存在的工具 —— 同样要如实报告。
-  if [ "$permission_skipped" -eq 1 ]; then
-    echo "  profile -> $name : adg-permission 未部署（$permission_note）—— 调度者改子代理权限时会调到一个不存在的工具" >&2
-  else
-    permission_in_profile="$profile_dir/node_modules/adg-permission/package.json"
-    if [ -f "$permission_in_profile" ]; then
-      echo "  profile -> $name : adg-permission 已经在 node_modules 里"
-    elif ! command -v dsh >/dev/null 2>&1; then
-      echo "  profile -> $name : 未找到 dsh 命令，跳过 adg-permission 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add file:$permission_dest" >&2
-    elif (cd "$profile_dir" && dsh plugin --profile "$name" add "file:$permission_dest"); then
-      echo "  profile -> $name : 已装 adg-permission"
-    else
-      echo "  profile -> $name : adg-permission 没装进 $profile_dir（dsh plugin add 失败）—— 关掉 dsh 后重跑本脚本" >&2
-    fi
-  fi
-
   # 4c-1. 写完之后**读回来断言** adg-notify 的三件事，缺一就不算装好：
   #   ① 包真在 node_modules 里（解析得到）；② dependencies 里有它；③ dsh.profile.bundles 里有它。
   # 只满足其中一部分是最坏的情况：bundle 装了、插件没装时委派里的 notify_user 会被剔成
@@ -711,30 +651,8 @@ for name in $profiles; do
         done
   fi
 
-  # 4c-3. 读回来断言 adg-permission 的三格（同 4c-1 的口径与理由）。
-  if [ "$permission_skipped" -eq 0 ]; then
-    node -e '
-      const fs = require("fs");
-      const [manifest, pkgJson, pkgName] = process.argv.slice(1);
-      let name = "";
-      try { name = JSON.parse(fs.readFileSync(pkgJson, "utf8")).name; } catch { name = ""; }
-      const j = JSON.parse(fs.readFileSync(manifest, "utf8"));
-      const depLine = Boolean(j.dependencies && j.dependencies[pkgName]);
-      const listed = Boolean(j.dsh && j.dsh.profile && (j.dsh.profile.bundles || []).includes(pkgName));
-      if (name === pkgName && depLine && listed) {
-        console.log("三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）");
-      } else if (name === pkgName) {
-        console.log("包在位，但 manifest 缺一格（dependencies=" + depLine + " / dsh.profile.bundles=" + listed + "）—— 手工补上再重启");
-      } else {
-        console.log("包不在 node_modules 里（或 package.json 读不出名字）");
-      }' "$manifest" "$permission_in_profile" adg-permission \
-      | while IFS= read -r permission_verdict; do
-          echo "  profile -> $name : adg-permission $permission_verdict"
-        done
-  fi
-
   # 4c-4. adg-delegate 插件（`delegate`）也装进这个 profile。
-  # 与 4c / 4c-2 同形（file: 依赖 + reconcile）。它是**唯一的委派入口**：没装它，调度者手上就没有
+  # 与 4c 同形（file: 依赖 + reconcile）。它是**唯一的委派入口**：没装它，调度者手上就没有
   # 任何开子代理的工具（preset 那条委派行的 toolName `agent` 对子代理永远关着，而调度者要用的是
   # `delegate`）。漏装不会让某次委派抛 names unknown global tool，而是"调度者想派活却没有工具"。
   if [ "$delegate_skipped" -eq 1 ]; then
@@ -911,13 +829,12 @@ for (const pair of pairs) {
     const missing = expected.filter(r => !fs.existsSync(path.join(copy, r)));
     if (missing.length) console.log("  profile -> " + name + " : " + pkg + " 的 profile 副本缺 " + missing.length + " 个文件（" + missing[0] + "…）—— 关掉 dsh 后重跑本脚本，或 dsh plugin --profile " + name + " add \"file:" + dest + "\"");
   }
-}' "$root" "adg-notify=$notify_dest" "adg-permission=$permission_dest" "adg-delegate=$delegate_dest" "adg-settings=$settings_dest" "adg-skill-inject=$inject_dest"
+}' "$root" "adg-notify=$notify_dest" "adg-delegate=$delegate_dest" "adg-settings=$settings_dest" "adg-skill-inject=$inject_dest"
 
 echo "  browser -> $browser_note"
 echo "  desktop -> $desktop_note"
 echo "  notify  -> $notify_note（notify_user 工具；每个 profile 的安装结果见上面 profile 行）"
 echo "  delegate -> $delegate_note（delegate 工具 —— 唯一的委派入口；只有调度智能体拿得到，子代理拿不到。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
-echo "  permission -> $permission_note（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
 echo "  settings -> $settings_note（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
 echo "  skill-inject -> $inject_note（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 echo ""
@@ -928,7 +845,6 @@ echo "（browser/ 与 desktop/ 工具链又是另一回事：用户根下的普�
 echo "  desktop 是 Windows 专用，自检：node \"$desktop_dest/cli.mjs\" profile（要真正驱动普通用户窗口，得在完全权限的会话里调它）。）"
 echo "（adg-notify 插件：装了之后必须重启 dsh 才注册 —— loader 会按解析路径缓存 ES 模块。）"
 echo "（adg-delegate 插件：同样要重启 dsh 才注册；它是**唯一的委派入口** —— 没装它调度者手上就没有开子代理的工具。）"
-echo "（adg-permission 插件：同样要重启 dsh 才注册；它不进任何一次委派的 tools —— 只有调度智能体用。）"
 echo "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
 echo "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
 if [ "$package_failed" -eq 1 ]; then

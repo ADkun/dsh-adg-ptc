@@ -1,6 +1,6 @@
 ---
 name: adg-delegation
-description: 给 Adg PTC 模式的调度智能体用：`delegate` 的参数语义与硬边界（`tools` 就是子代理那次可见的全部工具、六个内置 deny、未知名与 `run_code` 的后果），七条能力带 → 建议 `tools` / persona 要点 / 边界的映射表，persona 与技能路径的写法口径，以及「哪一次委派该给哪份技能路径」。要写一次委派、要按任务现定能力面、或子代理报「缺工具 / 超出能力范围」时加载。
+description: 给 Adg PTC 模式的调度智能体用：`delegate` 的参数语义与硬边界（`tools` 就是子代理那次可见的全部工具、五个内置 deny、未知名与 `run_code` 的后果），七条能力带 → 建议 `tools` / persona 要点 / 边界的映射表，persona 与技能路径的写法口径，以及「哪一次委派该给哪份技能路径」。要写一次委派、要按任务现定能力面、或子代理报「缺工具 / 超出能力范围」时加载。
 whenToUse: 在 Adg PTC 模式里要派出一个子代理（写 `delegate` 的 `description` / `prompt` / `tools` / `persona` / `background`）、要按任务选这次的工具面、或要决定把哪份技能文件的绝对路径写进委派时使用。
 ---
 
@@ -46,12 +46,12 @@ return [a.subagent_id, a.tools_note, b.subagent_id, b.tools_note]
 ## `tools` 是硬边界，不是提示
 
 - **名单即目录**：平台 `tools.restrict()` 让子代理**可见的工具目录恰好等于这个名单** —— 连 preset 自己注册的工具也一起被裁。名单里没有的名字，子代理那里**不存在**，它不会「想办法」拿到。
-- **省略 `tools`**：只下发 `{deny: 六个内置名 ∩ 本次可用}`，子代理拿到它继承到的全部减去那几项。
+- **省略 `tools`**：只下发 `{deny: 五个内置名 ∩ 本次可用}`，子代理拿到它继承到的全部减去那几项。
 - **拿不准就给什么**：本技能下面那七条能力带只是**例子**，不是完整清单 —— 能给的名单＝这次会话里已注册的那些工具名。两种安全做法：①**省略 `tools`**（它拿到继承到的全部，一定不会缺你没想到的工具；代价是它的固定前缀更大、而且它会看到一堆这次用不上的工具）；②点名，然后读返回的 `tools` / `tools_note` 核对（没生效的名字会被逐条列出，不是静默丢弃）。
-- **能力带没点名、但本 preset 里确实注册着**：`todo_write`（进度清单）、`present`（把产物作为文件呈现给用户）、`list_agents`（看自己派出去的子代理）、`send_message`（给自己派出去的子代理送消息 —— **只送字，改不了工具面**）。反过来这几个**不要给**：`skill`（技能面只归调度者）、`agent` / `delegate` / `set_child_permission` / `ask_user_question`（六个内置 deny 里的四个）、`run_code`（点名即抛错）。另有两组名字**本 preset 不注册**（composition 里没有它们的注册行）：编排引擎 `workflow` / `ralph`、目标三件 `create_goal` / `get_goal` / `update_goal` —— 写进 `tools` 只会让那一次委派在 `tools_note` 里回一条未知名，不是"给了但不生效"。
+- **能力带没点名、但本 preset 里确实注册着**：`todo_write`（进度清单）、`present`（把产物作为文件呈现给用户）、`list_agents`（看自己派出去的子代理）、`send_message`（给自己派出去的子代理送消息 —— **只送字，改不了工具面**）。反过来这几个**不要给**：`skill`（技能面只归调度者）、`agent` / `delegate` / `ask_user_question`（五个内置 deny 里的三个）、`run_code`（点名即抛错）。另有两组名字**本 preset 不注册**（composition 里没有它们的注册行）：编排引擎 `workflow` / `ralph`、目标三件 `create_goal` / `get_goal` / `update_goal` —— 写进 `tools` 只会让那一次委派在 `tools_note` 里回一条未知名，不是"给了但不生效"。
 - **`tools: []`**：`{allow: []}` —— 什么都不给，它一个工具都没有。不要这样派。
 - **未知名**：不在本次可用全局工具名里的名字被**剔除**并逐条写进 `tools_note`（`reason: 'unknown'`）—— **不静默丢弃**。所以子代理报「没有这个工具」时先读 `tools_note`。
-- **六个内置 deny 名字永远给不下去**：`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question`。写进 `tools` 会被剔除并记 `reason: 'denied'`。前四个都能**再开子代理**，后两个只认 live runtime root（子代理调 `ask_user_question` 拿 `DELEGATED_CALLER`）。
+- **五个内置 deny 名字永远给不下去**：`agent` / `delegate` / `workflow` / `ralph` / `ask_user_question`。写进 `tools` 会被剔除并记 `reason: 'denied'`。前四个都能**再开子代理**，后一个只认 live runtime root（子代理调 `ask_user_question` 拿 `DELEGATED_CALLER`）。
 - **`ask_user` 是给得下去的提问通道**（`adg-delegate` 提供；不是平台那个 `ask_user_question`）：给了它，子代理撞上登录墙 / 验证码 / 必须有人拍板时能**直接问用户**，答复回到它手上、它当场接着干 —— 不用你中转、也不用它单向喊一声就停手。它问出来的卡片落在**你这个会话**里（owner 是派它的你），你与用户都看得见。**要人工介入的任务就把 `ask_user` 写进 `tools`**，并在 `prompt` 里写明「撞上就开有头窗口 + 用 `ask_user` 问用户」。
 - **`notify_user` 刻意可以给**：它是单向、不阻塞的提醒。它**不能**替代 `ask_user` —— 用户看得见、但回不了话；撞上登录墙时它是「喊人」而不是「问人」。
 - **`run_code` 当场抛错**：它是 PTC 传输保留名，平台的 `tools.restrict()` 对它直接抛错（`cannot name reserved PTC mode presentation transport "run_code"`），`delegate` 替平台挡在前面 —— 点名它的那次调用**整次失败**，是本工具唯一会失败的名单项。
@@ -176,11 +176,11 @@ return [a.subagent_id, a.tools_note, b.subagent_id, b.tools_note]
 | 现象 | 含义 | 怎么办 |
 |---|---|---|
 | `tools_note` 里出现 `reason: 'unknown'` 的名字 | 那个名字不在本次可用的全局工具名里，已被剔除 | 换一个名字，或不再要求它用那个工具 |
-| `tools_note` 里出现 `reason: 'denied'` 的名字 | 那是六个内置 deny 之一 | 改设计：要么你自己做，要么换一条能力带 |
+| `tools_note` 里出现 `reason: 'denied'` 的名字 | 那是五个内置 deny 之一 | 改设计：要么你自己做，要么换一条能力带 |
 | 调用直接抛错，文本里有 `run_code` | 你点名了 PTC 传输保留名 | 删掉它 —— 要限制的是工具，不是承载它们的传输 |
 | 调用直接抛错，文本里有 `读不出本次可用的全局工具名` | 工具视图读不出来（API 形状变了） | 这是 fail-closed，不要重试同一条调用；如实报给用户 |
 | 子代理报「我没有 X 工具」/ 返回的 `tools_note` 里写着 `reason: 'unknown'` | 你点名的名字这次不存在，已被剔除 —— **委派本身没有失败** | 要它继续做那件事只能**新派一个子代理**并把名字换成真实存在的（或干脆省略 `tools` 让它继承全部），产物用路径交接；`send_message` 补不了工具 |
-| 某次委派当场抛 `names unknown global tool …` | 这条路只可能来自**静态名单**（preset 源文件里写死的 `allow`），不是 `delegate` 的 `tools` | 检查那个名字所属的插件（`notify` / `permission` / `delegate`）在这个 profile 装没装，并跑一次 `node tools/check-preset.mjs` |
+| 某次委派当场抛 `names unknown global tool …` | 这条路只可能来自**静态名单**（preset 源文件里写死的 `allow`），不是 `delegate` 的 `tools` | 检查那个名字所属的插件（`notify` / `delegate` / `settings` / `skill-inject`）在这个 profile 装没装，并跑一次 `node tools/check-preset.mjs` |
 | 子代理说「我看不了图」 | `read_image` 的两条条件之一没满足 | 要么改用可查询的状态量，要么就不要求视觉判据 |
 | 子代理报「我不能问用户 / 我拿不到答复」，或它的报错里出现 `DELEGATED_CALLER` | 你这次没给 `ask_user`，它撞上必须问人的岔路（登录墙 / 验证码 / 要人拍板）只能停手 | 把 `ask_user` 写进 `tools`，连同「撞上就用它问用户」一起重派；`send_message` **补不了工具面** |
 | 子代理报「工具不存在 / `UNKNOWN_TOOL`」 | 它在本会话里只能直呼 `run_code` —— 直接写 `tools.read(...)` 这类原生调用会被当成未知工具 | 委派里要它「在 `run_code` 里用 `tools.read({...})`」；`tools:sdk` 段已经在它上下文里，通常只需提醒一句 |

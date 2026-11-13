@@ -34,8 +34,8 @@ export const SUBAGENT_KINDS = Object.freeze(['continuable']);
  * - `delegate`：本插件的入口，同一个委派机制的**动态**版。
  * - `workflow` / `ralph`：编排引擎，都能起子代理（`ralph` 那行的 config 是 `subagentProvider: spawn`）。
  *
- * 后两个只认 live runtime root：
- * - `set_child_permission` / `ask_user_question`：子代理拿不到人类答主，也没有"自己派出去的子代理"这回事。
+ * 余下一个只认 live runtime root：
+ * - `ask_user_question`：子代理拿不到人类答主。
  *
  * 刻意**不在**名单里的两个：
  * - `notify_user`：单向、不阻塞的提醒，`notify/design.md` 与 `preset/design.md` 的 R20 明确允许
@@ -49,7 +49,6 @@ export const BUILTIN_DENY = Object.freeze([
   'delegate',
   'workflow',
   'ralph',
-  'set_child_permission',
   'ask_user_question',
 ]);
 
@@ -102,7 +101,7 @@ export function assertCallerAgent(exec, toolName = TOOL_NAME) {
  *
  * 读不出就**抛错**，不猜也不跳过（fail-closed）：内置 deny 是安全边界，而名单里可能含
  * 本 profile 未注册的名字（例如没装 `@deepseek-ai/dsh-tool-workflow` 就没有 `workflow`，
- * 没装 `adg-permission` 就没有 `set_child_permission`）；没有对照表就既
+ * 没装 `adg-notify` 就没有 `notify_user`）；没有对照表就既
  * 保证不了边界、又可能下发一个平台会抛 `names unknown global tool` 的名字。
  *
  * @param {object} parent 调用方 Agent（`exec.agent`）
@@ -170,7 +169,7 @@ export function planToolFilter(requested, knownNames) {
       denyNames,
       tools: [],
       ignored: [],
-      // 一个名字都减不掉时（这六个名字都不在本 profile）就没有要下发的滤镜。
+      // 一个名字都减不掉时（这五个名字都不在本 profile）就没有要下发的滤镜。
       filter: denyNames.length === 0 ? undefined : { deny: denyNames },
     };
   }

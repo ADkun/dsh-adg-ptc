@@ -46,7 +46,7 @@ import {
 /** 模块根目录：从 import.meta.url 推，绝不写死本机绝对路径。 */
 const MODULE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** 一份「典型 profile」的可用全局工具名：六个内置禁用名全在，外加 `notify_user`（它故意**不在**名单里）。 */
+/** 一份「典型 profile」的可用全局工具名：五个内置禁用名全在，外加 `notify_user`（它故意**不在**名单里）。 */
 const KNOWN = [
   'Read',
   'Write',
@@ -59,7 +59,6 @@ const KNOWN = [
   'delegate',
   'workflow',
   'ralph',
-  'set_child_permission',
   'ask_user_question',
   'notify_user',
   'compress',
@@ -263,8 +262,8 @@ test('D2 tools 省略 ⇒ 只下发 deny、不含 allow；deny 必须与可用�
   assert.match(out.tools_note, /^未过滤：子代理拿到它继承到的全部工具/);
   assert.match(out.tools_note, new RegExp(`减去 ${BUILTIN_DENY.length} 项：${BUILTIN_DENY.join('、')}`));
 
-  // 瘦 profile（只有 Read + delegate）：其余五个名字根本不在表里 ——
-  // agent/workflow/ralph 要看对应工具插件是否挂载、set_child_permission 要看有没有装 adg-permission，
+  // 瘦 profile（只有 Read + delegate）：其余四个名字根本不在表里 ——
+  // agent/workflow/ralph/ask_user_question 要看对应工具插件是否挂载，
   // 绝不能把未注册的名字塞进 deny（平台会抛 names unknown global tool，整次委派失败）。
   const lean = fixture({ names: ['Read', 'delegate'] });
   await delegate({ ...BASE_ARGS }, { agent: lean.parent, signal: undefined }, lean.deps);

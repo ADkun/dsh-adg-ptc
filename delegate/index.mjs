@@ -28,7 +28,7 @@ export { ASK_TOOL_NAME, TOOL_NAME };
 const DESCRIPTION = [
   '派遣子代理。',
   '`tools`不为空则子代理仅可使用指定的工具；为空则继承你可用的所有工具。',
-  '`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question` 恒不给子代理；`notify_user`（单向提醒）与 `ask_user`（子代理向用户提问的通道）可以给。',
+  '`agent` / `delegate` / `workflow` / `ralph` / `ask_user_question` 恒不给子代理；`notify_user`（单向提醒）与 `ask_user`（子代理向用户提问的通道）可以给。',
 ].join(' ');
 
 /** 输出 schema：工具结果就是这六个字段。 */
@@ -109,8 +109,8 @@ export function createDelegateTool(deps = {}) {
     // 它只建立会话并投递初始 prompt，不改任何既有状态 —— 可以并发派发多条。
     isConcurrencySafe: () => true,
     // 本工具**不等待子代理跑完**：等的是「建立 + 投递 + 能力面下发」这一步（子代理 inbox
-    // 接受初始 prompt），都是秒级动作。比 permission 的 30 秒小，
-    // 因为那边等的是另一个会话的一次完整读写往返。
+    // 接受初始 prompt），都是秒级动作。子代理真正的读写往返不在这段等待里，
+    // 子代理真正干活的那一段不在这段等待里。
     timeoutMs: 15000,
     async execute(args, exec) {
       return delegate(args, exec, deps);

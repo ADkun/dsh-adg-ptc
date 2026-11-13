@@ -1,9 +1,9 @@
 # AGENTS.md — delegate（`delegate` 插件）
 
-本模块是仓库内部的第一方子插件（与 `notify/`、`permission/` 同形制）：包名 `adg-delegate`，在**全局层**注册工具 `delegate`，
+本模块是仓库内部的第一方子插件（与 `notify/` 同形制）：包名 `adg-delegate`，在**全局层**注册工具 `delegate`，
 让调度智能体在**每一次委派**时现给子代理指定工具集合与 persona —— 平台 `@deepseek-ai/dsh-tool-subagent`
 做不到这一点（它已在 0.2.x 删掉 per-child 的 persona / toolFilter：委派缝隙里没有入口，官方口径是"配进 Agent Preset"）。
-本插件保住这个能力的载体是**能力面窗口**：预留 `childId` 后，在子代理的**建立窗口**（`agent/created`，即 `startActivation` 返回之前）把 `tools.restrict` 与 persona 段贴上去 —— 等返回再贴就晚了，子代理首轮会带着从 preset 继承来的调度者 persona（设计见 [design.md](design.md) 的 I7b / I16）。装载形状与 `notify/`、`permission/`
+本插件保住这个能力的载体是**能力面窗口**：预留 `childId` 后，在子代理的**建立窗口**（`agent/created`，即 `startActivation` 返回之前）把 `tools.restrict` 与 persona 段贴上去 —— 等返回再贴就晚了，子代理首轮会带着从 preset 继承来的调度者 persona（设计见 [design.md](design.md) 的 I7b / I16）。装载形状与 `notify/`
 同一种（稳定副本 + profile 的 `file:` 依赖 + `dsh.profile.bundles`），验证判据在 [testing-guide.md](testing-guide.md)。
 
 ## 命令
@@ -16,7 +16,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 ```
 
 `node --test` 默认按测试文件起子进程跑用例，而受限沙箱里跨进程的管道 stdio 会被拦（EPERM）；
-`--test-isolation=none` 让用例在同一个进程里跑，绕开那一层（`browser/`、`permission/`、`desktop/`
+`--test-isolation=none` 让用例在同一个进程里跑，绕开那一层（`browser/`、`desktop/`
 加这个 flag 是同一条口径）。
 
 **自测前提**：可选 peer `@deepseek-ai/dsh-tools` 要能被 Node 解析到。本机实测的解析桥在
@@ -31,8 +31,8 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 
 | # | 红线 | 理由 | 载体 |
 |---|---|---|---|
-| R1 | 禁止删掉、放宽或绕过内置 deny 名单（`agent` / `delegate` / `workflow` / `ralph` / `set_child_permission` / `ask_user_question`）：调用方在 `tools` 里点名也不许进子代理的工具面。 | 这是本插件唯一的安全边界。前四个都能**再开子代理**（`agent` 是 preset 那条静态委派行的 toolName，子代理从祖先层继承得到它；`delegate` 是本插件的动态版；`workflow` / `ralph` 是编排引擎），一放就破坏"一跳可达"，孙代理对调度者不可见、不可 steer；后两个只认 live runtime root。`notify_user` **刻意不在名单里** —— 它是单向提醒，`notify/design.md` 与 `preset/design.md` 的 R20 明确允许给子代理用。`ask_user` **也不在名单里**：它是本插件注册的第二个工具、子代理唯一的**提问通道**（owner 是派它的那个调度者），禁掉它子代理就又只能"单向喊一声 + 停手"，见 R13。 | `delegate/test/delegate.test.mjs` 的 D5（名单六个名字）与 D19（`ask_user` 不在名单里）；`delegate/lib/delegate.mjs` 的 `BUILTIN_DENY` |
-| R2 | 内置 deny 名单**必须与本次可用工具名求交**后再下发，禁止整体照发。 | 名单里可能含本 profile 未注册的名字（没装 `adg-permission` 就没有 `set_child_permission`），而平台 `tools.restrict()` 对 allow / deny 里的未知名一律抛错 —— 整次委派当场失败（根 `AGENTS.md` 红线 7 / 10 同源）。 | D2 的瘦 profile 断言 |
+| R1 | 禁止删掉、放宽或绕过内置 deny 名单（`agent` / `delegate` / `workflow` / `ralph` / `ask_user_question`）：调用方在 `tools` 里点名也不许进子代理的工具面。 | 这是本插件唯一的安全边界。前四个都能**再开子代理**（`agent` 是 preset 那条静态委派行的 toolName，子代理从祖先层继承得到它；`delegate` 是本插件的动态版；`workflow` / `ralph` 是编排引擎），一放就破坏"一跳可达"，孙代理对调度者不可见、不可 steer；后一个只认 live runtime root。`notify_user` **刻意不在名单里** —— 它是单向提醒，`notify/design.md` 与 `preset/design.md` 的 R20 明确允许给子代理用。`ask_user` **也不在名单里**：它是本插件注册的第二个工具、子代理唯一的**提问通道**（owner 是派它的那个调度者），禁掉它子代理就又只能"单向喊一声 + 停手"，见 R13。 | `delegate/test/delegate.test.mjs` 的 D5（名单五个名字）与 D19（`ask_user` 不在名单里）；`delegate/lib/delegate.mjs` 的 `BUILTIN_DENY` |
+| R2 | 内置 deny 名单**必须与本次可用工具名求交**后再下发，禁止整体照发。 | 名单里可能含本 profile 未注册的名字（例如某 profile 没装 `adg-notify` 就没有 `notify_user`），而平台 `tools.restrict()` 对 allow / deny 里的未知名一律抛错 —— 整次委派当场失败（根 `AGENTS.md` 红线 7 / 10 同源）。 | D2 的瘦 profile 断言 |
 | R3 | 禁止把未知名静默丢掉：剔除之后必须逐条写进 `tools_note`。 | 那是模型唯一能看见"我点名的名字没生效"的地方；静默丢弃会让它以为工具已经给下去了。 | D4 |
 | R4 | `run_code` 出现在 `tools` 里必须**当场抛错**（本仓库选定的口径，理由见 design.md 的 I5），不许剔除后继续。 | 平台对 allow 与 deny 两侧都为它抛错；放行会让调用方以为子代理能跑 PTC 程序。 | D6 |
 | R5 | 读不出本次可用工具名（`exec.agent.ctx.tools.view(...)` 形状不符）时必须**抛错**，不许"跳过校验继续派"。 | fail-closed：没有对照表，既保证不了内置 deny 边界（名单里可能含未注册名），也替模型挡不下未知名。唯一可接受的方向是拒绝。 | D11 |
@@ -55,7 +55,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | 改派发路径 | `design.md` 的 I4 / I9 / I10 | 平台契约：`@deepseek-ai/dsh-subagent` 的 `SubagentRuntime.startActivation` 与 `SubagentActivationSpec`；`@deepseek-ai/dsh-tool-subagent` 的同名执行路径（参考实现） |
 | 改能力面窗口（能力面载体：预留 id / `agent/created` 监听 / 三态收口） | `design.md` 的 I7 / I7b / I16 | 平台对照：`@deepseek-ai/dsh-subagent` 的 `applyChildOverrides` / `applyChildComposition`、`startLocal` 的时序，`@deepseek-ai/dsh-agent` 的 `agent/created` announce；`testing-guide.md` 的人工 review 项（`agent/created` 的时点） |
 | 改工具名或参数 | `preset/agent.cordis.yml` 的调度 persona（**唯一消费方**；`delegate` 是全局层工具名，**不需要写进 preset 的委派行**） | `tools/check-preset.mjs` 的 `KNOWN_TOOLS`（工具名要能过 preset 的静态自检） |
-| 改装载形状（目录名 / 包名 / 装法） | `install.ps1` / `install.sh`（接线在安装脚本里） | `permission/AGENTS.md` 的「跨模块路由」与 `notify/design.md` 的装载不变量（同一种装法，本模块不另立一套） |
+| 改装载形状（目录名 / 包名 / 装法） | `install.ps1` / `install.sh`（接线在安装脚本里） | `notify/design.md` 的装载不变量（同一种装法，本模块不另立一套） |
 | 改「读不出可用工具名」的降级口径 | `design.md` 的 I6 | `testing-guide.md` 的人工 review 项；根 `AGENTS.md` 的「诚实原则」 |
 
 ## 版本区

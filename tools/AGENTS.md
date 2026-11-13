@@ -29,8 +29,8 @@ node tools/resolve-flavor.mjs --billion-context --save-token                    
 
 ## 红线
 
-1. **ERROR 只留"这次委派必然抛错"的情形**（例：`allow` 里写了未注册的工具名 ⇒ `restrict()` 抛 `names unknown global tool ...`）。策略性越界（`agent` / `delegate` / `set_child_permission`）与条件性注册的名字（`bash` / `read_image` / `subagent_codex` / `subagent_claude_code`）只能判 WARN。
-   来源：`restrict()` 未知名直接抛的实现；载体：[机检] 夹具 A 插 `not_a_tool_name` / `workflow` / `ralph` ⇒ exit `1`（这两个名字不在 composition 的注册面里），插 `set_child_permission` / `bash` ⇒ exit `0` 且各一条 WARN（[`testing-guide.md`](testing-guide.md) 用例 `T-1`）。
+1. **ERROR 只留"这次委派必然抛错"的情形**（例：`allow` 里写了未注册的工具名 ⇒ `restrict()` 抛 `names unknown global tool ...`）。策略性越界（`agent` / `delegate`）与条件性注册的名字（`bash` / `read_image` / `subagent_codex` / `subagent_claude_code`）只能判 WARN。
+   来源：`restrict()` 未知名直接抛的实现；载体：[机检] 夹具 A 插 `not_a_tool_name` / `workflow` / `ralph` ⇒ exit `1`（这两个名字不在 composition 的注册面里），插 `bash` ⇒ exit `0` 且各一条 WARN（[`testing-guide.md`](testing-guide.md) 用例 `T-1`）。
 2. **禁止把"取值等于某个数"写成判错**：体积旋钮一律用插件出厂默认值，`FACTORY_DEFAULTS` 只在报告里当对照。
    来源：preset 侧体积闸门那次压测的实测后果——截断与提前压缩会把工具**已经取到**的事实切掉；载体：[人] 全文检索 `check-preset.mjs` 是否存在"取值 == 期望值"的比较（`FACTORY_DEFAULTS` 不得参与任何 `fail()` 分支）。
 3. **改 composition 的 tool 行必须同步 `KNOWN_TOOLS`**：composition 有而清单无 ⇒ 合法名字被误报；清单有而 composition 无 ⇒ 坏配置被放过（运行期 `restrict()` 抛 `names unknown global tool ...`）。

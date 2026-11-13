@@ -29,7 +29,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | D2 | `planToolFilter` / `delegate` + 假子代理 | `tools` 省略 ⇒ 假子代理的 `restrict` 收到只有 `deny` 的滤镜（没有 `allow` 键）；瘦 profile（`['Read','delegate']`）⇒ deny 只有 `delegate`；`tools` 回显 `[]`；note 以「未过滤」开头 | I1 / I2 | D2 |
 | D3 | 同上 | 给清单 ⇒ `allow` 与 `deny` 同时下发，`allow` 只留清单里的可用名（+ 平台续接通道 `send_message`，I17） | I1 / I17 | D3 |
 | D4 | 同上 | 未知名剔除、同名去重、`ignored` 保持点名顺序、逐条进 `tools_note`；空字符串这种坏值抛错 | I3 | D4 |
-| D5 | 同上 | 六个内置名被点名也不进 `allow`（且仍在 `deny` 里）；`notify_user` **不在**名单里、可以进 `allow`；`tools: []`（瘦 profile，无 `send_message`）⇒ `allow: []` + 「空清单」 | I1 / I17 | D5 |
+| D5 | 同上 | 五个内置名被点名也不进 `allow`（且仍在 `deny` 里）；`notify_user` **不在**名单里、可以进 `allow`；`tools: []`（瘦 profile，无 `send_message`）⇒ `allow: []` + 「空清单」 | I1 / I17 | D5 |
 | D6 | 同上 | `run_code` ⇒ 抛错（消息含 `run_code` 与「PTC 传输保留名」），且发生在调用任何服务之前（`startActivation` 零调用、`restrict` 零调用） | I5 | D6 |
 | D7 | `assertCallerAgent` / `delegate` | 没有 `exec.agent` ⇒ 抛错；缺 `subagents` 服务 ⇒ 报清楚是哪个服务 | — | D7 |
 | D8 | `buildRequest` | request 键恰为 `['prompt','parent']`；`label` / `signal` 不进 request（它们在 `SubagentActivationSpec` 上）；persona / toolFilter / maxDepth 都**不进** request | I7 / I8 / I16 | D8 |
@@ -103,7 +103,7 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 **未观测**：`agent/created` 是否**恒**在 `startLocal` 返回之前送达（I7b）—— 若平台把子代理的 announce 推迟到投递之后，本插件的建立窗口就会落空、退回创建后窗口，子代理首轮仍会带着调度者 persona；量法：真实会话里委派一次**不给 persona** 的子代理，让它**首轮就**报告自己的 persona 段（应当没有调度者 persona 残留）与工具面（应当已按 `tools_note` 裁过），若首轮不合口径就查 `settlement.status` 是否为 `pending`。
 **未观测**：`view` 的非公开性（类型面是 `private`，本机解析到的实现里是原型方法）在 dsh 升级后是否还成立；量法：升级后跑 `cd delegate && node --test test`，再做一次真实委派，看是否抛 I6 的自诊断错。
 **未观测**：scope key 约定（`exec.agent` 就是 scope key）在别的 dsh 版本里是否也成立 —— 不成立会**静默**退化成"只有全局层"的对照表；量法：真实会话里用 `tools: ["Read"]` 委派一次，断言 `tools_note` 没有把 `Read` 列为忽略。
-**未观测**：内置 deny 六个名字与真实 profile 的交集；量法：装齐 `adg-permission` / `adg-notify` 后委派一次，断言不抛 unknown-name 错，并在 `list_agents` 上确认该子代理的工具面里没有这六个名字（`notify_user` 例外：它不在名单里，给了就该出现）。
+**未观测**：内置 deny 五个名字与真实 profile 的交集；量法：在新会话里委派一次（`tools` 里点名这五个名字），断言不抛 unknown-name 错，并在 `list_agents` 上确认该子代理的工具面里没有这五个名字（`notify_user` 例外：它不在名单里，给了就该出现）。
 **未观测**：persona 的遮蔽净效果；量法：真派一次带 persona 的子代理，读它会话日志里的 `deployment:persona-prefix` 段，确认部署 persona 没有残留。
 **未观测**：并发多条委派时对照表读数的稳定性；量法：并发派两条，断言两条的 `tools` / `tools_note` 一致。
 **未观测**：`ask_user` 的登录墙端到端链路（子代理开有头窗口 → 直接问用户 → 用户在卡片上作答 → 答复回到子代理 → 它自己复核登录态并继续）；量法：在真站点登录墙前派一次带 `ask_user` 的浏览器委派，读转写：它这一轮调的是 `ask_user` 还是 `notify_user`、卡片落在哪个会话、拿到答复后有没有先复核登录态再继续。

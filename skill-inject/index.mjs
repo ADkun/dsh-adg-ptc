@@ -16,7 +16,7 @@
 //      `skillInjectSubagent` 关着（默认）时子代理拿到空正文，开着才拿到同一段框架。
 //      闸门放在内容层 ⇒ 设置保存后下一次组装系统提示词就生效，不用重启 dsh。
 //
-// 入口形状与 notify/permission/delegate 同款（契约三件套 name / inject / apply）：
+// 入口形状与 notify/delegate 同款（契约三件套 name / inject / apply）：
 //   - `name` 必须与 cordis.patch.yml 里 insert 行的 `id` 一致；
 //   - `inject: ['systemPrompt']` —— 只依赖系统提示词注册表，别的什么都不碰。
 //

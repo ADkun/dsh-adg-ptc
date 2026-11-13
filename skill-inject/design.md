@@ -65,7 +65,7 @@ last_reviewed: 2026-11-10
 
 **为什么不写在 preset composition 里（R2 的机理）**：`agent-preset-registry` 的 `composeFrom()` 把子代理的 scope **直接** `bindScopeParent(key, generation.key)` 绑到 preset generation scope —— 子代理与调度者离组合层都是 1 步，scope 链深度区分不了二者；`ScopedLayers.chainLayers(scope)` 沿链合并，composition 里注册的任何 scoped section 对调度者与子代理同时生效。所以"注入给谁"只能在**全局层**挂监听、逐 agent 判定后挂到 `agent.ctx`。
 
-### 装载链（与 notify/permission 同一种）
+### 装载链（与 notify 同一种）
 
 ```
 skill-inject/（仓库源） --install.* 第 2b-4 步--> ~/.dsh/plugins/adg-skill-inject/（稳定副本）

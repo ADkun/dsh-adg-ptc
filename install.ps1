@@ -326,55 +326,12 @@ if ($SkipPackages) {
   }
 }
 
-# ── 2b-1. permission/ 插件（set_child_permission 工具）────────────────────────
-# 与 2b 同形（普通插件包、file: 依赖、用户根下的稳定副本），但**消费方不同**：
-# 这个工具只给调度智能体用，不进任何一次委派的 tools（子代理本来就不该有子代理）。
-# 所以漏装的后果不是派发时报 `names unknown global tool`，而是调度者需要改权限时调到一个
-# 不存在的工具 —— 同样必须装，同样必须重启 dsh 才注册。
-$permSrc = Join-Path $here 'permission'
-$permDest = Join-Path $root 'plugins\adg-permission'
-$permNote = ''
-$permSkipped = $false
-# 4c-3 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
-$permInProfile = ''
-if ($SkipPackages) {
-  $permNote = '跳过（-SkipPackages）'
-  $permSkipped = $true
-} elseif (-not (Test-Path -LiteralPath (Join-Path $permSrc 'package.json'))) {
-  $permNote = "未找到 $permSrc，跳过 permission/ 插件部署"
-  $permSkipped = $true
-} else {
-  # 本清单与 permission/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
-  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。本插件没有 cli.mjs。
-  New-Item -ItemType Directory -Force -Path (Join-Path $permDest 'lib') | Out-Null
-  $permFiles = @('index.mjs', 'lib\permission.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
-  $permCopied = 0
-  $permMissing = @()
-  foreach ($rel in $permFiles) {
-    $from = Join-Path $permSrc $rel
-    if (-not (Test-Path -LiteralPath $from)) { $permMissing += $rel; continue }
-    $to = Join-Path $permDest $rel
-    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
-    if ($same) { continue }
-    Copy-Item -Force -LiteralPath $from -Destination $to
-    $permCopied += 1
-  }
-  if ($permMissing.Count -gt 0) {
-    $permNote = "permission/ 部署不完整：源里缺 $($permMissing -join ', ')"
-    $permSkipped = $true
-  } elseif ($permCopied -gt 0) {
-    $permNote = "permission/ 插件 -> $permDest（本次更新 $permCopied 个文件）"
-  } else {
-    $permNote = "permission/ 插件 -> $permDest（已是最新，无需拷贝）"
-  }
-}
-
 # ── 2b-2. delegate/ 插件（delegate 工具）─────────────────────────────────────
-# 与前两段同形（普通插件包、file: 依赖、用户根下的稳定副本），但**它现在是唯一的委派入口**：
+# 与前一段同形（普通插件包、file: 依赖、用户根下的稳定副本），但**它现在是唯一的委派入口**：
 # preset 的 delegation 组里只有一行 `agent`，子代理干什么 / 能用哪些工具 / 带不带 persona
 # 全由调度智能体在每次委派时通过 `delegate` 现定。漏装的后果不是"某个子代理少个工具"，
 # 而是**整套委派机制不存在** —— 调度者手上没有任何能开子代理的工具。
-# 它不进任何 allow（子代理的永禁名单里有 delegate / set_child_permission / ask_user_question /
+# 它不进任何 allow（子代理的永禁名单里有 delegate / ask_user_question /
 # agent），所以"装着 preset bundle 的 profile 必须同时装着 adg-delegate"这条不变量只有本脚本在守。
 $delegateSrc = Join-Path $here 'delegate'
 $delegateDest = Join-Path $root 'plugins\adg-delegate'
@@ -785,39 +742,8 @@ foreach ($name in $Profiles) {
     }
   }
 
-  # 4c-2. adg-permission 插件（set_child_permission）也装进这个 profile。
-  # 与 4c 同形（file: 依赖 + reconcile），但它**不是** allow 的硬依赖：这个工具不进任何 allow
-  # （子代理本来就不该有子代理），只有调度智能体用。所以漏装的后果不是派发时抛
-  # `names unknown global tool`，而是 persona 让调度者去调一个不存在的工具 —— 同样要如实报告。
-  if ($permSkipped) {
-    $installNotes += "$name : adg-permission 未部署（$permNote）—— 调度者改子代理权限时会调到一个不存在的工具"
-  } else {
-    $permInProfile = Join-Path $profileDir "node_modules\adg-permission\package.json"
-    $permNeedInstall = -not (Test-Path -LiteralPath $permInProfile)
-    if (-not $permNeedInstall) {
-      $installNotes += "$name : adg-permission 已经在 node_modules 里"
-    } elseif (-not $dshInvoke) {
-      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-permission 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$permDest`""
-    } else {
-      Push-Location $profileDir
-      try {
-        # 同 4a / 4c：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
-        $permLog = Join-Path $profileDir 'pnpm-adg-permission.log'
-        cmd /c "$dshInvoke plugin --profile $name add `"file:$permDest`" > `"$permLog`" 2>&1"
-        $permExit = $LASTEXITCODE
-      } finally { Pop-Location }
-      if (Test-Path -LiteralPath $permInProfile) {
-        Remove-Item -LiteralPath $permLog -Force -ErrorAction SilentlyContinue
-        $installNotes += "$name : 已装 adg-permission（dsh plugin add exit $permExit）"
-      } else {
-        $installNotes += "$name : adg-permission 没装进 $profileDir（dsh plugin add exit $permExit）—— 关掉 dsh 后重跑本脚本（日志 $permLog）"
-        if (Test-Path -LiteralPath $permLog) { Write-Host (Get-Content -LiteralPath $permLog -Raw -Encoding UTF8) }
-      }
-    }
-  }
-
   # 4c-4. adg-delegate 插件（delegate）—— 本 profile 的**唯一委派入口**。
-  # 与 4c / 4c-2 同形（file: 依赖 + reconcile）。漏装的后果最重：preset 的 delegation 组里
+  # 与 4c 同形（file: 依赖 + reconcile）。漏装的后果最重：preset 的 delegation 组里
   # 只有一行 `agent`，而开子代理的工具（delegate）根本不在 preset 里 —— 它在全局层。所以
   # "装了 bundle 却没装 adg-delegate"的 profile 里，调度者手上没有任何能委派的工具，整套
   # Adg PTC 模式退回成单智能体（不报错，只是静默失去能力）—— 必须在这里如实报告。
@@ -882,28 +808,7 @@ foreach ($name in $Profiles) {
     }
   }
 
-  # 4c-3. 同样读回来断言 adg-permission 的三格（判据与 4c-1 一样：node_modules 真目录 + dependencies + dsh.profile.bundles）。
-  # 它**不是** allow 的硬依赖，所以"缺一格"的症状不是派发时报错，而是调度者真要用 `set_child_permission` 时
-  # 调到一个不存在的工具 —— 一样必须在安装这一步就暴露出来，不能留到用户切完权限才发现。
-  if (-not $permSkipped) {
-    $permReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
-    $permDepLine = @($permReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-permission' }).Count -gt 0
-    $permListedLine = @($permReread.dsh.profile.bundles) -contains 'adg-permission'
-    $permPkgName = ''
-    if (Test-Path -LiteralPath $permInProfile) {
-      $permPkgName = (Get-Content -LiteralPath $permInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
-    }
-    if ($permPkgName -ne 'adg-permission') { $permNeedInstall = $true }
-    if ($permDepLine -and $permListedLine -and ($permPkgName -eq 'adg-permission')) {
-      $installNotes += "$name : adg-permission 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
-    } elseif ($permPkgName -eq 'adg-permission') {
-      $installNotes += "$name : adg-permission 包在位，但 manifest 缺一格（dependencies=$permDepLine / dsh.profile.bundles=$permListedLine）—— 手工补上再重启"
-    } else {
-      $installNotes += "$name : adg-permission **没装进 node_modules**（dependencies=$permDepLine / dsh.profile.bundles=$permListedLine）—— 调度者改子代理权限时会调到一个不存在的工具"
-    }
-  }
-
-  # 4c-5. 同样读回来断言 adg-delegate 的三格（判据与 4c-1 / 4c-3 一样）。
+  # 4c-5. 同样读回来断言 adg-delegate 的三格（判据与 4c-1 一样）。
   # 它是**整套委派机制**的载体，症状最隐蔽：装漏了不报错，只是调度者开不了子代理。
   if (-not $delegateSkipped) {
     $delegateReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -1149,7 +1054,6 @@ if (Test-Path -LiteralPath $installSrc) {
 # lib\user-settings.mjs 漏进了 notify 的拷贝清单）。这里统一报出来。
 foreach ($spec in @(
     @{ Pkg = 'adg-notify'; Dest = $notifyDest },
-    @{ Pkg = 'adg-permission'; Dest = $permDest },
     @{ Pkg = 'adg-delegate'; Dest = $delegateDest },
     @{ Pkg = 'adg-settings'; Dest = $settingsDest },
     @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
@@ -1180,8 +1084,7 @@ Write-Host "  browser -> $browserNote"
 Write-Host "  desktop -> $desktopNote"
 Write-Host "  install -> $installNote（安装脚本自己的稳定副本；repo 里改完 install.ps1 记得一起带过去）"
 Write-Host "  notify  -> $notifyNote（notify_user 工具；每个 profile 的安装结果见下面 profile 行）"
-Write-Host "  permission -> $permNote（set_child_permission 工具；只有调度智能体拿得到，子代理拿不到）"
-Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / set_child_permission / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
+Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
 Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 Write-Host "  turn-bookmarks -> $tbNote（轮次书签：每轮末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线；跳转仍走 dsh 原生轨道按钮；书签存会话目录 sidecar，不注册工具）"
@@ -1193,7 +1096,6 @@ Write-Host "（preset 走的是一条独立的 patch 层：`dsh --profile <name>
 Write-Host "（browser/ 与 desktop/ 工具链又是另一回事：用户根下的普通文件，重新跑本脚本即生效，不用重启 dsh。）"
 Write-Host "  desktop 的自检：node `"$desktopDest\cli.mjs`" profile —— 要真正驱动普通用户窗口，得在完全权限的会话里调它。"
 Write-Host "（adg-notify 插件：装了之后必须重启 dsh 才注册 —— loader 会按解析路径缓存 ES 模块。）"
-Write-Host "（adg-permission 插件：同样要重启 dsh 才注册；它不进任何 allow —— 只有调度智能体用。）"
 Write-Host "（adg-delegate 插件：同样要重启 dsh 才注册；它是唯一的委派入口 —— 没它调度者开不了子代理。）"
 Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启后设置里才会出现「Adg 设置」；没装它只是少一页设置，通知的出厂默认照旧。）"
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
