@@ -144,9 +144,7 @@ function addContextToolsNote(source, specs) {
   const flags = specs.map((spec) => spec.flag).join(' ')
   const packages = specs.map((spec) => spec.package).join(' 与 ')
   const names = specs.flatMap((spec) => spec.tools)
-  const reasons = specs.map((spec) => spec.sourceReason).join('；')
   const pronoun = specs.length > 1 ? '它们' : '它'
-  const pluginWord = specs.length > 1 ? '这些插件' : '这个插件'
   const personaAt = lines.findIndex((line) => /^- id: persona\s*$/.test(line))
   if (personaAt < 0) {
     fail(`找不到 \`- id: persona\` 行：${flags} 要往调度 persona 里加一段委派说明，检查 preset/agent.cordis.yml 的 identity 段是否被改动`)
@@ -173,7 +171,7 @@ function addContextToolsNote(source, specs) {
   if (anchorAt < 0) {
     fail(`调度 persona 的 prefix 里找不到 \`      ## 约束\` 行：${flags} 的注入锚点必须是它（检查那段是否被改写）`)
   }
-  const note = `      ${NOTE_MARKER}（${flags} 生成）**：这次会话装了 ${packages}，${pronoun}注册在全局层的 ${names.join(' / ')} 已经在你的工具目录里（PTC 下你在 \`run_code\` 里用 ${names.map((name) => `\`tools.${name}({...})\``).join(' / ')} 调它们）—— **每一次委派都要把这几个名字一并写进 \`tools\`**：子代理的 \`tools\` 是硬边界，没写进那一次委派它就看不见（它自己也在 PTC 里，写程序调得到但目录里没有这个名字就调不到），而它会从工具结果里收到要求它调用这几个工具的提示（${reasons}）。没装${pluginWord}的会话里那几个名字根本不存在，但你不需要判断：\`delegate\` 会把没生效的名字逐条写进 \`tools_note\`，不会让委派失败。`
+  const note = `      ${NOTE_MARKER}（${flags} 生成）**：这次会话装了 ${packages}，${pronoun}注册在全局层的 ${names.join(' / ')} 已经在你的工具目录里（PTC 下你在 \`run_code\` 里用 ${names.map((name) => `\`tools.${name}({...})\``).join(' / ')} 调它们）—— **每一次委派都要把这几个名字一并写进 \`tools\`**。`
   lines.splice(anchorAt, 0, note, '')
   return `${lines.join('\n')}\n`
 }
