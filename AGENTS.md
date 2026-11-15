@@ -1,12 +1,12 @@
 # AGENTS.md — dsh-adg-ptc
 
-Adg PTC 模式：一份 DSH agent preset（**一个调度智能体 + 它按需派出的通用子代理** —— 子代理的目标、边界、验收标准与工具面都在委派那一刻由调度者经第一方插件工具 `delegate` 现给，**没有固定专家名册**），外加两个本机操作工具链（`browser/`：默认无头的 Chromium 系浏览器驱动 + 最小 CDP 驱动；`desktop/`：零依赖的 Windows 桌面操控 CLI —— 截屏 / 窗口与 UIA 枚举 / SendInput 合成输入 / 语义 invoke，**要真正驱动普通用户窗口必须跑在完全权限会话里**）、六个仓库内部第一方子插件（`notify/`：包名 `adg-notify`、注册工具 `notify_user`，Windows toast 提醒；`delegate/`：包名 `adg-delegate`、注册工具 `delegate`，**唯一的委派入口** —— 只有调度者能用，每次委派现给那一个子代理的目标与工具面；`settings/`：包名 `adg-settings`，**不注册任何工具**，在「设置」里注册一页 **Adg 设置**（登记表驱动的框架，现承载**七条登记**、四种 kind（boolean / string / integer / enum）：通知三项 + 框架注入四项 —— 注入开关 / **注入哪个框架**（enum，`'elegant'` | `'thinking'` | `'execution'`，默认执行框架）/ 是否也注入子代理（默认关）/ 自定义注入正文，写出 `adg-settings.json`）；`skill-inject/`：包名 `adg-skill-inject`，**不注册任何工具**，把框架正文注入 Adg 调度者的系统提示词 —— 非 `adg-ptc` preset 一律不注入；注入**哪一份**由设置键 `skillInjectFramework` 在三份技能文件（`elegant-framework` / `thinking-framework` / `execution-framework`）之间选（**默认执行框架**），子代理是否也注入由设置键 `skillInjectSubagent` 决定（默认关 ＝ 与改动前一致：只注入调度者）；`ptc-parallel/`：包名 `adg-ptc-parallel`，**不注册任何工具**，在全局层给 PTC 呈现的 agent（调度者与子代理都算）注册一段「PTC 并行执行」的系统提示词 —— 末尾那份可并发/独占清单每次组装提示词时现算，不写死工具名）；`turn-bookmarks/`：包名 `adg-turn-bookmarks`，**不注册任何工具**，在每轮回答末尾放一颗星标 —— 收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加一道粉线（左键跳转仍由 dsh 原生的轨道按钮负责，星标单击或轨道右键切换收藏），书签存在每个会话自己目录下的 sidecar `adg-turn-bookmarks.json`）、九份用户技能（`skills/`；其中 `elegant-framework` / `thinking-framework` / `execution-framework` 三份的正文由 `adg-skill-inject` 按设置键选一份注入调度者系统提示词，出厂默认执行框架）、一个静态自检脚本与一个把 preset 源文件生成成 bundle 的构建脚本、两个安装脚本。
+Adg PTC 模式：一份 DSH agent preset（**一个调度智能体 + 它按需派出的通用子代理** —— 子代理的目标、边界、验收标准与工具面都在委派那一刻由调度者经第一方插件工具 `delegate` 现给，**没有固定专家名册**），外加两个本机操作工具链（`browser/`：默认无头的 Chromium 系浏览器驱动 + 最小 CDP 驱动；`desktop/`：零依赖的 Windows 桌面操控 CLI —— 截屏 / 窗口与 UIA 枚举 / SendInput 合成输入 / 语义 invoke，**要真正驱动普通用户窗口必须跑在完全权限会话里**）、七个仓库内部第一方子插件（`notify/`：包名 `adg-notify`、注册工具 `notify_user`，Windows toast 提醒；`delegate/`：包名 `adg-delegate`、注册工具 `delegate`，**唯一的委派入口** —— 只有调度者能用，每次委派现给那一个子代理的目标与工具面；`settings/`：包名 `adg-settings`，**不注册任何工具**，在「设置」里注册一页 **Adg 设置**（登记表驱动的框架，现承载**七条登记**、四种 kind（boolean / string / integer / enum）：通知三项 + 框架注入四项 —— 注入开关 / **注入哪个框架**（enum，`'elegant'` | `'thinking'` | `'execution'`，默认执行框架）/ 是否也注入子代理（默认关）/ 自定义注入正文，写出 `adg-settings.json`）；`skill-inject/`：包名 `adg-skill-inject`，**不注册任何工具**，把框架正文注入 Adg 调度者的系统提示词 —— 非 `adg-ptc` preset 一律不注入；注入**哪一份**由设置键 `skillInjectFramework` 在三份技能文件（`elegant-framework` / `thinking-framework` / `execution-framework`）之间选（**默认执行框架**），子代理是否也注入由设置键 `skillInjectSubagent` 决定（默认关 ＝ 与改动前一致：只注入调度者）；`ptc-parallel/`：包名 `adg-ptc-parallel`，**不注册任何工具**，在全局层给 PTC 呈现的 agent（调度者与子代理都算）注册一段「PTC 并行执行」的系统提示词 —— 末尾那份可并发/独占清单每次组装提示词时现算，不写死工具名）；`turn-bookmarks/`：包名 `adg-turn-bookmarks`，**不注册任何工具**，在每轮回答末尾放一颗星标 —— 收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加一道粉线（左键跳转仍由 dsh 原生的轨道按钮负责，星标单击或轨道右键切换收藏），书签存在每个会话自己目录下的 sidecar `adg-turn-bookmarks.json`）；`harness-identity/`：包名 `adg-harness-identity`，**不注册任何工具**，在全局层监听 agent 创建、对每个 `adg-ptc` preset 的 agent（调度者与子代理都算）在**它自己的 scope** 上注册一个同名（`harness:identity`）空文本系统提示词 section，覆盖掉平台固定加在系统提示词最开头的那一行 `You are an AI agent, powered by DeepSeek Harness.` —— 那一行被完全去掉（不替换成别的话、不留空行；含子代理；新模块见 `harness-identity/AGENTS.md`））、九份用户技能（`skills/`；其中 `elegant-framework` / `thinking-framework` / `execution-framework` 三份的正文由 `adg-skill-inject` 按设置键选一份注入调度者系统提示词，出厂默认执行框架）、一个静态自检脚本与一个把 preset 源文件生成成 bundle 的构建脚本、两个安装脚本。
 
 本文件是**给改这个仓库的人/agent 看的路由入口**：只写常驻内容（命令、红线、模块地图、质量门），设计细节一律下沉到模块文档。**给人看的项目总览与安装/使用说明在 `README.md`**（改任何东西之前先读它对应的小节）。
 
 ## 命令
 
-零运行时依赖；只要求 Node（`browser/package.json`、`desktop/package.json`、`notify/package.json`、`delegate/package.json`、`skill-inject/package.json`、`ptc-parallel/package.json` 与 `turn-bookmarks/package.json` 都声明 `>= 22`）。仓库根没有 `package.json`、没有 monorepo 构建、没有 lint 配置。
+零运行时依赖；只要求 Node（`browser/package.json`、`desktop/package.json`、`notify/package.json`、`delegate/package.json`、`skill-inject/package.json`、`ptc-parallel/package.json`、`turn-bookmarks/package.json` 与 `harness-identity/package.json` 都声明 `>= 22`）。仓库根没有 `package.json`、没有 monorepo 构建、没有 lint 配置。
 
 ```sh
 # preset 静态自检（零依赖，逐行文本扫描）：exit 0 通过 / 1 有 ERROR / 2 读不到目标文件。
@@ -49,6 +49,7 @@ node tools/gen-preset-bundle.mjs
 | `skill-inject/` 任何文件 | 重装子插件 + **重启 dsh** + **新 Adg 会话**（步骤号见 `install.ps1` / `install.sh` 的 2b-4 / 4c-8 / 4c-9；运行中的旧 agent 不补挂 —— section 在 agent 创建那一刻注册） | `cd skill-inject && node --test test`；再在新 Adg 会话里核对系统提示词出现下拉选中那份技能文件的正文（出厂＝执行框架正文首行「### 执行框架 BEGIN」）、派出的子代理系统提示词里默认没有它（`skillInjectSubagent` 默认关；打开后子代理也有，不需重启，判据见 `skill-inject/testing-guide.md` 的 M 系列） |
 | `ptc-parallel/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-6 / 4c-12 / 4c-13；运行中的旧 agent 不补挂 —— section 在 agent 创建那一刻注册；子代理的 scope 同样会被判定） | `cd ptc-parallel && node --test test`；再在新 PTC 会话里核对系统提示词出现「## PTC 并行执行（一次 run_code 里多做）」段、派出的子代理系统提示词里**也有**这一段（判据见 `ptc-parallel/testing-guide.md` 的 M 系列） |
 | `turn-bookmarks/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-7 / 4c-14 / 4c-15；`install.sh` 不管本模块） | `cd turn-bookmarks && node --test test`；再在重启后的新会话里聊过 3 轮、收藏一轮，核对右侧轨道条变粉、左键点它跳到该轮、右键点它切换收藏、正文提问行左侧出现粉线（判据见 `turn-bookmarks/testing-guide.md` 的「未观测项」） |
+| `harness-identity/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-8 / 4c-16 / 4c-17；运行中的旧 agent 不补挂 —— section 在 agent 创建那一刻注册；`install.sh` 不管本模块） | `cd harness-identity && node --test test`；再在新 Adg 会话里读系统提示词，确认开头没有 `You are an AI agent, powered by DeepSeek Harness.` 一行（子代理也无，判据见 `harness-identity/testing-guide.md` 的 M1 / M2） |
 | `delegate/` 任何文件 | 重装子插件 + **重启 dsh** + 新会话（装进 profile 的步骤号见本文件「Context Loading」表的 `delegate` 行） | `cd delegate && node --test test`；再在新会话里让调度者用一次 `delegate`（给 `description` / `prompt` 与要拿的工具名），核对返回的 `tools` / `tools_note` 与子代理实际拿到的工具面 |
 | composition 里写的 `@deepseek-ai/*` 包名 | 包名会随 dsh 升级**改名**，改完必须真实挂载 | `agentPresets.resolve('adg-ptc')` 的 `.broken` 为空；用旧名会报 `… never started` |
 | `browser/` 任何文件 | **重新跑一次 `install.*` 即生效，不用重启** —— 它是用户根下的普通文件，不是 preset 也不是插件 | `node "${DSH_HOME:-~/.dsh}/browser/cli.mjs" profile` |
@@ -69,6 +70,7 @@ node tools/gen-preset-bundle.mjs
 | `desktop/` | 零依赖的 **Windows 桌面操控 CLI**（唯一入口 `cli.mjs` + 随附 PowerShell 桥 `scripts/bridge.ps1`）：截屏 / 窗口与 UIA 枚举 / SendInput 合成输入 / 语义 invoke。**Windows 专用**；注入类命令的成功判据是可观测差异，不是 `SendInput` 的返回值（命令清单与判据见 `desktop/design.md`） | `desktop/AGENTS.md` |
 | `turn-bookmarks/` | 仓库内部第一方子插件 **`adg-turn-bookmarks`**：给每轮回答末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线（星标单击或轨道右键切换收藏；不注册任何工具、不改 dsh 的目录栏组件与跳转；书签落会话目录 sidecar `adg-turn-bookmarks.json`，宿主半边用一条同源栅栏路由读写它；DOM 契约与不变量见 `turn-bookmarks/design.md`） | `turn-bookmarks/AGENTS.md` |
 | `ptc-parallel/` | 仓库内部第一方子插件 **`adg-ptc-parallel`**：给 **PTC 呈现的 agent**（调度者与子代理都算）注入一段「PTC 并行执行」的系统提示词（不注册任何工具；按 scope 的呈现模式逐 agent 判定，末尾那份可并发/独占清单每次组装时现算、不写死工具名；判据与不变量见 `ptc-parallel/design.md`） | `ptc-parallel/AGENTS.md` |
+| `harness-identity/` | 仓库内部第一方子插件 **`adg-harness-identity`**：逐 agent 在 `agent.ctx` 上注册同名 `harness:identity` 空文本 section，覆盖平台全局固定开场白 `You are an AI agent, powered by DeepSeek Harness.`，把它从系统提示词里完全去掉（不注册任何工具；按 preset 身份 `adg-ptc` 逐 agent 判定、含子代理；覆盖机制见 `harness-identity/design.md`） | `harness-identity/AGENTS.md` |
 
 **新建模块的登记义务**：在 Project Map 加一行（唯一的登记点），并按「三信号」判断要不要给新模块建 `AGENTS.md`（有独立命令 / 有模块特有红线 / 需要跨模块路由，三者有其一方建）。
 
@@ -82,7 +84,7 @@ node tools/gen-preset-bundle.mjs
 |---|---|
 | `AGENTS.md`（本文件） | 根入口：路由（命令 / 红线 / 生效方式 / 模块地图 / 版本区 / 质量门） |
 | `README.md` | 人向总览：项目是什么、怎么装、怎么用、怎么排错 |
-| `preset/`、`tools/`、`browser/`、`desktop/`、`notify/`、`delegate/`、`settings/`、`skill-inject/`、`ptc-parallel/`、`turn-bookmarks/` 各自的 `AGENTS.md` → `design.md` → `testing-guide.md` | 模块三件套：路由 → 设计（不变量）→ 验证（用例全表与未观测项） |
+| `preset/`、`tools/`、`browser/`、`desktop/`、`notify/`、`delegate/`、`settings/`、`skill-inject/`、`ptc-parallel/`、`turn-bookmarks/`、`harness-identity/` 各自的 `AGENTS.md` → `design.md` → `testing-guide.md` | 模块三件套：路由 → 设计（不变量）→ 验证（用例全表与未观测项） |
 | `skills/adg-delegation/SKILL.md`（另有 `adg-browser-use` / `adg-computer-use` / `adg-grill-me` / `adg-session-handoff` / `adg-doc-criterion` / `elegant-framework` / `thinking-framework` / `execution-framework`） | 九份用户技能：委派能力与工具面映射 / 浏览器 / 桌面 / 方案压测访谈 / 会话交接提示词 / 文档工程师角色规范 / 优雅框架、思考框架、执行框架（这三份的正文由 `adg-skill-inject` 按设置键 `skillInjectFramework` 三选一注入调度者系统提示词，出厂默认执行框架，技能文件是正文的事实源） |
 | `docs-work/`（**临时工作目录，不在版本区**） | 过程件（changelog / handoff / pending / 工作稿 / 证据快照）；滚动更新、可被清理，任务交付前清空 |
 
@@ -95,7 +97,7 @@ node tools/gen-preset-bundle.mjs
 | 只是把它装到本机 | `README.md` 的「安装」→「给 AI 的安装指令」两节（后者是可直接粘给 AI 的完整步骤） |
 | 改这个仓库的某一块 | 本文件的「Project Map」定位模块 → 该模块的 `AGENTS.md` → 它的 `design.md`；改完按模块 `testing-guide.md` 与本文件的「Quality Gates」验 |
 | 刚接手、什么都还不知道 | 本文件（红线 + Project Map）→ `README.md`（项目是什么、装与用）→ 你要动的那一块的模块文档 |
-| 拿不准某条结论能不能当已成立的前提用 | 各模块文档里就地写明的 `**未观测**：…；量法：…` 条目（在 `preset/`、`tools/`、`browser/`、`desktop/`、`notify/`、`delegate/`、`settings/`、`ptc-parallel/`、`turn-bookmarks/` 各自的 `design.md` 与 `testing-guide.md` 里搜 `**未观测**：`）—— 未观测的前提不许当成已成立 |
+| 拿不准某条结论能不能当已成立的前提用 | 各模块文档里就地写明的 `**未观测**：…；量法：…` 条目（在 `preset/`、`tools/`、`browser/`、`desktop/`、`notify/`、`delegate/`、`settings/`、`ptc-parallel/`、`turn-bookmarks/`、`harness-identity/` 各自的 `design.md` 与 `testing-guide.md` 里搜 `**未观测**：`）—— 未观测的前提不许当成已成立 |
 
 **诚实原则（现行规范）**：**未观测不许写成实测，也不许写成"不可观测"** —— 每条未观测结论必须写出量法与可复跑的判据，就地写成一行 `**未观测**：<问题>；量法：<怎么测>`。引用别人记载的实测必须写明来源，**不得写成自己验证过**；**文档只描述当前项目状态**：版本区文档不写变更叙述 —— 变更史由 git 提交历史承担；过程件的落点与清理口径只在本文件「版本区（文档目录入口）」一节定义一次，别处只指回它。若某条"未观测"的依据已被本机日志或脚本推翻，**处置权在人** —— 报出来，不要自己按旧口径照抄。
 
@@ -129,6 +131,7 @@ node tools/gen-preset-bundle.mjs
 | 改框架注入（判据 / 降级 / section 位置 / 选哪份技能文件） | `skill-inject/AGENTS.md` → `skill-inject/design.md` | `skill-inject/testing-guide.md`；section 名 / order / 目标 preset 的常量只在 `skill-inject/lib/section.mjs`；装进 profile 的步骤见 `install.ps1` / `install.sh` 的 2b-4 / 4c-8 / 4c-9 步 |
 | 改 PTC 并行执行提示（PTC 判据 / section 位置 / 正文与动态工具清单） | `ptc-parallel/AGENTS.md` → `ptc-parallel/design.md` | `ptc-parallel/testing-guide.md`；正文常量与判定口径只在 `ptc-parallel/lib/guide.mjs`；装进 profile 的步骤见 `install.ps1` 的 2b-6 / 4c-12 / 4c-13 步（`install.sh` 不管本模块） |
 | 改轮次书签（上色选择器 / 存储 / 路由） | `turn-bookmarks/AGENTS.md` → `turn-bookmarks/design.md` | `turn-bookmarks/testing-guide.md`；存储形状的唯一规则源是 `turn-bookmarks/lib/bookmarks.mjs`；装进 profile 的步骤见 `install.ps1` 的 2b-7 / 4c-14 / 4c-15 步（`install.sh` 不管本模块） |
+| 改去除系统提示词固定开场白（覆盖机制 / section 名 / preset 判定） | `harness-identity/AGENTS.md` → `harness-identity/design.md` | `harness-identity/testing-guide.md`；section 名 / order / 目标 preset 的常量只在 `harness-identity/lib/section.mjs`；装进 profile 的步骤见 `install.ps1` 的 2b-8 / 4c-16 / 4c-17 步（`install.sh` 不管本模块） |
 | 改浏览器那一段委派口径（模式 / 登录态 / 权限闸门） | `preset/design.md` 的「核心数据模型」里 SchedulerPersona 一节（浏览器模式闸门的选择理由在 `preset/agent.cordis.yml` 调度 persona 的 `【浏览器：模式】` 段） | `browser/AGENTS.md`（它消费的命令行契约）→ 根 `README.md` 的「浏览器工具链与登录态资产」一节 → 改完 `node tools/check-preset.mjs` |
 | 只是想装到本机 | `README.md` 的「安装」一节 | `install.sh` / `install.ps1` |
 | 改文档 | `adg-doc-criterion` 技能 | 本文件的「版本区」一节 |
@@ -146,6 +149,7 @@ node tools/gen-preset-bundle.mjs
 | 委派插件 | 机检：`cd delegate && node --test test`（沙箱里加 `--test-isolation=none`）；再在**新会话**里让调度者真用一次 `delegate` | 单元测试全绿；返回的 `tools` / `tools_note` 与子代理实际拿到的工具面一致（点名未知名要被逐条剔除并记进 `tools_note`，点 `run_code` 当场抛错） |
 | PTC 并行提示插件 | 机检：`cd ptc-parallel && node --test test`（沙箱里加 `--test-isolation=none`）；改了判据、section 或正文再在**新 PTC 会话**里核对系统提示词出现「## PTC 并行执行（一次 run_code 里多做）」段（子代理那侧也应有） | 单元测试全绿；动态工具清单随各 agent 当前可见的工具变化（清单不写死在正文里） |
 | 轮次书签插件 | 机检：`cd turn-bookmarks && node --test test`（沙箱里加 `--test-isolation=none`）；改了选择器或映射再在**重启后的新会话**里按 `turn-bookmarks/testing-guide.md` 的「未观测项」逐条核（轨道变粉 / 点击跳转 / 正文粉线 / 星标出现与取消 / 刷新后仍在） | 单元测试全绿；未观测项逐条与期望一致 |
+| 去除开场白插件 | 机检：`cd harness-identity && node --test test`（沙箱里加 `--test-isolation=none`）；改了覆盖机制、section 名或判定再在**重启后的新 Adg 会话**里核对系统提示词开头没有 `You are an AI agent, powered by DeepSeek Harness.` 一行（调度者与子代理两侧都看） | 单元测试全绿；调度者与子代理都没有该行、且无多余空行 |
 | 设置页框架 | 机检：`cd settings && node --test test`（沙箱里加 `--test-isolation=none`）与 `cd notify && node --test test`（消费方契约在两边各钉一份，改任一侧都要两边都绿）；再在**重启后的 dsh** 里打开设置看「Adg 设置」页 | 两边单元测试全绿；页面能读当前生效值（含来源）/ 改一项保存 / 恢复默认，刷新后仍然生效 |
 | 桌面工具链 | 机检：`cd desktop && node --test test`（沙箱里加 `--test-isolation=none`）；改了注入路径再按 `desktop/testing-guide.md` 的「交付前的最小闭环」在**完全权限**会话里跑一次真机闭环 | 单元测试全绿；真机闭环每步的 `CHANGED=` / `CURSOR_LANDED=` 与期望一致（只用 `--dry-run` 证明不了注入） |
 | 文档合规 | 评/机检：按 `adg-doc-criterion` 技能的质量红线清单逐条自检；`AGENTS.md` 的 Project Map 与「版本区」表要覆盖本仓库全部模块与文档 | 逐条通过；行数在 `adg-doc-criterion` 技能给的预算内（量法：`node -e "const f=process.argv[1],s=require('fs').readFileSync(f,'utf8');console.log(s.split('\n').length-(s.endsWith('\n')?1:0))" <文件>`，当场读，读数不作锚） |

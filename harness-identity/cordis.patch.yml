@@ -1,0 +1,14 @@
+# adg-harness-identity 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层）：它注册的不是工具、而是逐 agent 的系统提示词覆盖，
+# 由插件自己在 agent/created 时**逐 agent** 判定（preset 身份是否 adg-ptc）后挂到那个 agent
+# 自己的 scope 上 —— 调度者与子代理各自判定、各自覆盖。
+# 覆盖的对象是平台在 global 层注册的固定开场白 section（name='harness:identity'，正文
+# "You are an AI agent, powered by DeepSeek Harness."）：同名 scoped section 覆盖 global 同名项，
+# 正文为空 ⇒ renderPrompt 丢弃空段 ⇒ 该行消失、不留空行。
+# 不写进 preset/agent.cordis.yml 的理由：preset 侧不挂 system-prompt 服务；且本段要按 agent 判定。
+#
+# 行 `id` 必须等于 index.mjs 的 `export const name`；`name` 是包名（无版本）。
+- insert:
+    - id: adg-harness-identity
+      name: adg-harness-identity

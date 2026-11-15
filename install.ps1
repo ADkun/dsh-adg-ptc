@@ -558,6 +558,52 @@ if ($SkipPackages) {
   }
 }
 
+# ── 2b-8. harness-identity/ 插件（去除系统提示词固定开场白）────────────────────────────
+# 与 2b / 2b-1..2b-7 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
+# 它不注册任何工具：在 agent/created 时判定"这个 agent 是不是 adg-ptc preset"，是就在那个
+# agent 自己的 agent.ctx 上注册一个**与平台固定开场白同名（harness:identity）、正文为空**的
+# 系统提示词 section —— scoped 同名 section 覆盖 global 同名那条，空文本在渲染时被丢弃，
+# 于是系统提示词开头那一行 'You are an AI agent, powered by DeepSeek Harness.' 被完全去掉
+# （不替换成别的话、不留空行；调度者与子代理都算）。
+# 漏装的症状是：系统提示词开头仍有那一行（退回平台默认），不报错。
+$harnessSrc = Join-Path $here 'harness-identity'
+$harnessDest = Join-Path $root 'plugins\adg-harness-identity'
+$harnessNote = ''
+$harnessSkipped = $false
+# 4c-16 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
+$harnessInProfile = ''
+if ($SkipPackages) {
+  $harnessNote = '跳过（-SkipPackages）'
+  $harnessSkipped = $true
+} elseif (-not (Test-Path -LiteralPath (Join-Path $harnessSrc 'package.json'))) {
+  $harnessNote = "未找到 $harnessSrc，跳过 harness-identity/ 插件部署"
+  $harnessSkipped = $true
+} else {
+  # 本清单与 harness-identity/package.json 的 `files` 字段**故意不同**：多一个 `package.json`
+  # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。有子目录 lib\，先建出来。
+  New-Item -ItemType Directory -Force -Path (Join-Path $harnessDest 'lib') | Out-Null
+  $harnessFiles = @('index.mjs', 'lib\section.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
+  $harnessCopied = 0
+  $harnessMissing = @()
+  foreach ($rel in $harnessFiles) {
+    $from = Join-Path $harnessSrc $rel
+    if (-not (Test-Path -LiteralPath $from)) { $harnessMissing += $rel; continue }
+    $to = Join-Path $harnessDest $rel
+    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
+    if ($same) { continue }
+    Copy-Item -Force -LiteralPath $from -Destination $to
+    $harnessCopied += 1
+  }
+  if ($harnessMissing.Count -gt 0) {
+    $harnessNote = "harness-identity/ 部署不完整：源里缺 $($harnessMissing -join ', ')"
+    $harnessSkipped = $true
+  } elseif ($harnessCopied -gt 0) {
+    $harnessNote = "harness-identity/ 插件 -> $harnessDest（本次更新 $harnessCopied 个文件）"
+  } else {
+    $harnessNote = "harness-identity/ 插件 -> $harnessDest（已是最新，无需拷贝）"
+  }
+}
+
 # ── 3. preset bundle：四种味道全部生成 → 各自落到自己的稳定位置（每 profile 只 link 一份）──
 # preset 是一个 **bundle**：仓库里的 preset\ 是唯一文本真相源，本脚本每次安装都重跑生成器
 # 把它编译成 bundle\adg-*\cordis.patch.yml，再拷进 $DSH_HOME\bundles\ 下的四个稳定目录。
@@ -1031,6 +1077,56 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-turn-bookmarks **没装进 node_modules**（dependencies=$tbDepLine / dsh.profile.bundles=$tbListedLine）—— 星标与目录栏染色都不生效"
     }
   }
+
+  # 4c-16. adg-harness-identity 插件（去除系统提示词固定开场白）也装进这个 profile。
+  # 与 4c-8 / 4c-12 / 4c-14 同形（file: 依赖 + reconcile）。漏装的后果：系统提示词开头仍有
+  # 'You are an AI agent, powered by DeepSeek Harness.' 那一行（退回平台默认），不报错 ——
+  # 所以同样要如实报告。装了之后还要**重启 dsh**（插件在 agent/created 时才注册）。
+  if ($harnessSkipped) {
+    $installNotes += "$name : adg-harness-identity 未部署（$harnessNote）—— 系统提示词开头仍会有平台默认开场白那一行"
+  } else {
+    $harnessInProfile = Join-Path $profileDir "node_modules\adg-harness-identity\package.json"
+    $harnessNeedInstall = -not (Test-Path -LiteralPath $harnessInProfile)
+    if (-not $harnessNeedInstall) {
+      $installNotes += "$name : adg-harness-identity 已经在 node_modules 里"
+    } elseif (-not $dshInvoke) {
+      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-harness-identity 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$harnessDest`""
+    } else {
+      Push-Location $profileDir
+      try {
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-12 / 4c-14：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        $harnessLog = Join-Path $profileDir 'pnpm-adg-harness-identity.log'
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$harnessDest`" > `"$harnessLog`" 2>&1"
+        $harnessExit = $LASTEXITCODE
+      } finally { Pop-Location }
+      if (Test-Path -LiteralPath $harnessInProfile) {
+        Remove-Item -LiteralPath $harnessLog -Force -ErrorAction SilentlyContinue
+        $installNotes += "$name : 已装 adg-harness-identity（dsh plugin add exit $harnessExit）"
+      } else {
+        $installNotes += "$name : adg-harness-identity 没装进 $profileDir（dsh plugin add exit $harnessExit）—— 关掉 dsh 后重跑本脚本（日志 $harnessLog）"
+        if (Test-Path -LiteralPath $harnessLog) { Write-Host (Get-Content -LiteralPath $harnessLog -Raw -Encoding UTF8) }
+      }
+    }
+  }
+
+  # 4c-17. 读回来断言 adg-harness-identity 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-13 / 4c-15 一样）。
+  if (-not $harnessSkipped) {
+    $harnessReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    $harnessDepLine = @($harnessReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-harness-identity' }).Count -gt 0
+    $harnessListedLine = @($harnessReread.dsh.profile.bundles) -contains 'adg-harness-identity'
+    $harnessPkgName = ''
+    if (Test-Path -LiteralPath $harnessInProfile) {
+      $harnessPkgName = (Get-Content -LiteralPath $harnessInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
+    }
+    if ($harnessPkgName -ne 'adg-harness-identity') { $harnessNeedInstall = $true }
+    if ($harnessDepLine -and $harnessListedLine -and ($harnessPkgName -eq 'adg-harness-identity')) {
+      $installNotes += "$name : adg-harness-identity 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
+    } elseif ($harnessPkgName -eq 'adg-harness-identity') {
+      $installNotes += "$name : adg-harness-identity 包在位，但 manifest 缺一格（dependencies=$harnessDepLine / dsh.profile.bundles=$harnessListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-harness-identity **没装进 node_modules**（dependencies=$harnessDepLine / dsh.profile.bundles=$harnessListedLine）—— 系统提示词开头那一行不会被去掉"
+    }
+  }
 }
 
 # 第 6 步：把脚本拷到用户根下的稳定副本。
@@ -1058,7 +1154,8 @@ foreach ($spec in @(
     @{ Pkg = 'adg-settings'; Dest = $settingsDest },
     @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
     @{ Pkg = 'adg-ptc-parallel'; Dest = $parallelDest },
-    @{ Pkg = 'adg-turn-bookmarks'; Dest = $tbDest })) {
+    @{ Pkg = 'adg-turn-bookmarks'; Dest = $tbDest },
+    @{ Pkg = 'adg-harness-identity'; Dest = $harnessDest })) {
   if (-not (Test-Path -LiteralPath $spec.Dest)) { continue }
   $expected = @()
   foreach ($f in Get-ChildItem -LiteralPath $spec.Dest -Recurse -File) {
@@ -1089,6 +1186,7 @@ Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三�
 Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 Write-Host "  turn-bookmarks -> $tbNote（轮次书签：每轮末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线；跳转仍走 dsh 原生轨道按钮；书签存会话目录 sidecar，不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
+Write-Host "  harness-identity -> $harnessNote（去除系统提示词固定开场白：给每个 adg-ptc 的 agent 在自己的 scope 上注册同名 harness:identity 空文本 section，覆盖掉平台开头固定那行 'You are an AI agent, powered by DeepSeek Harness.'；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
 Write-Host ""
 Write-Host "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
@@ -1101,6 +1199,7 @@ Write-Host "（adg-settings 插件：同样要重启 dsh 才注册 —— 重启
 Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— 重启后新建的 Adg 会话系统提示词里才有框架段；运行中的旧会话不补挂。它随第 1 节的技能拷贝一起工作：技能正文更新后重跑本脚本 + 重启即换。）"
 Write-Host "（adg-ptc-parallel 插件：同样要重启 dsh 才注册 —— 而且 section 是在 agent 创建那一刻挂上的，所以运行中的旧会话不补挂：重启 dsh + 新建对话才看得到。子代理的 scope 同样会被判定，工具清单按每个 agent 当前可见的工具现算。）"
 Write-Host "（adg-turn-bookmarks 插件：同样要重启 dsh 才注册；浏览器那半随 web 客户端加载，重启后新建会话才看得到星标。收藏状态存在会话自己目录下的 adg-turn-bookmarks.json，删会话即一起删。）"
+Write-Host "（adg-harness-identity 插件：同样要重启 dsh 才注册 —— section 是在 agent 创建那一刻挂上的，运行中的旧会话不补挂：重启 dsh + 新建对话后系统提示词最开头才没有 'You are an AI agent, powered by DeepSeek Harness.' 一行。子代理的 scope 同样会被判定。）"
 if ($packageFailed) {
   Write-Host ""
   Write-Host "注意：至少有一步 pnpm 没成功，$bundleName 可能还没装进 profile（上面的 profile 行里写明了）。" -ForegroundColor Yellow

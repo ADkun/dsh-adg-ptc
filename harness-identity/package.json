@@ -1,0 +1,40 @@
+{
+  "name": "adg-harness-identity",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 去除系统提示词固定开场白插件：给 adg-ptc 的每个 agent（调度者与子代理）在各自 scope 上注册同名空文本 'harness:identity' section，覆盖平台固定添加的 'You are an AI agent, powered by DeepSeek Harness.' 一行（不注册任何工具）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/section.mjs": "./lib/section.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/section.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "system-prompt"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

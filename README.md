@@ -2,7 +2,7 @@
 
 一份 DSH 自建 agent preset：**一个调度智能体 + 它按需派出的通用子代理**。你把需求说给调度智能体，它判断范围后自己用 `delegate` 在**每一次委派时现定**：这一次子代理干什么、给哪些工具、什么边界、什么验收标准。子代理做完把结果交回来由它汇总。**一跳可达**：子代理不能再开子代理（`delegate` 的内置 deny 名单 + 平台深度默认 1），带与带之间的越界也由调度者续派。
 
-另外八件一起装的东西：
+另外十件一起装的东西：
 
 - **`delegate/`** —— 仓库内部第一方子插件 `adg-delegate`，在**全局层**注册工具 `delegate`，而且**只有调度智能体拿得到**：它让调度者对**每一次委派**现定 `description` / `prompt` / `tools`（工具名数组；缺省＝让它继承全部）/ 可选 `persona`（平台语义是**遮蔽**该子代理的部署 persona，不是追加）/ `background`（缺省 `true` ＝ continuable 可续跑）。五个内置 deny 名**永不进子代理的工具面**：`agent` / `delegate` / `workflow` / `ralph` / `ask_user_question`；`notify_user` **刻意可以**给子代理（单向提醒，让撞上登录墙的子代理自己喊人）。它同时注册**第二个工具 `ask_user`** —— 子代理的**提问通道**：子代理调用它时，问题以**派它的那个调度者**为 owner 交给用户提问服务，卡片就落在**你与调度者对话的这个会话**里；你答完，答案直接回到子代理手上、它当场接着干（不是"喊一声就停手"）。点名的未知名逐条写进返回的 `tools_note`；点名 `run_code` 当场抛错；
 - **`browser/`** —— 默认无头的 Chromium 系浏览器驱动（Chrome / Brave / Edge 探测）+ 最小 CDP 驱动，零第三方依赖，是**拿到浏览器工具链的那次委派**实际用的工具链；
@@ -11,6 +11,8 @@
 - **`settings/`** —— 仓库内部第一方子插件 `adg-settings`：在「设置」里注册一页 **Adg 设置**，把 `adg-notify` 的**三项行为**（**通知默认标题** / **响提示音** / **通知常驻**）与 `adg-skill-inject` 的**四项行为**（**注入框架** 开关 / **注入哪个框架**（优雅框架 / 思考框架 / 执行框架三选一，**默认执行框架**）/ **同时注入子代理** 开关（默认关）/ **自定义注入正文**）做成可配置项，改动写进 `${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`（优先当前 profile 目录；本机实际就是 `<profile>\adg-settings.json`），**保存后立即生效、不用重启**（没有这项设置时通知走出厂默认）。它同时是一套**登记表驱动的框架**：加一项配置只需在 `settings/lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `settings/client.js` 的 DICT 补两条文案（zh/en），宿主与客户端逻辑都不用改 —— 详见下方「设置页（Adg 设置）」一节；
 - **`skill-inject/`** —— 仓库内部第一方子插件 `adg-skill-inject`：把框架正文注入 **Adg 会话（调度智能体，以及开启「同时注入子代理」后的子代理）**的系统提示词 —— 不依赖模型自觉去 read（persona 级的"先读技能"指令已被证过不可靠），系统提示词不参与折叠，"不许压缩"由机制天然满足。正文默认取执行框架 `skills/execution-framework/SKILL.md`（可在「设置 → Adg 设置」里切到优雅框架 `skills/elegant-framework/SKILL.md` 或思考框架 `skills/thinking-framework/SKILL.md`），也可在那一页换成自定义正文；**输入框左侧那颗「注入」开关**控制开关（与设置页同一个值，点一下即写盘、下一轮请求生效）。**只在 Adg PTC 模式注入**：按 preset 身份（`adg-ptc`）逐 agent 判定，其他 preset 的会话一律不注入；子代理要不要也带这一段，由设置项「**同时注入子代理**」决定（默认关 —— 关着时只有调度者有）。不注册任何工具；
 - **`turn-bookmarks/`** —— 仓库内部第一方子插件 `adg-turn-bookmarks`：**不注册任何工具**，在每一轮回答末尾放一颗星标 —— 点一下把这一轮收藏，已收藏的轮次在**右侧目录栏的轨道条**上染成粉色、正文里该轮提问行左侧加一道粉线；再点一下取消（也可以直接在**轨道条上右键**切换收藏/取消，左键仍是 dsh 原生跳转，插件不拦）。跳转仍走 dsh 原生的轨道按钮（本插件只染色，不改目录栏组件）。书签存在**每个会话自己目录**下的 sidecar `adg-turn-bookmarks.json`（宿主半边一条同源栅栏路由读写它），所以删会话时书签跟着一起删；细节与边界见 `turn-bookmarks/design.md`；
+- **`ptc-parallel/`** —— 仓库内部第一方子插件 `adg-ptc-parallel`：**不注册任何工具**，给 **PTC 呈现的 agent（调度者与子代理都算）**注入一段「PTC 并行执行」的系统提示词 —— 说清无依赖的调用该在**一次 `run_code` 里一次全发**；末尾那份**可并发 / 独占清单每次组装提示词时现算**（按该 agent 当前可见的工具），不写死工具名；
+- **`harness-identity/`** —— 仓库内部第一方子插件 `adg-harness-identity`：**不注册任何工具**，在**每个 `adg-ptc` 的 agent（调度者与子代理都算）自己的 scope** 上注册一个与平台固定开场白**同名（`harness:identity`）、正文为空**的系统提示词 section —— scoped 同名 section 覆盖 global 同名那条、空文本在渲染时被丢弃，于是系统提示词**最开头那一行** `You are an AI agent, powered by DeepSeek Harness.` 被**完全去掉**（不替换成别的话、不留空行；含子代理）；
 - **`skills/`** —— 九份技能，装到 `${DSH_HOME:-~/.dsh}/skills/`，按**渐进式披露**承载可复用经验（用法：调度者把技能文件的**绝对路径**写进委派 prompt，要子代理先 `read` 再动手）：
   - `adg-delegation` —— 给**调度智能体**看：能力带 → 建议工具面 / 建议 persona 要点 / 边界的映射表，以及怎么给 `tools` 与 `persona`、一跳可达、材料中转、验收判定；
   - `adg-browser-use` —— 给**拿到浏览器工具链的子代理**看：`cli.mjs` 用法、默认无头与换模式的不变量、登录墙人工协议、profile 是资产、标签页纪律、**必须完全权限**与三家浏览器的失败签名去哪看；
@@ -76,6 +78,8 @@ powershell -ExecutionPolicy Bypass -File $HOME\dsh-adg-ptc\install.ps1   # Windo
 | `settings/` | 稳定副本（`plugins/adg-settings/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-3 / 4c-6 / 4c-7 步做的就是这个） | **重启 dsh** 后设置里才出现「Adg 设置」那一页；**页面里的改动保存即生效，不用重启** |
 | `skill-inject/` | 稳定副本（`plugins/adg-skill-inject/`，9 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-4 / 4c-8 / 4c-9 步做的就是这个） | **重启 dsh** + 新 Adg 会话 |
 | `turn-bookmarks/` | 稳定副本（`plugins/adg-turn-bookmarks/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.ps1` 的 2b-7 / 4c-14 / 4c-15 步做的就是这个；`install.sh` 不管本模块） | **重启 dsh** + 新会话 |
+| `ptc-parallel/` | 稳定副本（`plugins/adg-ptc-parallel/`，7 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.ps1` 的 2b-6 / 4c-12 / 4c-13 步做的就是这个；`install.sh` 不管本模块） | **重启 dsh** + 新 PTC 会话（子代理那侧也有该段） |
+| `harness-identity/` | 稳定副本（`plugins/adg-harness-identity/`，7 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.ps1` 的 2b-8 / 4c-16 / 4c-17 步做的就是这个；`install.sh` 不管本模块） | **重启 dsh** + 新会话后系统提示词开头才没有 `You are an AI agent, powered by DeepSeek Harness.` 一行 |
 
 ## 味道：一份源文件，四种生成物
 
@@ -228,7 +232,7 @@ node "$env:DSH_HOME\browser\cli.mjs" close       # 唯一让登录态落盘的�
 node tools/check-preset.mjs
 ```
 
-通过（exit 0）即可。动了哪个模块就再跑那个模块的测试：`cd delegate && node --test test`、`cd browser && node --test test`、`cd desktop && node --test test`、`cd notify && node --test test`、`cd permission && node --test test`、`cd settings && node --test test`、`cd skill-inject && node --test test`（DSH 沙箱里一律加 `--test-isolation=none`）。自检还会核对承载体积旋钮的那三行是否完好（行在、包名对、没被关掉、`config:` 里没有插件不认识的键）；本 preset 刻意不覆盖任何旋钮，所以它打印出来的是插件出厂默认值。
+通过（exit 0）即可。动了哪个模块就再跑那个模块的测试：`cd delegate && node --test test`、`cd browser && node --test test`、`cd desktop && node --test test`、`cd notify && node --test test`、`cd permission && node --test test`、`cd settings && node --test test`、`cd skill-inject && node --test test`、`cd ptc-parallel && node --test test`、`cd turn-bookmarks && node --test test`、`cd harness-identity && node --test test`（DSH 沙箱里一律加 `--test-isolation=none`）。自检还会核对承载体积旋钮的那三行是否完好（行在、包名对、没被关掉、`config:` 里没有插件不认识的键）；本 preset 刻意不覆盖任何旋钮，所以它打印出来的是插件出厂默认值。
 
 ## 设置页（Adg 设置）
 
@@ -278,7 +282,7 @@ node tools/check-preset.mjs
 
 ## 许可
 
-`preset` 的包清单（`preset/bundle.package.json`）与 `notify/`、`delegate/`、`settings/`、`skill-inject/`、`ptc-parallel/`、`turn-bookmarks/` 的包清单都声明 **MIT**。仓库里没有单独的 `LICENSE` 文件；以包清单里的字段为准。
+`preset` 的包清单（`preset/bundle.package.json`）与 `notify/`、`delegate/`、`settings/`、`skill-inject/`、`ptc-parallel/`、`turn-bookmarks/`、`harness-identity/` 的包清单都声明 **MIT**。仓库里没有单独的 `LICENSE` 文件；以包清单里的字段为准。
 
 ## 未观测
 
@@ -299,5 +303,5 @@ node tools/check-preset.mjs
 9. **装 `skill-inject/` 子插件**：同样拷一个稳定副本（9 个文件：`index.mjs` / `client.js` / `lib/section.mjs` / `lib/user-settings.mjs` / `cordis.patch.yml` / `package.json` / `AGENTS.md` / `design.md` / `testing-guide.md`）+ `dsh plugin --profile <p> add "file:<稳定副本>"` + 读回清单确认三格齐（`install.*` 的第 2b-4 / 4c-8 / 4c-9 步做的就是这个）。它**不注册任何工具**：在 agent 创建时按 preset 身份判定（preset 为 `adg-ptc` 才会注入），是就按设置项「**注入哪个框架**」在三份技能之间选一份（`skills/elegant-framework/SKILL.md` / `skills/thinking-framework/SKILL.md` / `skills/execution-framework/SKILL.md`，**出厂默认执行框架**），把它的**正文**直接注入该 agent 的系统提示词 —— 不依赖模型自觉 read；其他 preset 的会话一律不注入，子代理要不要也注入由设置项「**同时注入子代理**」决定（默认关）。它依赖第 5 步拷的技能文件；正文与开关**每次组装系统提示词时重新求值**（设置页改完下一轮就换）。
 10. **拷两个本机操作工具链**：`<tempdir>/browser/` → `${DSH_HOME:-~/.dsh}/browser/`、`<tempdir>/desktop/` → `${DSH_HOME:-~/.dsh}/desktop/`（`install.*` 的第 2 / 2c 步做的就是这个：**先删后拷整个目录**）。两者都是用户根下的普通文件，重跑安装脚本即生效、**不用重启**；但 `desktop/` 还有前提 —— 要真正驱动普通用户窗口，**调用它的那一次会话必须是完全权限**，否则 UIPI 会静默拦下合成输入。
 11. **校验（只有真实挂载算证据）**：挂一个注入 `agentPresets` 的临时插件，按「真实挂载验证」一节那三条判据核 —— `.broken` 必须为空、`list()` 里能看到 `adg`、`compositionInventory()` 里**恰好一条**启用委派行（`agent`）且没有 `tool-subagent-fork` 行（它报的是**模块名**：`@deepseek-ai/dsh-tool-subagent` 出现 3 次＝1 条启用 + 两条 `disabled: true`，按"出现次数 = 委派行数"断言会误报失败）。也可以直接 `node <tempdir>/tools/check-preset.mjs`（exit 0 表示通过），但它只是**文本扫描器**，上面那条真实挂载的校验不能省。
-12. 明确告诉用户：**preset 改动与装了的那几个子插件（`notify/` / `delegate/` / `settings/` / `skill-inject/` / `ptc-parallel/` / `turn-bookmarks/` —— 后两者只有 `install.ps1` 装）都按"重启 dsh + 新会话"验收**（已挂载的会话不会中途换组合）。重启后在新建对话里选择「Adg PTC 模式」。
+12. 明确告诉用户：**preset 改动与装了的那几个子插件（`notify/` / `delegate/` / `settings/` / `skill-inject/` / `ptc-parallel/` / `turn-bookmarks/` / `harness-identity/` —— 后三者只有 `install.ps1` 装）都按"重启 dsh + 新会话"验收**（已挂载的会话不会中途换组合）。重启后在新建对话里选择「Adg PTC 模式」。
 13. 明确告诉用户：可复用的能力/经验都做成 `skills/<名字>/SKILL.md`，装到 `${DSH_HOME:-~/.dsh}/skills/` 后**热加载、立即生效、不用重启**；要让某次委派用上某份技能，就把它的**绝对路径**写进委派 prompt、要子代理先 `read`。
