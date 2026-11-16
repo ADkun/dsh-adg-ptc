@@ -36,7 +36,7 @@ last_reviewed: 2026-11-10
 ### 两个入口、一份真相（开关与正文）
 
 ```text
-设置页「Adg 设置」 ──┐
+侧边栏「Adg 设置」 ──┐
                     ├─ GET/POST /api/adg-settings/settings ──> <profile>/adg-settings.json
 输入框「注入」chip ──┘                                        └─ sectionTextNow() 每次组装重读
 ```

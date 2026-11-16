@@ -8,8 +8,8 @@
 - **`browser/`** —— 默认无头的 Chromium 系浏览器驱动（Chrome / Brave / Edge 探测）+ 最小 CDP 驱动，零第三方依赖，是**拿到浏览器工具链的那次委派**实际用的工具链；
 - **`desktop/`** —— 零依赖的 **Windows 桌面操控 CLI**（唯一入口 `cli.mjs` + 随附桥 `scripts/bridge.ps1`）：截屏 / 窗口与 UIA 枚举 / `SendInput` 合成输入 / 元素自带 UIA pattern 的语义操作 / 动作前后的可观测差异复核，是**拿到桌面工具链的那次委派**那条"真能点按钮"的路；**Windows 专用**，而且**要驱动普通用户窗口，调用它的那一次会话必须是完全权限** —— 受限会话的 Low 完整性级别会被 UIPI 拦下、且是**静默**丢事件，所以注入类命令只认可观测差异（`CHANGED=` / `CURSOR_LANDED=`）、不认 `SendInput` 的返回值；
 - **`notify/`** —— 仓库内部第一方子插件 `adg-notify`，注册工具 `notify_user`（Windows 桌面提醒，**单向不阻塞**；默认存活时间 **0 ＝ 常驻**，toast 走 `scenario="reminder"`，不再自己消失）；
-- **`settings/`** —— 仓库内部第一方子插件 `adg-settings`：在「设置」里注册一页 **Adg 设置**，把 `adg-notify` 的**三项行为**（**通知默认标题** / **响提示音** / **通知常驻**）与 `adg-skill-inject` 的**四项行为**（**注入框架** 开关 / **注入哪个框架**（优雅框架 / 思考框架 / 执行框架三选一，**默认执行框架**）/ **同时注入子代理** 开关（默认关）/ **自定义注入正文**）做成可配置项，改动写进 `${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`（优先当前 profile 目录；本机实际就是 `<profile>\adg-settings.json`），**保存后立即生效、不用重启**（没有这项设置时通知走出厂默认）。它同时是一套**登记表驱动的框架**：加一项配置只需在 `settings/lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `settings/client.js` 的 DICT 补两条文案（zh/en），宿主与客户端逻辑都不用改 —— 详见下方「设置页（Adg 设置）」一节；
-- **`skill-inject/`** —— 仓库内部第一方子插件 `adg-skill-inject`：把框架正文注入 **Adg 会话（调度智能体，以及开启「同时注入子代理」后的子代理）**的系统提示词 —— 不依赖模型自觉去 read（persona 级的"先读技能"指令已被证过不可靠），系统提示词不参与折叠，"不许压缩"由机制天然满足。正文默认取执行框架 `skills/execution-framework/SKILL.md`（可在「设置 → Adg 设置」里切到优雅框架 `skills/elegant-framework/SKILL.md` 或思考框架 `skills/thinking-framework/SKILL.md`），也可在那一页换成自定义正文；**输入框左侧那颗「注入」开关**控制开关（与设置页同一个值，点一下即写盘、下一轮请求生效）。**只在 Adg PTC 模式注入**：按 preset 身份（`adg-ptc`）逐 agent 判定，其他 preset 的会话一律不注入；子代理要不要也带这一段，由设置项「**同时注入子代理**」决定（默认关 —— 关着时只有调度者有）。不注册任何工具；
+- **`settings/`** —— 仓库内部第一方子插件 `adg-settings`：在左侧边栏「扩展」区注册一个入口 **Adg 设置**（点开是同名 main 面板，设置弹窗里不再保留这一页），把 `adg-notify` 的**三项行为**（**通知默认标题** / **响提示音** / **通知常驻**）与 `adg-skill-inject` 的**四项行为**（**注入框架** 开关 / **注入哪个框架**（优雅框架 / 思考框架 / 执行框架三选一，**默认执行框架**）/ **同时注入子代理** 开关（默认关）/ **自定义注入正文**）做成可配置项，改动写进 `${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`（优先当前 profile 目录；本机实际就是 `<profile>\adg-settings.json`），**保存后立即生效、不用重启**（没有这项设置时通知走出厂默认）。它同时是一套**登记表驱动的框架**：加一项配置只需在 `settings/lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `settings/client.js` 的 DICT 补两条文案（zh/en），宿主与客户端逻辑都不用改 —— 详见下方「设置页（Adg 设置）」一节；
+- **`skill-inject/`** —— 仓库内部第一方子插件 `adg-skill-inject`：把框架正文注入 **Adg 会话（调度智能体，以及开启「同时注入子代理」后的子代理）**的系统提示词 —— 不依赖模型自觉去 read（persona 级的"先读技能"指令已被证过不可靠），系统提示词不参与折叠，"不许压缩"由机制天然满足。正文默认取执行框架 `skills/execution-framework/SKILL.md`（可在「左侧边栏 → 扩展 → Adg 设置」里切到优雅框架 `skills/elegant-framework/SKILL.md` 或思考框架 `skills/thinking-framework/SKILL.md`），也可在那一页换成自定义正文；**输入框左侧那颗「注入」开关**控制开关（与设置页同一个值，点一下即写盘、下一轮请求生效）。**只在 Adg PTC 模式注入**：按 preset 身份（`adg-ptc`）逐 agent 判定，其他 preset 的会话一律不注入；子代理要不要也带这一段，由设置项「**同时注入子代理**」决定（默认关 —— 关着时只有调度者有）。不注册任何工具；
 - **`turn-bookmarks/`** —— 仓库内部第一方子插件 `adg-turn-bookmarks`：**不注册任何工具**，在每一轮回答末尾放一颗星标 —— 点一下把这一轮收藏，已收藏的轮次在**右侧目录栏的轨道条**上染成粉色、正文里该轮提问行左侧加一道粉线；再点一下取消（也可以直接在**轨道条上右键**切换收藏/取消，左键仍是 dsh 原生跳转，插件不拦）。跳转仍走 dsh 原生的轨道按钮（本插件只染色，不改目录栏组件）。书签存在**每个会话自己目录**下的 sidecar `adg-turn-bookmarks.json`（宿主半边一条同源栅栏路由读写它），所以删会话时书签跟着一起删；细节与边界见 `turn-bookmarks/design.md`；
 - **`ptc-parallel/`** —— 仓库内部第一方子插件 `adg-ptc-parallel`：**不注册任何工具**，给 **PTC 呈现的 agent（调度者与子代理都算）**注入一段「PTC 并行执行」的系统提示词 —— 说清无依赖的调用该在**一次 `run_code` 里一次全发**；末尾那份**可并发 / 独占清单每次组装提示词时现算**（按该 agent 当前可见的工具），不写死工具名；
 - **`harness-identity/`** —— 仓库内部第一方子插件 `adg-harness-identity`：**不注册任何工具**，在**每个 `adg-ptc` 的 agent（调度者与子代理都算）自己的 scope** 上注册一个与平台固定开场白**同名（`harness:identity`）、正文为空**的系统提示词 section —— scoped 同名 section 覆盖 global 同名那条、空文本在渲染时被丢弃，于是系统提示词**最开头那一行** `You are an AI agent, powered by DeepSeek Harness.` 被**完全去掉**（不替换成别的话、不留空行；含子代理）；
@@ -75,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File $HOME\dsh-adg-ptc\install.ps1   # Windo
 | `desktop/` | `${DSH_HOME:-~/.dsh}/desktop/` | 重跑安装脚本即生效，**不用重启**（但**调用它的那一次会话**要驱动普通用户窗口必须是完全权限） |
 | `notify/` | 稳定副本 + `dsh plugin --profile <p> add "file:<稳定副本>"` | **重启 dsh** + 新会话 |
 | `delegate/` | 稳定副本 + `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-2 / 4c-4 / 4c-5 步做的就是这个） | **重启 dsh** + 新会话 |
-| `settings/` | 稳定副本（`plugins/adg-settings/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-3 / 4c-6 / 4c-7 步做的就是这个） | **重启 dsh** 后设置里才出现「Adg 设置」那一页；**页面里的改动保存即生效，不用重启** |
+| `settings/` | 稳定副本（`plugins/adg-settings/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-3 / 4c-6 / 4c-7 步做的就是这个） | **重启 dsh** 后左侧边栏「扩展」区才出现「Adg 设置」入口；**页面里的改动保存即生效，不用重启** |
 | `skill-inject/` | 稳定副本（`plugins/adg-skill-inject/`，9 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.*` 的 2b-4 / 4c-8 / 4c-9 步做的就是这个） | **重启 dsh** + 新 Adg 会话 |
 | `turn-bookmarks/` | 稳定副本（`plugins/adg-turn-bookmarks/`，8 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.ps1` 的 2b-7 / 4c-14 / 4c-15 步做的就是这个；`install.sh` 不管本模块） | **重启 dsh** + 新会话 |
 | `ptc-parallel/` | 稳定副本（`plugins/adg-ptc-parallel/`，7 个文件）+ `dsh plugin --profile <p> add "file:<稳定副本>"`（`install.ps1` 的 2b-6 / 4c-12 / 4c-13 步做的就是这个；`install.sh` 不管本模块） | **重启 dsh** + 新 PTC 会话（子代理那侧也有该段） |
@@ -236,15 +236,7 @@ node tools/check-preset.mjs
 
 ## 设置页（Adg 设置）
 
-装好 `settings/` 子插件并**重启 dsh** 之后，设置左栏会出现一页 **Adg 设置**（它只承载本仓库第一方子插件的行为开关）。当前它承载两组配置：
-
-**通知（`adg-notify`，三项）**
-
-| 配置项 | 默认 | 改掉 / 关掉之后 |
-|---|---|---|
-| 通知默认标题 | `DSH 通知` | 换成你认得出的标题；某一次 `notify_user` 自己带了 `title` 时按那次的来 |
-| 响提示音 | 开 | 关掉之后静音弹出（那一次调用显式传 `silent` 也照旧） |
-| 通知常驻 | 开 | 关掉之后按 **8 秒**存活投递（会写 `ExpirationTime`）；实测屏幕上在**约 17 秒内**消失（系统回收有粒度，见 `notify/testing-guide.md`）；开着＝常驻，直到你处理 |
+装好 `settings/` 子插件并**重启 dsh** 之后，左侧边栏「扩展」区会出现 **Adg 设置** 入口，点开是一个 main 面板（它只承载本仓库第一方子插件的行为开关）。当前它承载两组配置：
 
 **框架注入（`adg-skill-inject`，四项）**
 
@@ -254,6 +246,14 @@ node tools/check-preset.mjs
 | 注入哪个框架 | 执行框架（`execution-framework`） | 三选一：优雅框架（`elegant-framework`）、思考框架（`thinking-framework`）或执行框架（`execution-framework`）。这里选的是**用哪份技能文件**；下一行的「自定义注入正文」若填了内容，仍以那份自定义正文为准（下一轮请求即生效，不用重启） |
 | 同时注入子代理 | 关 | 打开后子代理的系统提示词里也出现所选框架段（下一轮派出的子代理即生效，不用重启）；关着时只有调度者有。默认关 —— 不开就与「只注入调度者」一样 |
 | 自定义注入正文 | 空（＝跟随技能文件） | 填了就把这段文字当框架正文注入（**不再读**选中的那份技能文件）；留空 / 全空白＝跟随技能文件；上限 20000 字符 |
+
+**通知（`adg-notify`，三项）**
+
+| 配置项 | 默认 | 改掉 / 关掉之后 |
+|---|---|---|
+| 通知默认标题 | `DSH 通知` | 换成你认得出的标题；某一次 `notify_user` 自己带了 `title` 时按那次的来 |
+| 响提示音 | 开 | 关掉之后静音弹出（那一次调用显式传 `silent` 也照旧） |
+| 通知常驻 | 开 | 关掉之后按 **8 秒**存活投递（会写 `ExpirationTime`）；实测屏幕上在**约 17 秒内**消失（系统回收有粒度，见 `notify/testing-guide.md`）；开着＝常驻，直到你处理 |
 
 **存在哪**：`${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`（**优先 profile 目录**；本机实际就是 `<profile>\adg-settings.json`，不是用户根那份。原子写；删掉它就回到出厂默认）。页面「当前生效」区逐项标出**这个值从哪来** —— 设置文件 / 插件 Config（行 `config:` 兜底）/ 内置默认，三层优先。**保存即生效、不用重启**：消费方每次调用都重新读那份文件（注入插件在每次组装系统提示词时重读，所以下一轮就换；输入框那颗「注入」开关同理，点一下就写进同一份文件）。
 
@@ -275,7 +275,7 @@ node tools/check-preset.mjs
 | 手改源文件后在名单里写了个没注册的工具名 | `dsh-tools` 的 `restrict()` 遇到未知名直接抛 `names unknown global tool …`，那一次委派当场失败；回 `node tools/check-preset.mjs` 看它报哪一行（经 `delegate` 的 `tools` 点名的未知名不会走到这里，它们被逐条写进 `tools_note`） |
 | 装的时候 `pnpm` 报文件被占用 | dsh 正在运行。要真正装/换依赖先关掉 dsh；脚本会如实报告并继续 |
 | `install.ps1` 在 Windows PowerShell 5.1 上直接解析失败 | 检查文件前三个字节是否仍是 `EF BB BF`：这个脚本**必须保留 UTF-8 BOM**，没有 BOM 时 5.1 会按系统 ANSI 代码页读它、中文变乱码 |
-| 设置里没有「Adg 设置」这一页 | 那个 profile 没装 `adg-settings` 子插件，或者装完没重启 dsh（插件是挂载期注册的）。重跑 `install.*`，读回时确认 `adg-settings` 三格齐（`node_modules` 真目录 + `dependencies` + `dsh.profile.bundles`）；重启后它出现在设置左栏 |
+| 左侧边栏「扩展」区没有「Adg 设置」入口 | 那个 profile 没装 `adg-settings` 子插件，或者装完没重启 dsh（插件是挂载期注册的）。重跑 `install.*`，读回时确认 `adg-settings` 三格齐（`node_modules` 真目录 + `dependencies` + `dsh.profile.bundles`）；重启后它出现在左侧边栏「扩展」区 |
 | 在设置页里改了通知三项，通知没变 | 三处按顺序看：①页面上「当前生效」区每项的来源是「设置文件 / 插件 Config / 内置默认」—— 写盘成功后再看它是否变成「设置文件」；②消费方是 `adg-notify`，它在**下一次 `notify_user` 调用**时才读设置文件（`${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json`，本机在 profile 目录下）（不用重启，但也不会回头改已经弹出来的那条）；③那一次调用自己带了 `title` / `silent` 参数就会压过设置页 |
 | 设置页一直显示「加载失败」 | 宿主半边没挂上：先确认那个 profile 的 `adg-settings` 三格齐、且重启过 dsh（`/api/adg-settings/settings` 是同源路由，另一个 profile 装没装不影响这一个） |
 | 想知道某个结论"量过没有" | 先看本文末尾的「未观测」一节与各模块的 `**未观测**：` 条目；都没有的就是还没量过，别当成实测 |

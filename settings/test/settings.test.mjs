@@ -156,15 +156,15 @@ test('I1: 登记表自洽 —— 键唯一、kind 合法、必备字段齐全、
   assert.deepEqual(KINDS, ['boolean', 'string', 'integer', 'enum']);
   const keys = FIELDS.map((field) => field.key);
   assert.equal(new Set(keys).size, keys.length, '键不能重名');
-  // 键集合就是那七项（通知三项 + 注入四项），顺序即页面顺序。
+  // 键集合就是那七项（注入四项 + 通知三项），顺序即页面顺序（框架注入栏在通知栏上）。
   assert.deepEqual(keys, [
-    'notifyTitle',
-    'notifySound',
-    'notifyPersist',
     'skillInjectEnabled',
     'skillInjectFramework',
     'skillInjectSubagent',
     'skillInjectText',
+    'notifyTitle',
+    'notifySound',
+    'notifyPersist',
   ]);
   for (const field of FIELDS) {
     assert.ok(KINDS.includes(field.kind), `${field.key}: kind 必须是 ${KINDS.join('/')}`);

@@ -2,11 +2,11 @@
 // 用户根的设置文件。
 //
 // 形状（与 dsh-subagent-mgm / dsh-insert-context 同一套「三件套」，本仓库不另立一套）：
-//   - 页面是客户端 half（client.js）注册的 settings.section；
+//   - 页面是客户端 half（client.js）注册的侧边栏入口 + 同名 main 面板（sidebar.panellist + main）；
 //   - 它读写的就是本文件的 `/api/adg-settings/settings`；
 //   - 值落在 `${DSH_PROFILE_DIR|DSH_HOME|~/.dsh}/adg-settings.json`（0600、原子替换）。
 //
-// 消费方**不 import 本包**，只按文件契约读自己那几项（当前只有 adg-notify 读通知三项）——
+// 消费方**不 import 本包**，只按文件契约读自己那几项（adg-notify 读通知三项、adg-skill-inject 读注入四项）——
 // 所以「保存后立即生效、不需要重启」来自「消费方每次调用都重读一次文件」，不是热重载。
 // 键名与界的真相仍在 lib/schema.mjs；本文件不写死任何一个键。
 

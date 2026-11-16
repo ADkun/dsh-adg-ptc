@@ -24,7 +24,7 @@ node tools/check-preset.mjs                            # 仓库根：preset 静�
 
 | # | 用例 | 钉住 | 判据要点 |
 |---|---|---|---|
-| 1 | I1: 登记表自洽 | I1 / I3 | 键唯一；`kind ∈ KINDS`；`labelKey`/`hintKey` 的命名约定；string 必有 `maxLength`、integer 必有 `min`/`max`；`FIELDS` 的键集合**就是**七项（通知三项 + 注入四项；技术类键不许混进来） |
+| 1 | I1: 登记表自洽 | I1 / I3 | 键唯一；`kind ∈ KINDS`；`labelKey`/`hintKey` 的命名约定；string 必有 `maxLength`、integer 必有 `min`/`max`；`FIELDS` 的键集合**就是**七项（注入四项 + 通知三项，顺序即页面顺序；技术类键不许混进来） |
 | 2 | I2: default 必过自己的 validValue | I2 | 逐条 `validValue(field, field.default) === field.default`；`DEFAULTS` 与 `FIELDS` 一致 |
 | 3 | I3: `describeFields()` 只有数据 | I4 | `JSON.parse(JSON.stringify(x))` 深等于原值 |
 | 4 | validValue: 布尔 | I2 | `true/false/'true'/'false'` 收；`'yes'/1/0/null/undefined/{}/[]` 拒 |
@@ -84,11 +84,11 @@ pwsh -File install.ps1            # 或 bash install.sh
 
 1. **包在不在**：`<DSH_HOME>/plugins/adg-settings/`（稳定副本，8 个文件）与 `<profile>/node_modules/adg-settings/package.json`（真目录）。
 2. **被选没被选**：该 profile 的 `dependencies` 与 `dsh.profile.bundles` 里都有 `adg-settings`。
-3. **运行期**：重启 dsh → 打开设置 → 左栏出现「Adg 设置」→ 这一页能读出「当前生效」七项、能保存、能恢复默认。
+3. **运行期**：重启 dsh → 左侧边栏「扩展」区出现「Adg 设置」入口 → 点开这一页能读出「当前生效」七项、能保存、能恢复默认，且设置弹窗里不再有这一页。
 
 页面上的手动验证步骤（每次改完都值得走一遍）：
 
-1. 打开「Adg 设置」→ 七项显示**出厂默认**（标题「DSH 通知」、声音开、常驻开、注入开、**注入框架＝执行框架（execution-framework）**、同时注入子代理关、自定义正文空），「当前生效」的每格写「来自内置默认」。
+1. 打开「Adg 设置」→ 页面自上而下先「框架注入」后「通知」，七项显示**出厂默认**（注入开、**注入框架＝执行框架（execution-framework）**、同时注入子代理关、自定义正文空；然后标题「DSH 通知」、声音开、常驻开），「当前生效」的每格写「来自内置默认」。
 2. 改标题 → 保存 → 提示「已保存」→ 刷新页面 → 值还在，来源变「设置文件」。
 3. 打开设置文件 → 只有你保存过的键。落点按 `settingsFile()` 的优先序：`${DSH_PROFILE_DIR:-${DSH_HOME:-~/.dsh}}/adg-settings.json` —— 本机 `DSH_PROFILE_DIR` 是当前 profile 目录，所以文件**不在用户根**、在 `<profile>` 下。
 4. 让一个子代理弹一条**不带标题**的通知 → 标题就是你在页面上写的那句；关掉「响提示音」再弹一条 → 静音。
@@ -102,7 +102,7 @@ pwsh -File install.ps1            # 或 bash install.sh
 
 - **已知限制（Windows）**：`0600` 的权限断言只在非 Windows 上生效（Windows 的 `fs.statSync().mode` 不表达 ACL），这条在 Windows 上靠代码评审而非用例。
 - **已知限制**：`install.sh` 的语法在本机**未观测**（无 `sh`）—— 与 `browser/` / `desktop/` 的既有口径一致；改动它之后只能靠逐行比对 `install.ps1` 的对应段落。
-- **未观测**：真浏览器里的观感（开关命中区域、窄窗口换行、暗色主题对比度）与 `order: 38` 是否与别的插件撞车；量法：重启 dsh → 打开设置 → 看左栏顺序与渲染 → `node -e` 列出各插件的 `order` 比对。
+- **未观测**：真浏览器里的观感（开关命中区域、窄窗口换行、暗色主题对比度、侧边栏入口 `order: 20` 是否与别的插件撞车、main 面板在无内边距/无滚动的 `.mainPanel` 里的排版）；量法：重启 dsh → 看左侧边栏「扩展」区是否出现入口、点开排版是否正常 → `node -e` 列出各插件的 `order` 比对。
 - **未观测**：`dsh.client` 的 `immediately: true` / `inject: []` 在 web 半边打包时的实际语义；量法：重启 dsh 后页面出现证明载入路径可用，**不**证明这两个键的语义。
 - **未观测**：Composition 没有 HTTP 载体（没有 `webServer` 服务）时本插件的装载行为；量法：在没有 webServer 的宿主上装一次，看是否只缺一页设置而不报错。
 - **未观测**：`adg-notify` 与 `adg-settings` **只装了一个**时的行为（理论上两者互不依赖：少装 settings 时 notify 用出厂默认；少装 notify 时设置页照常能读写）；量法：在只装其中一个的 profile 上重启 dsh，分别验证。

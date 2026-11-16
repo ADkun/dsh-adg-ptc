@@ -36,7 +36,7 @@ last_reviewed: 2026-10-15
 | `allowEmpty`（string，可选） | `true` ＝ 空串 / 全空白算合法值（语义由消费方定义，如「留空＝跟随默认」） | 宿主校验、客户端 |
 | `multiline`（string，可选） | `true` ＝ 客户端画多行文本框（仍是 `kind: 'string'`，**不是**新 kind） | 客户端 |
 
-`FIELDS` 是这几条登记的冻结数组；`DEFAULTS` 由它派生。**现存七条、两个分组**：`notify` 组的 `notifyTitle`（string，`maxLength: 80`，默认 `DSH 通知`）、`notifySound`（boolean，默认 `true`）、`notifyPersist`（boolean，默认 `true`），`consumer` 都是 `adg-notify`；`skillInject` 组的 `skillInjectEnabled`（boolean，默认 `true`）、`skillInjectFramework`（enum，`allowValues: ['elegant', 'thinking', 'execution']`，默认 `'execution'` ＝ 注入执行框架那份技能文件）、`skillInjectSubagent`（boolean，默认 `false` ＝ 子代理不注入，与这条开关引入前的行为一致）、`skillInjectText`（string，`maxLength: 20000`、`allowEmpty: true`、`multiline: true`，默认 `''` ＝ 跟随技能文件），`consumer` 都是 `adg-skill-inject`。
+`FIELDS` 是这几条登记的冻结数组；`DEFAULTS` 由它派生。**现存七条、两个分组，页面自上而下按这个数组顺序铺卡（先「框架注入」后「通知」）**：`skillInject` 组的 `skillInjectEnabled`（boolean，默认 `true`）、`skillInjectFramework`（enum，`allowValues: ['elegant', 'thinking', 'execution']`，默认 `'execution'` ＝ 注入执行框架那份技能文件）、`skillInjectSubagent`（boolean，默认 `false` ＝ 子代理不注入，与这条开关引入前的行为一致）、`skillInjectText`（string，`maxLength: 20000`、`allowEmpty: true`、`multiline: true`，默认 `''` ＝ 跟随技能文件），`consumer` 都是 `adg-skill-inject`；`notify` 组的 `notifyTitle`（string，`maxLength: 80`，默认 `DSH 通知`）、`notifySound`（boolean，默认 `true`）、`notifyPersist`（boolean，默认 `true`），`consumer` 都是 `adg-notify`。
 
 `allowEmpty` 与 `multiline` 是**修饰**，不是新的 `kind`：它们只影响「这个字符串允许什么值」与「客户端画成什么控件」，宿主的 `validValue` / `refuseMessage` 与客户端的控件选择都读同一条登记项 —— 所以加一个多行可空文本项仍然只是「加一条登记 + 两条文案」。
 
@@ -63,7 +63,10 @@ stored（<DSH_PROFILE_DIR | DSH_HOME | ~/.dsh>/adg-settings.json，见 2.3）  >
 ### 2.4 路由与页面
 
 - 宿主半边：`ctx.inject(['webServer'], …)` 注册 `{ kind: 'prefix', path: '/api/adg-settings', handler }`；只有 `/settings` 这条子路由。
-- 浏览器半边：`window.__ModuleLoader__.load({ id: 'adg-settings', factory })`，只 `require('react')`；注册进 `settings.section` 插槽（`id: 'adg-settings'`、`order: 38`、`label: () => t('nav')`、`locale: NS`）。
+- 浏览器半边：`window.__ModuleLoader__.load({ id: 'adg-settings', factory })`，只 `require('react')`；把同一个 `AdgSettingsSection` 挂到两处插槽：
+  - `sidebar.panellist` 的一个入口（`id: PANEL_ID`、`order: 20`、`label: () => t('nav')`、`locale: NS`，图标是内联 SVG 齿轮 —— 注册进 `sidebar.panellist` 的新 entry 会自动落进第三方 `dsh-sidebar-manager` 折出的「扩展」组、位于「工作区」之上）；
+  - 同名的 `main` 面板（`key: PANEL_ID`，`inject: () => ({ t })`）。点侧边栏入口 → `layout.selectPanel(PANEL_ID)` → 渲染该 main 面板。设置弹窗（`settings.section`）里不再保留这一页。
+  `PANEL_ID = 'adg-settings'`。
 
 ### 2.5 消费方（`adg-notify` 与 `adg-skill-inject`）
 
@@ -150,7 +153,7 @@ skill-inject/lib/user-settings.mjs:
 - **为什么「子代理是否也注入」单独一条登记（`skillInjectSubagent`）而不是绑进 `skillInjectEnabled`**：两个诉求正交（我要不要注入 / 注入给谁），绑在一起就没法表达「我要注入，但只注入调度者」。它的出厂值落在 `false` ＝ 与这条开关引入前完全一致（只注入调度者），所以升级本身不改变任何人的行为；开关的语义与生效时机在消费方那侧（`adg-skill-inject` 的内容层闸门），本模块只负责把一个布尔暴露出来。
 - **为什么注入开关同时出现在设置页和输入框**：设置页是"我改配置"的入口，输入框 chip 是"这次我想临时关掉"的入口；两者都写同一个键、都走同一条 `POST`，所以不存在"两个开关打架"的第三种状态。
 - **为什么 `notifyPersist` 用布尔而不是毫秒数**：用户要的是"常驻 / 不常驻"这一个决定；毫秒数属于技术细节。关掉常驻时用的是**改成常驻之前的原有默认值** `8000ms`（`AUTO_DISMISS_MS`），不引入新的旋钮。
-- **为什么 `order: 38`**：36 = `dsh-insert-context`、37 = `dsh-subagent-mgm`、430 = `dsh-plugin-save-token` 已占用；本页排在这三者之后。
+- **为什么是侧边栏入口 + main 面板，而不是设置弹窗里的一页**：用户要把它放到左侧边栏「扩展」区（「工作区」之上）。再注册一个 `sidebar.panellist` entry 即可自动进那个折叠组（组的折叠/排序由第三方 `dsh-sidebar-manager` 负责，本模块不碰它）；`order: 20` 让它在官方面板（插件 `0` / 自动化任务 `10`）之后。点入口经 `layout.selectPanel` 切到同名 `main` 面板 —— 侧边栏 entry 的 `id` 与 main 面板的 `key` 都必须是 `'adg-settings'`（`selectPanel` 找不到已注册的同名 main key 会抛错）。
 - **为什么只有一条 `/settings` 子路由**：设置页只需要读/写/清三种动作，方法已经能表达，不需要更多路径。
 
 ## 7. 非功能红线
@@ -159,6 +162,6 @@ skill-inject/lib/user-settings.mjs:
 
 ## 8. 未观测
 
-- **未观测**：真浏览器里的观感（开关命中区域、窄窗口换行、暗色主题对比度、`order: 38` 是否与别的插件撞车）；量法：重启 dsh → 打开设置 → 看左栏顺序与页面渲染；撞车时用 `node -e` 列出各插件注册的 `order` 比对。
+- **未观测**：真浏览器里的观感（开关命中区域、窄窗口换行、暗色主题对比度、侧边栏入口 `order: 20` 是否与别的插件撞车、main 面板在 `.mainPanel`（无内边距/无滚动）里的实际排版）；量法：重启 dsh → 看左侧边栏「扩展」区是否出现入口、点开排版是否正常 → `node -e` 列出各插件注册的 `order` 比对。
 - **未观测**：`dsh.client` 里 `immediately: true` 与 `inject: []` 在 web 半边打包时的实际语义（本模块照 `dsh-insert-context` 的 `package.json` 同形声明）；量法：重启 dsh 后页面出现即证明载入路径可用，**不**证明这两个键的语义。
 - **未观测**：`ctx.inject(['webServer'], …)` 在没有 HTTP 载体的 composition 里的降级行为（本模块只在有载体的 profile 上装）；量法：在没有 webServer 的宿主上装载，看它是否只缺一页设置而不报错。

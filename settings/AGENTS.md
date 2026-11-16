@@ -1,6 +1,6 @@
 # AGENTS.md — settings（Adg 设置页框架）
 
-本模块 = 一个 dsh 插件包 **`adg-settings`**：在「设置」里注册一页 **Adg 设置**（浏览器半边 `client.js`），并提供宿主半边的同源读写路由 **`/api/adg-settings/settings`** 与一个设置文件 **`<DSH_PROFILE_DIR|DSH_HOME|~/.dsh>/adg-settings.json`**（**优先 profile 目录**：本机宿主进程里 `DSH_PROFILE_DIR` 就是当前 profile 目录 ⇒ 真实落点是 `<profile>\adg-settings.json`，**不是**用户根那份）。它是**一套框架**：加一项配置 = 在 `lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `client.js` 的 DICT 里加两条文案（`label` / `hint`），宿主与客户端的逻辑都不用改 —— **例外**是新增一种 `kind`：那属于改框架，宿主的校验与客户端的控件选择都要同步（见 [design.md](design.md) 的 I3）。现有两个占用者、共七条登记：通知三项（`notifyTitle` / `notifySound` / `notifyPersist`，由 `adg-notify` 消费）与框架注入四项（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`，由 `adg-skill-inject` 消费；`skillInjectFramework` 是 enum，取值 `'elegant'` | `'thinking'` | `'execution'`，**默认 `'execution'`** ＝ 注入执行框架那份技能文件；`skillInjectSubagent` ＝ 子代理是否也注入同一段框架，**默认关** ⇒ 只注入调度者 ＝ 与改动前行为一致）。设计与不变量见 [design.md](design.md) 的 I1..I14。
+本模块 = 一个 dsh 插件包 **`adg-settings`**：在左侧边栏「扩展」区注册一个入口 **Adg 设置**（点开是同名的 main 面板；浏览器半边 `client.js`），并提供宿主半边的同源读写路由 **`/api/adg-settings/settings`** 与一个设置文件 **`<DSH_PROFILE_DIR|DSH_HOME|~/.dsh>/adg-settings.json`**（**优先 profile 目录**：本机宿主进程里 `DSH_PROFILE_DIR` 就是当前 profile 目录 ⇒ 真实落点是 `<profile>\adg-settings.json`，**不是**用户根那份）。它是**一套框架**：加一项配置 = 在 `lib/schema.mjs` 的 `FIELDS` 加一条登记 + 在 `client.js` 的 DICT 里加两条文案（`label` / `hint`），宿主与客户端的逻辑都不用改 —— **例外**是新增一种 `kind`：那属于改框架，宿主的校验与客户端的控件选择都要同步（见 [design.md](design.md) 的 I3）。现有两个占用者、共七条登记：通知三项（`notifyTitle` / `notifySound` / `notifyPersist`，由 `adg-notify` 消费）与框架注入四项（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`，由 `adg-skill-inject` 消费；`skillInjectFramework` 是 enum，取值 `'elegant'` | `'thinking'` | `'execution'`，**默认 `'execution'`** ＝ 注入执行框架那份技能文件；`skillInjectSubagent` ＝ 子代理是否也注入同一段框架，**默认关** ⇒ 只注入调度者 ＝ 与改动前行为一致）。设计与不变量见 [design.md](design.md) 的 I1..I14。
 
 **为什么本模块有独立文档**（三样信号都在）：有独立于仓库根的命令（`node --test test`）；有模块特有红线（只放用户要的项、技术类键不许进页面、键名真相只在 `lib/schema.mjs`、消费方不许 import 本包、未知键与非法值必须拒且不落盘）；有跨模块路由（`install.ps1` / `install.sh` 部署它；`adg-notify` 按**文件契约**读它写的设置文件）。
 
@@ -13,7 +13,7 @@
 | 路由前缀 | `/api/adg-settings` | 宿主半边 `index.js` 的 `ROUTE_PATH`（**未导出**，是 HTTP 契约，不是模块契约） |
 | 设置页路由 | `/api/adg-settings/settings` | `client.js` 的 `ROUTE`；GET 读 / POST 写 / DELETE 恢复默认 |
 | 设置文件 | `adg-settings.json` | `settings/index.js`、`notify/lib/user-settings.mjs` 与 `skill-inject/lib/user-settings.mjs` 各有一份同名常量（文件契约，三方同名靠漂移用例钉住） |
-| 设置页 id / order | `adg-settings` / `38` | `client.js` 注册进 `settings.section` 的 `id` / `order`（36 = `dsh-insert-context`、37 = `dsh-subagent-mgm`、430 = `dsh-plugin-save-token`） |
+| 侧边栏入口 id / main key | `adg-settings` | `client.js` 的 `PANEL_ID`：同时用作 `sidebar.panellist` 的 `id` 与 `main` 面板的 `key`（点入口经 `layout.selectPanel` 切同名 main 面板）；`sidebar.panellist` 的 `order: 20` |
 
 ## 命令
 
@@ -53,8 +53,8 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 
 1. **包在不在**：`<DSH_HOME>/plugins/adg-settings/`（稳定副本）与 `<profile>/node_modules/adg-settings/package.json`（真目录）。
 2. **被选没被选**：该 profile 的 `dependencies` 与 `dsh.profile.bundles` 里都有 `adg-settings` —— **装了 ≠ 被选中**。
-3. **运行期注册没注册**：重启 dsh 之后，设置页左栏出现「Adg 设置」，且那一页能读能写 —— 只有这一步能证明宿主半边的路由与浏览器半边的 `settings.section` 都注册上了。
+3. **运行期注册没注册**：重启 dsh 之后，左侧边栏「扩展」区出现「Adg 设置」入口，点开能读能写 —— 只有这一步能证明宿主半边的路由与浏览器半边的 `sidebar.panellist` + `main` 都注册上了。
 
 部署由 `install.ps1` / `install.sh` 的第 2b-3 步（把 `settings/` 拷到用户根的稳定副本）与第 4c-6 / 4c-7 步（逐 profile `dsh plugin add file:<稳定副本>` + 读回断言三格）完成。仓库源与稳定副本在不同盘，不可能硬链接 ⇒ 改了仓库里 `settings/` 的源码**必须重跑一次 `install.*`**。
 
-**未观测**：重启 dsh 后这一页在真浏览器里的观感（开关的命中区域、窄窗口下的换行、暗色主题的对比度）与 `order: 38` 是否与别的插件撞车；量法：重启 dsh → 打开设置 → 看左栏顺序与页面渲染 → 用 `node -e` 列出各插件注册的 `order` 比对。
+**未观测**：重启 dsh 后这一页在真浏览器里的观感（开关的命中区域、窄窗口下的换行、暗色主题的对比度、侧边栏入口 `order: 20` 是否与别的插件撞车、main 面板在无内边距/无滚动的 `.mainPanel` 里的排版）；量法：重启 dsh → 看左侧边栏「扩展」区是否出现入口、点开排版是否正常 → 用 `node -e` 列出各插件注册的 `order` 比对。

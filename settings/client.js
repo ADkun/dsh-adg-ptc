@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'settings.adgSettings';
     const ROUTE = '/api/adg-settings/settings';
+    const PANEL_ID = 'adg-settings';
     const inject = ['slots', 'locale'];
 
     /**
@@ -156,6 +157,7 @@ window.__ModuleLoader__.load({
 
     const STYLE = [
       '.as_root{display:flex;flex-direction:column;gap:16px;max-width:860px;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-primary)}',
+      '.as_page{box-sizing:border-box;height:100%;overflow:auto;padding:22px 26px}',
       '.as_head{display:flex;flex-direction:column;gap:6px}',
       '.as_title{margin:0;font-size:15px;font-weight:650}',
       '.as_sub{margin:0;font-size:12.5px;color:var(--dsw-alias-label-secondary);max-width:66ch}',
@@ -512,21 +514,46 @@ window.__ModuleLoader__.load({
       }
     }
 
+    // 侧边栏「扩展」区的图标：一个齿轮（stroke 走 currentColor，跟随主题）。
+    function AdgSettingsIcon({ size = 20 }) {
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 24 24',
+        fill: 'none', stroke: 'currentColor', strokeWidth: 1.7,
+        strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+      },
+        h('circle', { cx: 12, cy: 12, r: 3 }),
+        h('path', { d: 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z' }),
+      );
+    }
+
+    // main 面板的页面壳：给它滚动与内边距（layout 的 .mainPanel 两者都不给），
+    // 里面仍是同一个 AdgSettingsSection。
+    function AdgSettingsPage({ t }) {
+      return h('div', { className: 'as_page' }, h(AdgSettingsSection, { t }));
+    }
+
     function apply(ctx) {
       const t = ctx.locale.bind(NS);
       ctx.effect(() => ctx.locale.register(NS, { zh: DICT.zh, en: DICT.en }), 'adg-settings: dictionaries');
 
-      // order 38：紧跟在「过程插入」(36) 与「子智能体管理」(37) 之后。
-      ctx.slots.inject('settings.section', () => ctx.slots.register({
-        name: 'settings.section',
-        id: 'adg-settings',
-        order: 38,
+      // Adg 设置只从左侧边栏「扩展」区进入：侧边栏点它 → layout.selectPanel('adg-settings')
+      // → 渲染同 key 的 main 面板。设置弹窗里不再保留这一页。
+      const tFace = () => Object.assign(text => t(text), { locale: localeTag(ctx) });
+
+      ctx.slots.inject('main', () => ctx.slots.register({
+        name: 'main',
+        key: PANEL_ID,
+        locale: NS,
+        inject: () => ({ t: tFace() }),
+      }, AdgSettingsPage));
+
+      ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+        name: 'sidebar.panellist',
+        id: PANEL_ID,
+        order: 20,
         label: () => t('nav'),
         locale: NS,
-      }, props => h(AdgSettingsSection, {
-        ...props,
-        t: Object.assign(text => t(text), { locale: localeTag(ctx) }),
-      })));
+      }, AdgSettingsIcon));
     }
 
     exports.apply = apply;
