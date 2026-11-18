@@ -56,13 +56,11 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | 改能力面窗口（能力面载体：预留 id / `agent/created` 监听 / 三态收口） | `design.md` 的 I7 / I7b / I16 | 平台对照：`@deepseek-ai/dsh-subagent` 的 `applyChildOverrides` / `applyChildComposition`、`startLocal` 的时序，`@deepseek-ai/dsh-agent` 的 `agent/created` announce；`testing-guide.md` 的人工 review 项（`agent/created` 的时点） |
 | 改工具名或参数 | `preset/agent.cordis.yml` 的调度 persona（**唯一消费方**；`delegate` 是全局层工具名，**不需要写进 preset 的委派行**） | `tools/check-preset.mjs` 的 `KNOWN_TOOLS`（工具名要能过 preset 的静态自检） |
 | 改装载形状（目录名 / 包名 / 装法） | `install.ps1` / `install.sh`（接线在安装脚本里） | `notify/design.md` 的装载不变量（同一种装法，本模块不另立一套） |
-| 改「读不出可用工具名」的降级口径 | `design.md` 的 I6 | `testing-guide.md` 的人工 review 项；根 `AGENTS.md` 的「诚实原则」 |
+| 改「读不出可用工具名」的降级口径 | `design.md` 的 I6 | `testing-guide.md` 的人工 review 项 |
 
-## 版本区
+## 文档（真相与判据）
 
-本模块在版本区里的文档就是 `delegate/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量）→
-[testing-guide.md](testing-guide.md)（用例全表与未观测项）三份，加**不在版本区**的临时目录 `docs-work/`。
-完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
+本模块三份文档：`delegate/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

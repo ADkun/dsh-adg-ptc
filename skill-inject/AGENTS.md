@@ -39,14 +39,14 @@ cd skill-inject && node --test --test-isolation=none test  # DSH 沙箱（worksp
 | 你要做什么 | 先读 | 再读 |
 |---|---|---|
 | 改注入判据 / 降级行为 | [design.md](design.md) 的「核心数据模型」 | [testing-guide.md](testing-guide.md) 的「用例总表」 |
-| 改 SKILL 路径 / section 名 / order | `lib/section.mjs`（唯一事实源） | 根 `AGENTS.md` 的 Project Map 与本文件 R7 |
+| 改 SKILL 路径 / section 名 / order | `lib/section.mjs`（唯一事实源） | 本文件 R7 与 `aoci` 定位 |
 | 改开关、技能选择或自定义正文（`skillInjectEnabled` / `skillInjectSkill` / `skillInjectSubagent` / `skillInjectText`） | `settings/lib/schema.mjs` 的 `FIELDS`（键名 / 默认值 / 界的真相）+ 本模块 `lib/user-settings.mjs`（读法） | `settings/design.md` 的「加一项配置的步骤」；输入框 chip 在 `client.js`；两边都要跑 `cd settings && node --test test` |
 | 改装载形状 | `install.ps1` / `install.sh` 的第 2b-4 / 4c-8 / 4c-9 步 | `notify/design.md` 的 I8 / I9 / I10 / I11（同一种装法的既有口径） |
 | 改技能正文本身 | 任意技能目录的 `SKILL.md`（如 `skills/thinking-framework/SKILL.md` / `skills/execution-framework/SKILL.md`；与本模块无关 —— 插件每次组装重读；选哪份由设置键 `skillInjectSkill` 定） | 根 `README.md` 的 skills 一节 |
 
-## 版本区
+## 文档（真相与判据）
 
-本模块在版本区里的文档就是 `skill-inject/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）三份。完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
+本模块三份文档：`skill-inject/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

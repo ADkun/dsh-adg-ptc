@@ -79,12 +79,11 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1            # Windows
 | 改浏览器那一段委派口径（模式 / 登录态 / 权限闸门） | `preset/design.md` 的「SchedulerPersona」 | `browser/AGENTS.md`（它消费的命令行契约）→ 根 `README.md` 的「浏览器工具链与登录态资产」一节 |
 | 改 composition 的 tool 行 / 体积旋钮 | `preset/design.md` 的「非功能红线」 | `tools/design.md`（判错口径） |
 
-其余各条见根 `AGENTS.md` 的「Context Loading」表（全仓路由主表）：改 `delegate` 插件本身 / 改调度 persona 名册 / 通知子插件 / 只想弄懂怎么装到本机 —— 此处不另抄。
+其余各条（改 `delegate` 插件 / 改调度 persona 名册 / 通知子插件 / 装到本机）用 `aoci` 定位该读的文件，此处不另抄。
 
-## 版本区
+## 文档（真相与判据）
 
-本模块在版本区里的文档就是 `preset/AGENTS.md`（本文件，路由）→ [`design.md`](design.md)（设计、状态机与不变量）→ [`testing-guide.md`](testing-guide.md)（用例全表与未观测项）这三份，加**不在版本区**的临时工作目录 `docs-work/`（过程件住那里，交付前清空到空目录）。完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
-给人看的安装与使用说明在根 `README.md`。
+本模块三份文档：`preset/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、状态机与不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 **未观测**：本模块文档与源文件之间是否还有别的未登记漂移；量法：按根 `AGENTS.md`「Quality Gates」的文档合规那行逐条自检一遍，把发现的漂移就地写进对应文档。
 

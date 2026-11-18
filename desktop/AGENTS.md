@@ -75,9 +75,9 @@ cd desktop && node --test --test-isolation=none test        # 沙箱里同样必
 
 模块其余不变量（I1…I11、I2b、I6b–I6f、I7b–I7l、I9b、I10b–I10d）在 `design.md`；对抗性验证用例与"未观测"项在 `testing-guide.md`。
 
-## 版本区
+## 文档（真相与判据）
 
-本模块在版本区里的文档就是这三份，都在仓库 `desktop/` 下：`AGENTS.md`（本文，路由与红线）→ [`design.md`](design.md)（设计、数据模型与不变量）→ [`testing-guide.md`](testing-guide.md)（用例全表、迁移矩阵与未观测项）。三份都进 git、互相引用、**改了就原地更新**，不建"最新稿"、不留过程件（过程件住根 `AGENTS.md` 定义的 `docs-work/`，交付前清空）。完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
+本模块三份文档：`desktop/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、数据模型与不变量）→ [testing-guide.md](testing-guide.md)（用例全表、迁移矩阵与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

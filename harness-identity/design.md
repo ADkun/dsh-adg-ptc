@@ -87,14 +87,14 @@ return presetId === 'adg-ptc';
 
 来自 `@deepseek-ai/dsh-system-prompt` 与 `@deepseek-ai/dsh-scope`（本机解析见根 `AGENTS.md` 的「外部依赖与 ref 解析」）：
 
-- **固定开场白的注册**：`SystemPrompt` 构造函数（`lib/index.js:230-234`）当 `config.includeHarnessIdentity ?? true` 为真时 `this.section({ name:'harness:identity', order:getSectionOrder('HARNESS_IDENTITY')(=-1000), text:'You are an AI agent, powered by DeepSeek Harness.' })`。
-- **section() 落进调用方 scope**：`section(section)`（`lib/index.js:255-258`）只校验 `Number.isFinite(section.order)`，然后 `this.layers.effect(this.ctx, …)`。cordis 服务代理使 `this.ctx` 绑定到访问者 ctx（即 `agent.ctx`）的 scope ⇒ 落进该 agent 的 scoped 层。
-- **scoped 覆盖 global**：`section()` 的文档（`lib/index.js:248-251`）"A scoped section shadows a global section with the same name; duplicates within one layer … throw"。
-- **重名报错文案点名了正确做法**：`PromptLayer` 的 `NamedEntries` 重复错误（`lib/index.js:205`）写着 —— `prompt section "<name>" is already registered (for a per-agent override, register through that agent's \`agent.ctx\` instead)`。
-- **merge 顺序（最近 scope 赢）**：`@deepseek-ai/dsh-scope` 的 `ScopedLayers.merge(scope, pick)`（`lib/index.js:177-181`）`new Map(global.entries())` 后按 `chainLayers(scope)`（`scopeChainOf(scope).reverse()`：最远祖先先、exact scope 最后）逐层 `merged.set`，故同名以最近 scope 为准。
-- **effect 按 ctx 的 scope 落层**：`ScopedLayers.effect(ctx, …)`（`lib/index.js:189-218`）`const scope = scopeOf(ctx)`：无 scope → global 层；有 scope → 该 scope 的 scoped 层（无则建、注销时空则回收）。
-- **空文本被丢弃**：`renderPrompt`（`lib/index.js:119-121`）`sections.map(s=>s.interpolate===false?s.text:interpolate(s.text)).filter(text=>text.length>0).join('\n\n')`。
-- **assemble 用 merge 取 section**：`assemble(context)`（`lib/index.js:358-413`）第 365 行 `const sectionByName = this.layers.merge(scope, layer=>layer.sections)`，再 `sort(comparePromptSections)` 渲染。
+- **固定开场白的注册**：`SystemPrompt` 构造函数 当 `config.includeHarnessIdentity ?? true` 为真时 `this.section({ name:'harness:identity', order:getSectionOrder('HARNESS_IDENTITY')(=-1000), text:'You are an AI agent, powered by DeepSeek Harness.' })`。
+- **section() 落进调用方 scope**：`section(section)` 只校验 `Number.isFinite(section.order)`，然后 `this.layers.effect(this.ctx, …)`。cordis 服务代理使 `this.ctx` 绑定到访问者 ctx（即 `agent.ctx`）的 scope ⇒ 落进该 agent 的 scoped 层。
+- **scoped 覆盖 global**：`section()` 的文档 "A scoped section shadows a global section with the same name; duplicates within one layer … throw"。
+- **重名报错文案点名了正确做法**：`PromptLayer` 的 `NamedEntries` 重复错误 写着 —— `prompt section "<name>" is already registered (for a per-agent override, register through that agent's \`agent.ctx\` instead)`。
+- **merge 顺序（最近 scope 赢）**：`@deepseek-ai/dsh-scope` 的 `ScopedLayers.merge(scope, pick)` `new Map(global.entries())` 后按 `chainLayers(scope)`（`scopeChainOf(scope).reverse()`：最远祖先先、exact scope 最后）逐层 `merged.set`，故同名以最近 scope 为准。
+- **effect 按 ctx 的 scope 落层**：`ScopedLayers.effect(ctx, …)` `const scope = scopeOf(ctx)`：无 scope → global 层；有 scope → 该 scope 的 scoped 层（无则建、注销时空则回收）。
+- **空文本被丢弃**：`renderPrompt` `sections.map(s=>s.interpolate===false?s.text:interpolate(s.text)).filter(text=>text.length>0).join('\n\n')`。
+- **assemble 用 merge 取 section**：`assemble(context)` `const sectionByName = this.layers.merge(scope, layer=>layer.sections)`，再 `sort(comparePromptSections)` 渲染。
 - `ctx.systemPrompt.section({name, order, text})` —— `text` 是 `string | ((context) => string)`；本模块用空串常量。
 
 ## 6. 未观测项

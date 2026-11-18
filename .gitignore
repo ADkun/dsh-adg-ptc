@@ -16,6 +16,9 @@ node_modules/
 bundle/
 
 # 临时工作目录：过程件（changelog / handoff / pending / 工作稿 / 证据快照）只住在这里，不进版本控制
-# —— 版本区只留最终真相（一批 AGENTS.md / design.md / testing-guide.md）。指针只登记在根 AGENTS.md
-# 的「版本区」一节（唯一的登记点）；目录名改了只改那一处，别在别处抄第二份清单。
+# —— 版本区只留最终真相（一批 AGENTS.md / design.md / testing-guide.md）。文件在哪、改哪份文件由 aoci
+# 索引覆盖，不在此另抄清单。
 docs-work/
+
+# aoci 维护/追加托管块时产生的 AGENTS.md.backup.<时间戳>.<sha> 是过程产物，不入库。
+*.backup.*

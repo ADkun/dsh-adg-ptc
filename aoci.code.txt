@@ -1,0 +1,226 @@
+#AOCI-CODE-VOLUME: 1
+
+===D:/dsh/plugins/dsh-adg-ptc/===
+.gitattributes[FV6T]: F:强制全仓文本文件 LF 行尾，保证跨平台安装与指纹逐字节一致 | R:- | A:- | S:* text=auto eol=lf 必须保留：CRLF 会改 SHA256，并让 install.sh 在 macOS/Linux 上执行失败
+.gitignore[FG6T]: F:声明 git 忽略项：OS/临时日志、仓库根 node_modules 解析桥、bundle 生成物、docs-work 过程目录 | R:code:.gitattributes | A:- | S:node_modules/ 是仓库根解析桥（把 @deepseek-ai/* 链到本机 dsh），不入库；缺了它 notify 自测会 import 失败
+AGENTS.md[SG9M]: F:仓库常驻约束：命令、关键红线、生效口径、外部依赖 ref 规则、质量门与能力边界 | R:code:README.md,code:preset/design.md | A:命令,关键红线,生效方式,Quality Gates,认知与导航 | S:aoci 托管块（begin/end 注释之间）不计入 200 行预算、不要手改；导航由 aoci 索引负责，本文不自建 Project Map
+README.md[SG8M]: F:给人看的安装/使用/排错总览：安装脚本参数、四种味道、子代理能力带、真实挂载验证 | R:code:AGENTS.md,code:install.ps1,code:install.sh | A:安装,味道,真实挂载验证,子代理与能力带 | S:静态自检 check-preset 不能证明挂载；验收必须真实挂载读 agentPresets.resolve('adg-ptc').broken 为空
+install.ps1[OV8L]: F:Windows 安装脚本：探测 profile 与味道、生成 bundle 落到 $DSH_HOME/bundles、逐 profile 装 preset 与六个子插件并读回断言三格 | R:code:install.sh | A:Get-BundleMounts,Resolve-GroupWanted | S:必须保留 UTF-8 BOM（否则 PS5.1 按 ANSI 解码中文乱码并解析失败）；装 bundle 与装 adg-notify 必须同一次运行、同 profile（缺 notify 会让每次委派抛 names unknown global tool notify_user）；装了≠被选中，必须写进 dsh.profile.bundles
+install.sh[OV8L]: F:POSIX sh 安装脚本：探测 profile 与味道、生成 bundle、逐 profile 装 preset 与 adg-notify/delegate/settings/skill-inject 并读回断言 | R:code:install.ps1 | A:flavor_of,bundle_dir_of,want_bili_of,want_save_token_of | S:不管 ptc-parallel/turn-bookmarks/harness-identity（这三个只由 install.ps1 装）；两个注入开关默认 auto，也可用 ADG_BILLION_CONTEXT/ADG_SAVE_TOKEN 环境变量给默认值
+
+===D:/dsh/plugins/dsh-adg-ptc/browser/===
+AGENTS.md[SI7T]: F:browser 模块路由与红线：命令行速查、零依赖、动作判据与完全权限前提 | R:code:browser/design.md,code:browser/testing-guide.md,code:browser/cli.mjs | A:命令,红线,生效方式 | S:拿到浏览器工具链的委派必须处于 danger-full-access，否则 Chrome/Edge/Brave 在受限令牌下都起不来（无头同样）；这是部署前提不是安全边界
+cli.mjs[EI7L]: F:browser 命令行入口：解析参数并派发 profile/status/tabs/launch/open/text/eval/shot 与五条动作命令 | R:code:browser/lib/actions.mjs,code:browser/lib/cdp.mjs,code:browser/lib/target.mjs,code:browser/lib/verify.mjs | A:parseArgs,命令分发 | S:动作命令的 --url 是子串命中、读页命令的 --url 是完整地址，两条语义不能混；动作成败只认 CHANGED 三态不认调用返回
+design.md[SI7M]: F:browser 设计：职责边界、BrowserTarget/Mode/Instance 等数据模型、I1–I17 不变量与判据 | R:code:browser/AGENTS.md | A:核心数据模型,判据表,不变量,非功能红线 | S:换模式是 I5「禁止重启活实例」的唯一例外，且必须调用方显式指定目标模式，否则在活实例上一律 STATE=REUSED 不动它
+package.json[FV4T]: F:adg-browser 包声明：私有零依赖 ESM 包，test 脚本 node --test test，engines node>=22 | R:code:browser/AGENTS.md | A:- | S:type=module 且 engines node>=22（依赖全局 WebSocket），降级运行会静默失败，靠 assertRuntime 显式报错
+testing-guide.md[SI6M]: F:browser 测试指南：命令、用例总表 A1–A105、守卫变异自证、迁移矩阵与交付前最小闭环 | R:code:browser/AGENTS.md,code:browser/design.md | A:用例总表,交付前的最小闭环 | S:判据的原料全部来自页面读数，页面连回读一起伪造时外部分辨不了，残余要如实报、不许说已封住
+
+===D:/dsh/plugins/dsh-adg-ptc/browser/lib/===
+actions.mjs[DI7L]: F:五条动作命令实现：用法校验、页面内动作、DOM 可观测差异判据接线 | R:code:browser/lib/verify.mjs,code:browser/lib/cdp.mjs | A:runClick,runHover,runType,runSelect,runWaitFor,decideSelect | S:select 的判定必须在 Node 侧 decideSelect（页面探针只读原始数据、不许知道请求值），写入后必须回读自证三样；click/hover 命中自检在发事件之前以退出码 2 停手
+cdp.mjs[LI6M]: F:最小 CDP 客户端：navigate/eval/screenshot 与目标/标签页管理，零依赖用全局 fetch+WebSocket | R:code:browser/lib/target.mjs | A:connect,evalJs,readPage,pageSession,closeBrowser | S:零依赖硬约束：模块 specifier 只能是 node: 内建或相对路径，禁止 playwright/puppeteer/ws（自带注入与旗标）
+target.mjs[LI6M]: F:解析驱动哪个浏览器：profile/端口/可执行文件/启动参数与「复用还是启动」决策（纯函数） | R:code:browser/lib/cdp.mjs | A:resolveProfile,resolvePort,resolveMode,launchArgs,findChrome,planLaunch | S:profile 只能是显式配置或 <DSH_HOME>/browser-profile，禁止放工作区；启动参数禁止伪装/降权旗标；非法端口不静默回落
+verify.mjs[DI6L]: F:动作判据层：把动作前后 DOM 可观测状态归一化、比较，产出 true/false/unknown 三态 | R:code:browser/lib/actions.mjs | A:captureState,compareStates,changeVerdict,normalizeState,digestOf | S:unknown 必须保留：判据在动作前后读不到不等于没变化，绝不把 unknown 报成 false；任何 CDP 返回都不是成功证据
+
+===D:/dsh/plugins/dsh-adg-ptc/browser/test/===
+actions.test.mjs[TI6L]: F:actions/verify 的单元测试：用假 session 钉住五命令用法错误面与三态判据，不碰浏览器 | R:code:browser/lib/actions.mjs,code:browser/lib/verify.mjs | A:- | S:unknown 与 false 必须分开的断言、以及 select 决策在 Node 侧的源码级断言都在此
+browser.test.mjs[TI6L]: F:target/cdp 纯函数与协议层单元测试：I1–I10 不变量，用假 socket 钉协议行为，零依赖 | R:code:browser/lib/target.mjs,code:browser/lib/cdp.mjs | A:- | S:-
+
+===D:/dsh/plugins/dsh-adg-ptc/delegate/===
+AGENTS.md[SW7T]: F:delegate 插件路由与红线：命令、delegate 能力面语义、ask_user 提问通道、生效方式 | R:code:delegate/design.md,code:delegate/index.mjs | A:命令,红线,生效方式 | S:tools 是硬能力边界（restrict 让子代理目录恰等于名单）；内置 deny 五个名字点不动，ask_user 是唯一给子代理的提问通道
+cordis.patch.yml[FE7T]: F:adg-delegate 的 bundle 层：在全局层 insert 一行注册工具 delegate | R:code:delegate/index.mjs | A:- | S:insert 落在顶层 global 层，delegate 因此是全局工具、可写进任何子代理 toolFilter；行 id 必须等于 index.mjs 的 export const name；global 层同名重复注册会失败
+design.md[SW7M]: F:delegate 设计：ToolPlan、persona 遮蔽语义、能力面下发窗口、ask_user owner 路由与 I1–I10 不变量 | R:code:delegate/AGENTS.md,code:delegate/lib/delegate.mjs | A:核心数据模型,不变量,非功能红线 | S:persona 平台语义是遮蔽（空串也算 unset）不是追加；能力面在建立窗口贴上，没赶上退回创建后窗口兜底，失败要回收子代理、不得留未受限子代理
+index.mjs[EW7M]: F:adg-delegate 的 cordis 插件入口：注册全局工具 delegate 与 ask_user，解析服务并派发 | R:code:delegate/lib/delegate.mjs,code:delegate/cordis.patch.yml | A:name,inject,createDelegateTool,createAskUserTool,apply | S:命名导出 name 必须与 cordis.patch.yml 的 insert id 一致；工具定义必须走 defineTool 且带 output（缺了直接 TypeError）
+package.json[FV4T]: F:adg-delegate 包声明：私有零依赖 ESM，dsh.bundle.patch 指向 cordis.patch.yml，peer @deepseek-ai/dsh-tools 可选 | R:code:delegate/index.mjs | A:- | S:-
+testing-guide.md[SW6S]: F:delegate 测试指南：命令、用例总表 D1–D41、消费方契约与「验证≠装载」、交付前最小闭环 | R:code:delegate/AGENTS.md,code:delegate/design.md | A:用例总表,验证 ≠ 装载 | S:单元测试证明不了真实挂载，必须在真实会话里让调度者真用一次 delegate 核对 tools/tools_note
+
+===D:/dsh/plugins/dsh-adg-ptc/delegate/test/===
+delegate.test.mjs[TW6L]: F:delegate 单元测试：D1–D41 覆盖工具计划、能力面下发窗口、ask_user owner 与 defineTool 契约 | R:code:delegate/lib/delegate.mjs,code:delegate/index.mjs | A:- | S:-
+
+===D:/dsh/plugins/dsh-adg-ptc/desktop/===
+AGENTS.md[SU7T]: F:desktop 模块路由与红线：Windows 桌面操控 CLI 命令、零依赖、注入必须完全权限、动作只认可观测差异 | R:code:desktop/design.md,code:desktop/cli.mjs | A:命令,红线,生效方式 | S:驱动普通用户窗口的会话必须 danger-full-access，受限令牌 Low 完整性会被 UIPI 静默拦下；注入类命令只认 CHANGED/CURSOR_LANDED 不认 SendInput 返回
+design.md[SU7M]: F:desktop 设计：ScreenBox/WindowRecord/ElementSnapshot/InjectionPlan 数据模型、命令行与输出行契约、判据取法与红线 | R:code:desktop/AGENTS.md | A:核心数据模型,命令行契约,输出行契约,判据怎么取 | S:UIPI 拦截是静默的（受限会话 Low 完整性注入被丢事件），只能靠动作前后各取一次可观测差异判断，不认返回值
+cli.mjs[EU7L]: F:desktop 唯一入口：解析参数并派发 screen/windows/uia/point/click/type/key/invoke/verify/snapshot/probe，动作前后做可观测差异复核 | R:code:desktop/lib/args.mjs,code:desktop/lib/bridge.mjs,code:desktop/lib/verify.mjs | A:cmdProfile,cmdScreen,cmdWindows,cmdUia,cmdInject,cmdInvoke | S:type/key 的 --hwnd 必填（不指名可能把字打进别的窗口）；注入只认可观测差异 CHANGED=/CURSOR_LANDED= 不认返回值
+package.json[FV4T]: F:adg-desktop 包声明：私有的零依赖 ESM 包，test 脚本 node --test test、engines node>=22 | R:code:desktop/cli.mjs | A:- | S:-
+testing-guide.md[SU6M]: F:desktop 测试指南：命令、用例总表、迁移矩阵、内容判据矩阵、已知平台坑与交付前最小闭环 | R:code:desktop/AGENTS.md,code:desktop/design.md | A:用例总表,迁移矩阵,交付前的最小闭环 | S:六条注入命令都不许再出现 exit=3221225477（I7e）；注入前先断言窗口矩形与 UIA 根矩形一致（I2b），不一致别照 uia 子元素矩形点；落点归属要把 --target-hwnd 递进去
+
+===D:/dsh/plugins/dsh-adg-ptc/desktop/lib/===
+args.mjs[LU6M]: F:desktop 命令行解析纯函数层：切词、标志作用域校验、整数/坐标/按钮校验 | R:code:desktop/cli.mjs | A:parseArgs,requireInt,requirePoint,requireButton,checkFlagScope | S:解析失败一律抛 UsageError，cli 打印 USAGE 并以退出码 2 结束；位置参数语义留给 cli，本层只切词
+bridge.mjs[LU6M]: F:子进程通道层：把 scripts/bridge.ps1 跑起来、经 %TEMP% 文件取回 JSON（不用管道，避沙箱 EPERM） | R:code:desktop/scripts/bridge.ps1,code:desktop/cli.mjs | A:runBridge,bridgeJson,probeBridge,resolvePowerShell,summarizeStderr | S:禁止 spawn stdio:'pipe'（受限 Low 完整性下 libuv 命名管道 EPERM），stdout/stderr 一律重定向到 %TEMP% 文件读完即删；错误须带 exitCode 与崩溃名
+coords.mjs[LU6M]: F:坐标换算纯函数层：物理像素↔SendInput 归一化坐标、屏幕框、矩形比较与命中判定 | R:code:desktop/design.md | A:toAbsolute,fromAbsolute,screenBox,geoVerdict,dpiScale,parseRect | S:归一化分母必须是虚拟屏尺寸-1（65535 映射最右下像素），写成尺寸会偏 1px 且越靠右下偏越多；对外坐标必须真实物理像素（原生层启动即声明 PerMonitorV2）
+elements.mjs[LU6M]: F:UIA 元素 id 与选元素纯函数层：RuntimeId 拼串取 FNV-1a 生成 el_<8hex>、快照/pattern 文本与动作选择 | R:code:desktop/lib/verify.mjs | A:elementId,fnv1a32,pickElement,chooseAction,patternShapeProblem,elementIdentity | S:elementId 必须与 bridge.ps1 的 Get-Fnv1a 同算法同输入（否则 uia 报的 id 拿去 invoke 找不到元素）；pickElement 不许猜，0/多个/形状不对/无条件都给 reason
+env.mjs[LU5S]: F:归属与 IntegrityLevel 纯函数层：env/home/arch 由调用方注入，算运行时/平台判定与注入闸门（CanInject/BlockHigher） | R:code:desktop/cli.mjs | A:runtimeVerdict,platformVerdict,normalizeIntegrity,decideInjection,dshHome,installedEntry | S:不认识 Windows、所有环境读数注入（单测不碰真机）；IntegrityLevel 未知或更高一律 fail-closed 挡注入
+verify.mjs[LU7L]: F:动作判据纯函数层：比较动作前后可观测状态产出 true/false/unknown 三态，含内容快照、期望键与注入告警 | R:code:desktop/lib/coords.mjs,code:desktop/lib/elements.mjs | A:compareStates,changeVerdict,applyContentSnapshot,checkExpectations,injectionWarn,parseExpect | S:任何调用返回都不能当成功证据（UIPI 拦下时 SendInput 仍返回已插入 N 且 GetLastError=0），判据只能靠动作前后可观测差异；内容探针崩了须降级 unknown，不许因像素哈希在就报 false
+
+===D:/dsh/plugins/dsh-adg-ptc/delegate/lib/===
+delegate.mjs[DW8L]: F:delegate 纯逻辑：工具计划（内置 deny/未知名剔除/run_code 拒绝）、请求装配、可续后台派发与 ask_user owner 路由 | R:code:delegate/index.mjs | A:planToolFilter,buildRequest,buildFace,applyChildFace,delegate,askUser | S:零 import 纯函数（唯一读 ctx 工具视图）；BUILTIN_DENY 五名恒不进 allow；点名 run_code 当场抛错；send_message 是平台续接通道，显式 tools 未点名也保留
+
+===D:/dsh/plugins/dsh-adg-ptc/desktop/scripts/===
+bridge.ps1[DU8L]: F:桌面原生桥（Windows PowerShell 5.1 单文件）：用 Win32/UIA/COM 实现 screen/windows/uia/point/click/type/key/invoke/verify/snapshot/probe，经 -Out JSON 文件回报 | R:code:desktop/lib/bridge.mjs,code:desktop/scripts/identity.ps1 | A:Invoke-ProfileCommand,Invoke-ScreenCommand,Invoke-UiaCommand,Invoke-InputCommand,Invoke-VerifyCommand,Send-Inputs | S:宿主用 -NoProfile -NonInteractive -ExecutionPolicy Bypass -File 调用、结果写 -Out 文件（stdout 仅诊断）；脚本须 ASCII 无 BOM（宿主按 ANSI 代码页解码）；启动即 Initialize-Dpi 声明 PerMonitorV2 否则坐标被虚拟化；Read-ElementContent 可能抛 AV 且 try/catch 抓不住（I7e）
+identity.ps1[DU6T]: F:元素身份校验的唯一实现在此：Get-ElementIdentityGate 比对调用方定位快照的 runtimeId 与实际执行树的 runtimeId，不一致即拒动 | R:code:desktop/scripts/bridge.ps1 | A:Get-ElementIdentityGate | S:单实现文件：bridge.ps1 与执行型夹具都 dot-source 同一份；Expected 为空即不校验，不一致返回 invoked=false/identityMismatch=true（Node 侧转 exit2 拒动，不等于 1 已动无变化）
+
+===D:/dsh/plugins/dsh-adg-ptc/desktop/test/===
+cli-contract.test.mjs[TU6S]: F:CLI 契约测试：--help 退出码 0、未知命令退出码 2、缺失或越界参数走 UsageError（退出码 2） | R:code:desktop/cli.mjs,code:desktop/lib/args.mjs | A:- | S:-
+content-safety.test.mjs[TU6M]: F:内容探针安全测试：Read-ElementContent 抛 AV 时须降级 unknown（不许报 false），含 AV 崩溃路径静态守卫 | R:code:desktop/lib/verify.mjs | A:- | S:-
+contract-table.test.mjs[TU6S]: F:消费方契约表测试：命令行与输出行契约和 design 文档表格一致（契约改名漏改会红） | R:code:desktop/design.md | A:- | S:-
+criteria.test.mjs[TU6S]: F:判据测试：compareStates 五类判据各自能触发 CHANGED、三态 changeVerdict（看不见=unknown 不是 false） | R:code:desktop/lib/verify.mjs | A:- | S:-
+element-identity.test.mjs[TU6M]: F:元素身份测试：fnv1a32/elementId 与 bridge.ps1 同输出、占位 id、elementIdentity/identityState/pickElement 不猜 | R:code:desktop/lib/elements.mjs | A:- | S:-
+helpers.mjs[TU6S]: F:桌面测试共用夹具：假 env、假桥与状态构造辅助 | R:- | A:- | S:-
+injection.test.mjs[TU6S]: F:注入测试：命名键与标点键映射、不可映射字符 fail-closed（不许发 wScan=0 还报成功）、发射顺序与 PHASE | R:code:desktop/scripts/bridge.ps1 | A:- | S:-
+key-chord.test.mjs[TU6M]: F:组合键测试：PHASE 序列必须 modifier-down→key-down→key-up→modifier-up，静态守卫不可映射字符 fail-closed | R:code:desktop/scripts/bridge.ps1 | A:- | S:-
+params-map.test.mjs[TU6M]: F:参数映射测试：布尔开关不吞下一 token、必有值开关缺值报用法错、requireInt/Point/Text/Button 校验 | R:code:desktop/lib/args.mjs | A:- | S:-
+patterns-shape.test.mjs[TU6S]: F:UIA pattern 形状测试：标量当单元素列表、坏形状必须报出不许被静默吞、单 pattern 仍可选语义动作 | R:code:desktop/lib/elements.mjs | A:- | S:-
+plan.test.mjs[TU6S]: F:注入计划测试：EVENTS_MATCH_PLAN 与落点归属、landingNote 命中判定 | R:code:desktop/lib/verify.mjs | A:- | S:-
+pure.test.mjs[TU6L]: F:纯函数总测（915 行）：坐标、身份、环境与完整性、判据、期望键等各纯函数层的大量用例 | R:code:desktop/lib/coords.mjs,code:desktop/lib/env.mjs,code:desktop/lib/verify.mjs | A:- | S:-
+
+===D:/dsh/plugins/dsh-adg-ptc/harness-identity/===
+AGENTS.md[SI7T]: F:harness-identity 模块路由与红线：命令、覆盖必须同名 section + 空文本、安装与重启生效 | R:code:harness-identity/design.md,code:harness-identity/index.mjs | A:命令,红线,跨模块路由,生效方式 | S:section 名必须逐字 harness:identity（不等则静默失效、那行还在）；覆盖 section 必须注册在 agent.ctx 的 scoped 层（全局层重名会直接抛错）；正文必须空串（非空即变成替换，属于另一需求）
+cordis.patch.yml[FE7T]: F:adg-harness-identity 的 bundle 层：顶层 global 层 insert 一行（不注册工具，靠插件逐 agent 覆盖开场白） | R:code:harness-identity/index.mjs | A:- | S:行 id 必须等于 index.mjs 的 export const name；只写 insert、不写进 preset/agent.cordis.yml（preset 侧不挂 system-prompt 服务）
+design.md[SI7S]: F:harness-identity 设计：三条边界、挂载点、覆盖机制（同名空文本覆盖 global）、I1–I11 与平台契约速查 | R:code:harness-identity/AGENTS.md | A:核心数据模型,不变量,平台契约速查,未观测项 | S:三步机制缺一不可：平台把开场白放 global 层 → scoped 同名项覆盖 global 同名 → 空文本段被 renderPrompt 的 filter(text.length>0) 丢弃；升级 dsh 后必须重核第 5 节平台契约
+index.mjs[EI7T]: F:adg-harness-identity 插件入口：全局监听 agent/created，对每个 adg-ptc agent 在 agent.ctx 注册同名空文本 section | R:code:harness-identity/lib/section.mjs,code:harness-identity/cordis.patch.yml | A:name,inject,apply | S:name 必须与 cordis.patch.yml 的 insert id 一致；监听器体整段 try/catch（单 agent 失败不拖垮其它）；只在 agent 创建那一刻注册一次、运行中的旧 agent 不补挂
+package.json[FV4T]: F:adg-harness-identity 包声明：私有零依赖 ESM，main/exports 指 index.mjs、dsh.bundle.patch 指 cordis.patch.yml | R:code:harness-identity/index.mjs | A:- | S:-
+testing-guide.md[SI6T]: F:harness-identity 测试指南：用例总表、沙箱注意（--test-isolation=none）、漂移检测与覆盖边界 | R:code:harness-identity/AGENTS.md,code:harness-identity/design.md | A:用例总表,漂移检测,覆盖边界 | S:单元测试证明不了真机：必须重启后在新 Adg 会话读系统提示词确认开头那行消失（调度者与子代理两侧）
+
+===D:/dsh/plugins/dsh-adg-ptc/harness-identity/lib/===
+section.mjs[LI6T]: F:harness-identity 的判定与覆盖常量（纯函数、不 import cordis）：shouldInjectFor 与 shadowSection | R:code:harness-identity/index.mjs | A:shouldInjectFor,shadowSection,SECTION_NAME,SECTION_ORDER,TARGET_PRESET,SHADOW_TEXT | S:SECTION_NAME 必须逐字 harness:identity、SECTION_ORDER=-1000、SHADOW_TEXT 空串，全与平台对齐（升级 dsh 后按 design 第5节重核）；shouldInjectFor fail-closed（拿不到 preset 身份返回 false）
+
+===D:/dsh/plugins/dsh-adg-ptc/harness-identity/test/===
+harness-identity.test.mjs[TI6M]: F:harness-identity 单元测试：G1–G5 判定、S1–S4 覆盖常量、W0–W9 假 ctx 接线、C1–C5 文件契约 | R:code:harness-identity/lib/section.mjs,code:harness-identity/index.mjs | A:- | S:-
+
+===D:/dsh/plugins/dsh-adg-ptc/notify/===
+AGENTS.md[SN7T]: F:notify 模块路由与红线：命令、notify_user 触发面、全局层注册与生效方式 | R:code:notify/design.md,code:notify/index.mjs | A:命令,红线,生效方式 | S:notify_user 注册在全局层，同名再注册会让 profile 插件加载失败；失败一律抛错不许静默成功；.ps1 必须 ASCII 无 BOM
+cli.mjs[EN7S]: F:adg-notify 命令行入口：不起 dsh 就能验证 toast 通路（走与 notify_user 相同的 lib/toast.mjs），退出码 0/1/2 | R:code:notify/lib/toast.mjs | A:usage,parseArgs,main | S:只验证机制能否弹，不验证 dsh 是否装载本插件（运行期装载只有重启 dsh 才能观测）
+cordis.patch.yml[FN7T]: F:adg-notify 的 bundle 层：顶层 global 层 insert 一行，使 notify_user 成为全局工具名（调度者可点名进子代理 tools） | R:code:notify/index.mjs | A:- | S:行 id 必须等于 index.mjs 的 export const name；global 层同名重复注册会失败，别在 preset 里再插一行同名工具
+design.md[SN7S]: F:notify 设计：Notification/ToastRequest/ToastResult 三不可变值对象、工具定义契约、I1–I15 不变量与设置页三项行为 | R:code:notify/AGENTS.md | A:核心数据模型,对外接口,非功能红线 | S:常驻必须搭一个 system dismiss 按钮（scenario=reminder 单独会被 Windows 静默忽略、几秒自灭）；失败一律抛出不是返回 shown:false；silent 只按值判定（dsh-tools 会就地补齐 undefined 属性）
+index.mjs[EN7S]: F:adg-notify 插件入口：注册全局工具 notify_user（defineTool，output schema+render），注入 tools 服务 | R:code:notify/lib/toast.mjs,code:notify/lib/user-settings.mjs | A:name,inject,TOOL_NAME,createNotifyUserTool,apply | S:parameters 是隐式属性映射方言不是对象根 JSON Schema；output 必须 {schema,render} 否则 TypeError；createNotifyUserTool 依赖可注入（send 默认 sendToast）以便不弹窗单测
+package.json[FN4T]: F:adg-notify 包声明：私有零依赖 ESM，main/exports/files、test 脚本、dsh.bundle.patch、可选 peer dsh-tools | R:code:notify/index.mjs | A:- | S:-
+testing-guide.md[SN6S]: F:notify 测试指南：命令、用例总表、未观测项（并发两条是否被吞）与交付前最小闭环（含真机驻留口径） | R:code:notify/AGENTS.md,code:notify/design.md | A:用例总表,未观测项,交付前的最小闭环 | S:单元测试证明不了真机弹窗与装载，必须重启后新会话真调一次 notify_user 并看通知中心；cli.mjs send 只证明机制
+
+===D:/dsh/plugins/dsh-adg-ptc/notify/lib/===
+toast.mjs[LN7M]: F:toast 投递实现：把 Notification 装配成 ToastRequest 并跑 Windows PowerShell 5.1 toast.ps1，成功返回 ToastResult、失败一律抛错 | R:code:notify/scripts/toast.ps1 | A:sendToast,buildToastArgs,DEFAULT_TITLE,DEFAULT_TIMEOUT_MS | S:执行器只能是 Windows PowerShell 5.1、.ps1 须 ASCII 无 BOM；全部失败路径（非 Windows/脚本缺失/spawn 抛错/非零退出/超时）都抛 Error 带具体原因，PowerShell 不存在时抛错前不起进程、超时抛前先 child.kill()
+user-settings.mjs[LN6S]: F:读 Adg 设置文件得通知三项用户默认（标题/响铃/常驻），宽容解析、坏文件回出厂默认 | R:code:notify/index.mjs | A:readUserDefaults,USER_DEFAULTS | S:USER_DEFAULTS 三项必须与 settings/lib/schema.mjs 里 consumer=adg-notify 的登记项逐项相等（跨模块漂移）；一次投递按 本次调用>设置文件>出厂默认 解析
+
+===D:/dsh/plugins/dsh-adg-ptc/notify/scripts/===
+toast.ps1[DN6T]: F:Windows toast 投递脚本（ASCII 无 BOM）：按 -Title/-Body/-AppId/-Sound/-DisappearAfterMs 构造 toast XML 并 Show() | R:code:notify/lib/toast.mjs | A:- | S:常驻(<=0)必须带一个 system dismiss 按钮否则 reminder 被静默忽略；脚本必须 ASCII-only 无 BOM（否则 PS5.1 按 ANSI 解码乱码）
+
+===D:/dsh/plugins/dsh-adg-ptc/notify/test/===
+notify.test.mjs[TN6L]: F:notify 单元测试：D1–D8 覆盖取值规范化、silent 按值、toast 装配、失败抛错、常驻按钮源码回归与跨模块设置漂移 | R:code:notify/lib/toast.mjs,code:notify/index.mjs | A:- | S:-
+user-settings.test.mjs[TN6S]: F:user-settings 单元测试：宽容解析（缺文件/坏 JSON/数组/缺项/错类型）与三项默认值 | R:code:notify/lib/user-settings.mjs | A:- | S:-
+
+===D:/dsh/plugins/dsh-adg-ptc/preset/===
+AGENTS.md[SP8S]: F:preset 模块路由与红线：命令、委派行与工具面红线、味道与注入、真实挂载验收 | R:code:preset/design.md,code:preset/agent.cordis.yml | A:命令,红线,生效方式 | S:唯一委派行=delegation 组的 agent 行（不写 persona/toolFilter/maxDepth）；构建期注入名禁止手写；validated≠mounted，必须真实挂载读 agentPresets.resolve('adg-ptc').broken 为空
+agent.cordis.yml[FP9L]: F:Adg preset 的唯一真相源：agent-plane composition，定义调度 persona、工具行、compaction/delegation 组与唯一委派行 agent | R:code:preset/design.md,code:preset/preset.yml,code:preset/bundle.package.json | A:persona,delegation 组,compaction 组,tool 行 | S:不写通用 subagent 行、不写体积旋钮 config、不写 maxDepth/maxTokens/reasoningEffort；构建期注入名禁止手写；persona 的 约束/验收标准/回复内容 三锚段不许删改；委派行恰一条且 toolName=agent
+bundle.package.json[FP6T]: F:preset bundle 包清单：私有包，dsh.bundle.patch、files、engines，供生成器拼出 bundle 的 package.json | R:code:preset/design.md | A:- | S:-
+design.md[SP8S]: F:preset 设计：PresetRevision 生命周期、DelegationRow 动态工具面、SchedulerPersona 三不可变值对象与 I1–I23 不变量 | R:code:preset/AGENTS.md,code:preset/agent.cordis.yml | A:核心数据模型,不变量,非功能红线 | S:validated 不等于 mounted（判据不同）；包名随 dsh 升级改名，沿用旧名让整份 preset 变 broken；persona 三锚段（约束/验收标准/回复内容）共 12 个顶级【…】段不许增删改写
+preset.yml[FP6T]: F:preset 显示元数据：模式名 Adg PTC 模式 与描述（生成器缺 name/description/order 会 exit1） | R:code:preset/design.md | A:- | S:order 默认 20 用于模式排序；改描述等于改新会话里模式选择项的文案
+testing-guide.md[SP7S]: F:preset 测试指南：用例总表（含 persona 锚段在位与语义）、迁移矩阵、消费方契约与怎么重新测量 | R:code:preset/AGENTS.md,code:preset/design.md | A:用例总表,迁移矩阵,怎么重新测量 | S:静态自检只做逐行文本扫描、不检查三锚段内容；改成本结论必须附改动前后各跑一次会话审计的比例/量级对比
+
+===D:/dsh/plugins/dsh-adg-ptc/ptc-parallel/===
+AGENTS.md[SH7T]: F:ptc-parallel 模块路由与红线：命令、PTC 并行提示 section、动态工具清单、子代理同样注入与生效方式 | R:code:ptc-parallel/design.md,code:ptc-parallel/index.mjs | A:命令,红线,生效方式 | S:动态工具清单随各 agent 当前可见工具变化、不写死在正文；子代理也有该段；运行中旧 agent 不补挂（section 在 agent 创建时注册）
+cordis.patch.yml[FH7T]: F:adg-ptc-parallel 的 bundle 层：顶层 global 层一行 insert，注册一条系统提示词 section（非工具），由插件在 agent/created 时逐 agent 判定后挂到该 agent 的 scope | R:code:ptc-parallel/index.mjs | A:insert 行 id | S:落全局层（无 scope）：preset composition 里的 scoped section 会经 composeFrom 落到子代理、无法逐 agent 区分调度者与子代理；行 id 必须等于 index.mjs 的 export const name，同层重名注册会拖垮整个 profile 的插件加载
+design.md[SH7S]: F:ptc-parallel 设计：isPtcAgent 判据（tools.get('run_code',agent)）、section 注入字段（name/order 810/provider text）与动态工具清单分类，含 I1–I14 不变量与本插件三条边界 | R:code:ptc-parallel/AGENTS.md,code:ptc-parallel/lib/guide.mjs | A:核心数据模型,判定口径,不变量 | S:run_code 是保留名呈现传输层，只有呈现模式非 native 的 scope 才有它（判据等价于 PTC 呈现）；判据抛错一律当不是 PTC（fail-closed）；这段话不保证模型照做、也不改任何工具行为
+index.mjs[EH7T]: F:adg-ptc-parallel 插件入口：inject ['systemPrompt']，监听 agent/created，对每个确认 PTC 呈现的 agent 在其 agent.ctx 上注册 section（name adg:ptc-parallel、order 810、text 为 provider） | R:code:ptc-parallel/lib/guide.mjs | A:name,inject,apply | S:注册挂 agent.ctx（agent 注销随 scope 拆除）；运行中的旧 agent 不补挂、改代码要新会话；单个 agent 注册失败被 try/catch 吞掉不拖垮其它 agent
+package.json[FH4T]: F:adg-ptc-parallel 包声明：私有零依赖 ESM，main/exports 指 index.mjs 与 lib/guide.mjs，dsh.bundle.patch 指 cordis.patch.yml，engines node>=22 | R:code:ptc-parallel/index.mjs | A:- | S:-
+testing-guide.md[SH6T]: F:ptc-parallel 测试指南：用例总表（G/S/L/W/C/M 六族）、沙箱注意、漂移检测与覆盖边界 | R:code:ptc-parallel/AGENTS.md,code:ptc-parallel/design.md | A:用例总表,漂移检测,覆盖边界 | S:单元测试证明不了监听器接到运行期，M 系列要重启 dsh 在新会话读系统提示词（子代理那侧尤其要验）；这段是提示词不是机制闸门
+
+===D:/dsh/plugins/dsh-adg-ptc/ptc-parallel/lib/===
+guide.mjs[LH7S]: F:ptc-parallel 可测内核（不 import cordis）：GUIDE_TEXT 正文唯一真相源、isPtcAgent 判定、classifyVisibleTools/renderToolLists 现算工具清单、guideTextFor 组装 | R:code:ptc-parallel/index.mjs | A:GUIDE_TEXT,isPtcAgent,guideTextFor,classifyVisibleTools,renderToolLists,RUN_CODE_NAME | S:正文与 CLASSIFICATION_NOTE 不得出现任何工具名（S3 硬断言），工具清单每次现算、不写死；分类只看有没有 isConcurrencySafe 属性，绝不无参调用它去探测
+
+===D:/dsh/plugins/dsh-adg-ptc/ptc-parallel/test/===
+ptc-parallel.test.mjs[TH6M]: F:ptc-parallel 单元测试：G 判定、S 正文常量、L 动态清单分类/渲染/组装、W 假 ctx 接线、C 文件契约（约 32 用例，零依赖零副作用） | R:code:ptc-parallel/lib/guide.mjs,code:ptc-parallel/index.mjs | A:- | S:沙箱里必须加 --test-isolation=none；S3 用 TOOL_NAME_PATTERN 断言正文不含任何工具名
+
+===D:/dsh/plugins/dsh-adg-ptc/settings/===
+AGENTS.md[SS8T]: F:settings 模块路由与红线：Adg 设置页框架（宿主路由 + 浏览器面板 + 设置文件），五名字对照、R1–R12 红线与生效方式 | R:code:settings/design.md,code:settings/lib/schema.mjs | A:命令,红线,生效方式 | S:设置页只放用户要拍板的项、技术类键不许进页面；键名/默认值/界的真相只在 lib/schema.mjs；消费方只读文件不许 import 本包；认不得的键与非法值 400 且不落盘
+client.js[ES7L]: F:adg-settings 浏览器半边：ModuleLoader bundle，按宿主 GET 的 fields[] 画控件（boolean/string/integer/enum/skill）聚卡片标 origin，挂侧边栏入口与同名 main 面板，保存走 POST/DELETE 同源路由 | R:code:settings/index.js | A:DICT,AdgSettingsSection,checkField,requestBody,displayValue,originLabel | S:页面不定义任何界、不自持久化，渲染与校验都用宿主回来的 fields[]；每条 labelKey/hintKey 必须各备 zh 与 en 两份文案，enum 还要 option.<键>.<值>
+cordis.patch.yml[FS7T]: F:adg-settings 的 bundle 层：顶层 global 层一行 insert（id adg-settings），config 块给出各项配置的页面写文件前回退值 | R:code:settings/index.js | A:insert 行 id,config 块 | S:config 出厂值必须与 lib/schema.mjs 登记表的 default 逐项深等（漂移用例 13e 钉住）；行 id 必须等于 index.js 的 export const name；同层重名注册会拖垮整个 profile 加载
+design.md[SS8S]: F:settings 设计：Field 登记项、三层优先级（stored>configured>default）、设置文件形状与原子写、路由与页面、消费方契约，含 I1–I14 不变量 | R:code:settings/AGENTS.md,code:settings/lib/schema.mjs | A:核心数据模型,三层优先级,设置文件,路由 | S:设置文件落 <DSH_PROFILE_DIR|DSH_HOME|~/.dsh>/adg-settings.json（优先 profile 目录而非用户根）；写盘 mkdir + 临时文件 0600 + rename 原子替换
+index.js[ES8M]: F:adg-settings 宿主半边：把登记表变成同源 HTTP 路由 /api/adg-settings/settings（GET/POST/DELETE）与落在 profile 的 0600 原子写设置文件，含同源栅栏与 connection 优先 | R:code:settings/lib/schema.mjs,code:settings/lib/skills.mjs | A:name,STORE_NAME,settingsFile,apply,rejectionFor,readJson | S:POST 逐键合并非整份替换；认不得的键与非法值 400 且不落盘；同源栅栏不许放宽（非回环/cross-site/外站 Origin/Referer 一律 403，connection 在场以其为准）；请求体上限 64KiB
+package.json[FS4T]: F:adg-settings 包声明：私有零依赖 ESM，main 指 index.js、exports 另给 ./client 与 ./lib/schema.mjs，dsh.bundle.patch 与 dsh.client 元数据 | R:code:settings/index.js | A:- | S:-
+testing-guide.md[SS7S]: F:settings 测试指南：用例总表（kind 校验、三层优先级、路由、漂移）、消费方契约表、人工验收步骤与未观测项 | R:code:settings/AGENTS.md,code:settings/design.md | A:用例总表,消费方契约,人工验收 | S:settings/test 管框架与漂移、notify/test 管消费方形状，漂移一旦发生两条路都红；0600 权限断言只在非 Windows 生效
+
+===D:/dsh/plugins/dsh-adg-ptc/settings/lib/===
+schema.mjs[LS8M]: F:adg 设置框架的唯一登记表：KINDS 五种、FIELDS 冻结数组、DEFAULTS 派生，validValue/refuseMessage/normalizeSettings/buildEffective/describeFields | R:code:settings/index.js,code:settings/client.js | A:KINDS,FIELDS,validValue,normalizeSettings,buildEffective,describeFields | S:I1 键名真相只在本文件、消费方不 import 只按文件契约；I2 每个 default 必须能过自己的 validValue；加一项配置只改 FIELDS 与 client DICT 两条文案。现存七项两分组（skillInject 组四项、notify 组三项）
+skills.mjs[LS6T]: F:设置页「注入哪个技能」下拉的技能来源：枚举 ${DSH_HOME:-~/.dsh}/skills 下含 SKILL.md 的子目录（升序） | R:code:settings/lib/schema.mjs,code:skill-inject/lib/section.mjs | A:skillsRoot,listSkillNames | S:枚举目录而非调 skills 服务，因 section text 必须同步求值；须与 skill-inject/lib/section.mjs 的 listSkills 对同一临时技能根列出同名（漂移检查）
+
+===D:/dsh/plugins/dsh-adg-ptc/settings/test/===
+settings.test.mjs[TS6L]: F:settings 单元测试（34 用例，全走 mkdtemp 不碰真机）：kind 校验、normalize/buildEffective、路由栅栏与请求体上限、写盘原子、notify/skill-inject 两组漂移与客户端 DICT 覆盖 | R:code:settings/lib/schema.mjs,code:settings/index.js | A:- | S:沙箱里必须加 --test-isolation=none
+
+===D:/dsh/plugins/dsh-adg-ptc/skill-inject/===
+AGENTS.md[SR8T]: F:skill-inject 模块路由与红线：框架正文注入插件（按 skillInjectSkill 选技能、可自定义），R1–R11 红线、跨模块路由与生效方式 | R:code:skill-inject/design.md,code:skill-inject/lib/section.mjs | A:命令,红线,跨模块路由,生效方式 | S:注入判据两层：preset 闸门恒等 adg-ptc 不外放（fail-closed），子代理由 skillInjectSubagent 内容层决定（默认关=只注入调度者）；禁止把本插件行写进 preset；正文一律取自 lib/section.mjs 不内联副本
+client.js[ER7S]: F:adg-skill-inject 浏览器半边：在聊天输入框 conversation.input.left（id adg-skill-inject-toggle、order 21）放一颗「注入」开关 chip，挂载 GET 读值、点击 POST skillInjectEnabled | R:code:skill-inject/index.mjs | A:DICT,SkillInjectDock,apply | S:chip 不存本地状态，每次读写都走 /api/adg-settings/settings，与设置页永远同步（R11）；没装 adg-settings 时 POST 404 → chip 落 failed 禁用态
+cordis.patch.yml[FR7T]: F:adg-skill-inject 的 bundle 层：顶层 global 层一行 insert（id adg-skill-inject），注册一段系统提示词 section，由插件在 agent/created 逐 agent 挂（调度者与子代理都挂） | R:code:skill-inject/index.mjs | A:insert 行 id | S:落全局层：preset composition 的 scoped section 会经 composeFrom 落到子代理、区分不了二者；行 id 必须等于 index.mjs 的 export const name，同层重名会拖垮整个 profile 加载
+design.md[SR8T]: F:skill-inject 设计：InjectedSection 字段（name adg:thinking-framework/order 100/provider text）、正文优先级、两个入口一份真相、注入两层闸门与装载链 | R:code:skill-inject/AGENTS.md,code:skill-inject/lib/section.mjs | A:核心数据模型,注入判据,正文优先级 | S:注册层只判 preset（恒等 adg-ptc，fail-closed），内容层判 skillInjectSubagent；子代理也注册但默认拿空正文（默认关=只注入调度者）；闸门在内容层使翻开关下一轮即生效、不用重启
+index.mjs[ER8S]: F:adg-skill-inject 插件入口：inject ['systemPrompt']，监听 agent/created，逐 agent 判 preset 后挂 section，text 为每次组装求值的 provider（sectionTextNow） | R:code:skill-inject/lib/section.mjs,code:skill-inject/lib/user-settings.mjs | A:name,inject,sectionTextNow,apply | S:section name/order/目标 preset 常量只在 lib/section.mjs 一处；闸门在内容层使设置保存即生效、不用重启 dsh；不内联任何框架正文
+package.json[FR4T]: F:adg-skill-inject 包声明：私有零依赖 ESM，main 指 index.mjs、exports 给 client 与 lib，dsh.bundle.patch 与 dsh.client 元数据，engines node>=22 | R:code:skill-inject/index.mjs | A:- | S:-
+testing-guide.md[SR6T]: F:skill-inject 测试指南：用例总表（U 单元 / S 设置读法 / M 真实挂载）、沙箱注意、漂移检测与覆盖边界 | R:code:skill-inject/AGENTS.md,code:skill-inject/design.md | A:用例总表,未观测项,覆盖边界 | S:单元测试证明不了 section 注册到运行期，M 系列要重启 dsh 在新 Adg 会话读系统提示词（调度者有、子代理默认无）
+
+===D:/dsh/plugins/dsh-adg-ptc/skill-inject/lib/===
+user-settings.mjs[LR6T]: F:skill-inject 侧读 adg-settings 写下的注入四项（skillInjectEnabled/Skill/Subagent/Text），宽容解析、坏文件回出厂默认，不 import adg-settings 包 | R:code:skill-inject/index.mjs,code:settings/lib/schema.mjs | A:STORE_NAME,USER_DEFAULTS,readUserDefaults,settingsFile | S:STORE_NAME/默认值/长度上限须与 settings/lib/schema.mjs 登记表逐项一致（漂移用例钉住）；只读文件不 import 对方包，否则只装其一时挂载期炸掉
+section.mjs[LR8S]: F:skill-inject 可测内核（不 import cordis）：section 名/order/目标 preset 常量 + skillsRoot/listSkills/skillPathFor/stripFrontmatter/fallbackText/resolveSectionText 等纯函数 | R:code:skill-inject/index.mjs | A:SECTION_NAME,SECTION_ORDER,TARGET_PRESET,resolveSectionText,shouldInjectFor,isSubagentHeader | S:SECTION_NAME 逐字 adg:thinking-framework、order 100、TARGET_PRESET adg-ptc 是唯一书写点；技能名语法 /^[a-z0-9]+(?:-[a-z0-9]+)*$/ 防路径穿越；SKILL.md 缺失/空/读失败走 fallbackText 降级
+
+===D:/dsh/plugins/dsh-adg-ptc/skill-inject/test/===
+section.test.mjs[TR6M]: F:skill-inject 单元测试：stripFrontmatter/sectionTextFor/fallbackText/resolveSectionText 纯函数，含 frontmatter 剥离、缺失降级、契约常量等用例 | R:code:skill-inject/lib/section.mjs | A:- | S:只测 lib/section.mjs 纯函数；index.mjs 接线（ctx.on / agentCtx.systemPrompt.section）属运行期，归真实挂载验证
+user-settings.test.mjs[TR6S]: F:skill-inject 用户设置自测：readUserDefaults 宽容读取（缺文件/坏 JSON/坏值回落）与和设置页登记表的键/默认值/界对齐 | R:code:skill-inject/lib/user-settings.mjs | A:- | S:落盘只在 mkdtemp 临时目录（靠 DSH_PROFILE_DIR 指过去），用例结束恢复环境变量并删目录
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-browser-use/===
+SKILL.md[SQ7M]: F:浏览器工具链使用技能：browser/cli.mjs 契约与子命令、五条动作命令的 CHANGED=true|false|unknown 三态判据、无头默认与换模式、登录人工介入与降级 web_fetch | R:code:browser/design.md,code:browser/AGENTS.md | A:动作命令,三态判据,人工介入协议,降级条件 | S:动作成败只认可观测差异 CHANGED=true|false|unknown，unknown 绝不许读成 false；登录永远由人在有头窗口完成；任务进行中不 close
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-computer-use/===
+SKILL.md[SQ7S]: F:桌面工具链使用技能：desktop/cli.mjs 入口与子命令、注入类只认可观测差异（CHANGED/CURSOR_LANDED）、UIPI 静默拦截与完全权限前提、优先走 Windows API 路线 | R:code:desktop/design.md,code:desktop/AGENTS.md | A:子命令,注入判据,UIPI 前提,Windows API 路线 | S:注入类命令只认可观测差异、不认调用返回；受限会话 Low 完整性会被 UIPI 静默拦下且丢事件，真机驱动须完全权限
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-delegation/===
+SKILL.md[SQ8S]: F:委派技能（给调度者）：delegate 参数语义与硬边界（tools 就是子代理那次全部工具、五个内置 deny、未知名与 run_code 后果）、能力带→tools/persona 映射、技能路径写法 | R:code:delegate/design.md,code:delegate/AGENTS.md | A:参数语义,能力带映射,persona 写法,技能路径口径 | S:tools 是子代理那次可见的全部工具（硬边界不是提示）；agent/delegate/workflow/ralph/ask_user_question 在 BUILTIN_DENY；点名未知名被剔除、点 run_code 当场抛错
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-doc-criterion/===
+SKILL.md[SQ9M]: F:文档工程师角色规范：把施工认知写成真相与判据层（design 当前真相、roadmap 未来意图与验收判据、testing-guide 用例矩阵），过程件隔离、引用形式、质量红线与机检/评审设施 | R:code:skills/adg-doc-criterion/scripts/check-docs.mjs,code:skills/adg-doc-criterion/review-prompt.md | A:角色与原则,引用形式规范,文档类型总表,质量红线清单,机检与评审设施 | S:文档先是给人看懂可审核，再是零上下文智能体施工的判据；导航/文件在哪/改一处读哪份交给 aoci，本层不重复承担（防双写漂移）；根 AGENTS ≤200 行且 aoci 托管块不计
+review-prompt.md[SQ6T]: F:对抗评审提示词模板：把整块交给独立评审子智能体（不带作者上下文），冷启动三问自测 + 逐条红线评审，只负责 [评] 项与语义洞 | R:code:skills/adg-doc-criterion/SKILL.md,code:skills/adg-doc-criterion/scripts/check-docs.mjs | A:提示词正文,冷启动三问 | S:评审子智能体不带作者上下文才可信；[机检] 项已由 check-docs.mjs 跑过，评审只补 [评] 项与语义；逐治理域各派一次
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-doc-criterion/examples/perfect/===
+AGENTS.md[SQ6T]: F:adg-doc-criterion 满分样张入口：演示最小治理域 Task Queue 的根 AGENTS.md（一句话/命令/关键红线/Quality Gates/能力边界，不含文件清单） | R:code:skills/adg-doc-criterion/examples/perfect/queue/design.md | A:- | S:这是机检与对抗评审的对照样张，改 check-docs/selftest 时必须让它仍 exit 0；结构展示「导航交 aoci、本文件只留判据」的正确形状
+roadmap.md[SQ5T]: F:满分样张 roadmap.md：未来意图唯一受控出口，四节（在办/已定待做/待决策/明确不做），每行目标 + 验收判据 + 状态 + 关联 | R:code:skills/adg-doc-criterion/examples/perfect/queue/design.md | A:在办,已定待做,待决策,明确不做 | S:roadmap 只放未来意图与验收判据、实现即删除；状态词表 approved/in-progress/needs-decision；四节标题是机检依赖（在办/已定待做/待决策/明确不做）
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-doc-criterion/examples/perfect/queue/===
+design.md[SQ6T]: F:满分样张 design.md：内存任务队列 Queue 的职责/依赖/核心数据模型（Task 与 Queue 状态机、I1–I4 不变量）/对外接口/非功能红线/For Agents | R:code:skills/adg-doc-criterion/examples/perfect/AGENTS.md | A:核心数据模型,不变量,非功能红线 | S:演示 design 的正确形状：给人 5 秒看懂的状态机 + 可核验不变量（I1 id 唯一、I2 迁移不跳跃、I3 并发不超 concurrency、I4 只经 _transition 改 state）
+testing-guide.md[SQ5T]: F:满分样张 testing-guide.md：用例总表（T1–T4 逐条对不变量）、迁移矩阵、消费方契约与人工 review 项 | R:code:skills/adg-doc-criterion/examples/perfect/queue/design.md | A:用例总表,迁移矩阵 | S:-
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-doc-criterion/scripts/===
+check-docs.mjs[EQ8M]: F:adg-doc-criterion 机检器（零依赖）：扫描治理域 .md 的行数预算/status 词表/引用真实性与形式/过程件隔离/roadmap 合规；aoci 托管块不计预算、无孤儿检查 | R:code:skills/adg-doc-criterion/scripts/selftest.mjs,code:skills/adg-doc-criterion/SKILL.md | A:budgetFor,stripAociBlock,walk,tokensOf | S:budgetFor：AGENTS 根 200/模块 120、design 250、testing-guide 300、roadmap 60；AGENTS.md 走 stripAociBlock 再计数；退出码 0/1/2；改它必须同步 selftest 并让 examples/perfect 仍 exit 0
+selftest.mjs[EQ6T]: F:check-docs.mjs 回归夹具（零依赖）：每个用例在临时目录造 fixture，跑检查器断言命中/未命中特定 code，含 examples/perfect exit 0 | R:code:skills/adg-doc-criterion/scripts/check-docs.mjs | A:mk,run,goodFiles | S:改 check-docs 的规则必须同步加/改用例；goodFiles 造的根 AGENTS 只需「# Demo 治理域 + 一句话」（不再含 Project Map/版本区表）
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-grill-me/===
+SKILL.md[SQ6T]: F:grill-me 技能（给调度者自己）：把方案画成设计树、按轮追问整个前沿、每问附推荐答案，直到无未定分支与用户达成共识 | R:code:skills/adg-grill-me/SKILL.md | A:设计树,追问前沿,共识判据 | S:给调度者自己用、决策一律交用户（事实自己查、要子代理经 delegate 现派）；判据是没有未定分支，而非问题问完
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/adg-session-handoff/===
+SKILL.md[SQ6T]: F:会话交接技能：把当前会话提炼成一份可直接整块粘进新会话的交接提示词（目标验收/硬约束/已定决策/当前状态/环境/未决项/已排除/下一步） | R:code:skills/adg-session-handoff/SKILL.md | A:交接提示词结构 | S:唯一判据：零上下文新会话只读这份字就能不追问、不重走已排除的路接着干；唯一产物是提示词不是文件
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/execution-framework/===
+SKILL.md[SQ7S]: F:执行框架技能（正文由 adg-skill-inject 注入调度者）：工作循环、执行顺序与交付标准，首行「### 执行框架 BEGIN」 | R:code:skill-inject/design.md | A:工作循环,交付纪律 | S:这是注入正文默认来源（skillInjectSkill 出厂 execution-framework）；改正文等于改调度者每轮系统提示词；首行标记用于核对注入
+
+===D:/dsh/plugins/dsh-adg-ptc/skills/thinking-framework/===
+SKILL.md[SQ7M]: F:思维规范框架技能（可由 adg-skill-inject 选定注入）：全面、自然、不假修饰的思考过程指南，首行「# 思维规范框架」 | R:code:skill-inject/design.md | A:思考过程指南 | S:设置里把 skillInjectSkill 切到 thinking-framework 即注入这份（首行「# 思维规范框架」、不再有执行框架 BEGIN）；改正文即改调度者提示词
+
+===D:/dsh/plugins/dsh-adg-ptc/tools/===
+AGENTS.md[SV7T]: F:tools 模块路由与红线：六个脚本（check-preset/gen-preset-bundle/check-bundle-flavor/flavors/has-bundle/resolve-flavor）命令、退出码与红线 | R:code:tools/design.md,code:tools/check-preset.mjs | A:命令,红线,构建期注入组 | S:ERROR 只留「这次委派必然抛错」；体积旋钮不钉死取值；构建期注入名只能由构建期注入、禁止手写进 agent.cordis.yml；改 tool 行必须同步 KNOWN_TOOLS
+check-bundle-flavor.mjs[EV7S]: F:产物味道自检器（零依赖）：断言某份生成 cordis.patch.yml 的调度 persona 说明里该在的注入组名字在、不该在的不在、委派行恰一条、compaction auto 与味道相符 | R:code:tools/flavors.mjs,code:tools/gen-preset-bundle.mjs | A:味道键断言 | S:判据是退出码（0/1/2）不是产物字节数；plain 正常通过时没有 context-tools 行，只有 plain 出现那段说明才打 LEAK + ERROR
+check-preset.mjs[EV8L]: F:preset 源文件静态校验器（零依赖逐行扫描，非 YAML 解析）：行尾/BOM、唯一委派行字段齐全 toolName 唯一、allow 只写已注册名、无通用委派行、BUILTIN_DENY 与 ask_user 口径、体积旋钮结构、构建期注入名未手写 | R:code:tools/flavors.mjs,code:preset/agent.cordis.yml | A:KNOWN_TOOLS,FACTORY_DEFAULTS,EXPECTED_ROWS,readRowBlock | S:只证明文本硬约束没破、不证明能挂载（包解析/realm 要真实挂载）；exit 0/1/2、允许 WARN；改 composition tool 行必须同步 KNOWN_TOOLS；FACTORY_DEFAULTS 只在报告当对照不参与 fail
+design.md[SV8S]: F:tools 设计：Finding/KnobRow/ExitStatus 三不可变值对象与 I1–I9 不变量、InjectionGroup 组表（flavors.mjs）四问、对外 CLI 接口与生成物分味道 | R:code:tools/AGENTS.md,code:tools/flavors.mjs | A:核心数据模型,不变量,InjectionGroup,对外接口 | S:味道是组的集合不是枚举（手写枚举会漏半数组合）；稳定目录名是 dirNameFor 推导结果不许写死；probeBundle 要「声明选中 + node_modules 实体」两条都成立
+flavors.mjs[EV8S]: F:构建期注入组的单一事实来源（冻结组表）：INJECTION_GROUPS/GROUP_ORDER，以及 flavorKeyOf/parseFlavorKey/flavorKeys/toolsFor/notInjectedFor/autoCompactionOffFor/dirNameFor/probeBundle | R:code:tools/design.md | A:INJECTION_GROUPS,GROUP_ORDER,dirNameFor,probeBundle,flavorKeys | S:注入组清单只有这一份，其余脚本/文档一律按它推导不另抄；加一组只改 INJECTION_GROUPS 与 GROUP_ORDER 即自动获得旗标/味道键/目录名/各校验；dirNameFor 把 + 换成 -
+gen-preset-bundle.mjs[EV7M]: F:preset bundle 生成器：从 preset/preset.yml + agent.cordis.yml + bundle.package.json 生成 <outDir>/{cordis.patch.yml,package.json}，按旗标注入组名字并关 bili 的 auto | R:code:tools/flavors.mjs,code:preset/agent.cordis.yml | A:addContextToolsNote,disableAutoCompaction,parseTopLevelScalars | S:只有 bundle patch 一行声明 preset 是 dsh 现在唯一认的形状（旧目录发现机制已失效）；注错方向/不关 auto 由 check-bundle-flavor 兜；产物是构建输出，手改下次安装被覆盖
+has-bundle.mjs[EV7T]: F:profile 是否挂着某 bundle 插件的共用判据（安装脚本用它定味道）：逐 profile 输出 名称\t0|1，退出码恒 0、读不到也算 0 | R:code:tools/flavors.mjs | A:probeBundle,GROUP_ORDER | S:判据两条都要成立（包名在 dsh.profile.bundles + 包里真有 dsh.bundle.patch 文件），实现在 flavors.mjs 的 probeBundle，勿在调用方重写；补丁名从包里 package.json 的 dsh.bundle.patch 读
+resolve-flavor.mjs[EV7T]: F:把 profile 挂的注入组翻成 味道键+稳定目录名+gen 旗标 三列（制表符分隔），拼法只由 flavors.mjs 定义，两安装脚本共用避免漂移 | R:code:tools/flavors.mjs | A:flavorKeyOf,dirNameFor,flavorKeys | S:味道键与稳定目录名必须逐字一致地出现在 install.ps1/install.sh/自检/文档，故拼法只写 flavors.mjs；--<组> 是探测结果，auto/on/off 判定留调用方
+testing-guide.md[SV7S]: F:tools 模块测试指南：T-* check-preset / G-* 生成器 / F-* 味道自检 / P-* 探测映射 / R-* 人工 review 的用例总表与判据（跑哪条命令、看哪行、期望退出码） | R:code:tools/design.md,code:tools/AGENTS.md | A:用例总表,未观测项 | S:判据一律命令+输出行+退出码、不设读数锚（字节数/项数/警告数会漂）；夹具 A 复制 agent.cordis.yml 只改副本，读写必须 UTF-8（PowerShell Get-Content 会 ANSI 误读改行数）
+
+===D:/dsh/plugins/dsh-adg-ptc/turn-bookmarks/===
+AGENTS.md[SW7T]: F:turn-bookmarks 模块路由与红线：浏览器半边放星标/染轨道/正文标记、宿主半边把书签存会话目录 sidecar；含 R1–R12 红线与跨模块路由表 | R:code:turn-bookmarks/design.md,code:turn-bookmarks/testing-guide.md | A:三个名字,红线,跨模块路由 | S:三个名字不同物：包名=行id=adg-turn-bookmarks、路由前缀 /api/adg-turn-bookmarks、槽 conversation.chat.turnTail；不注册任何工具、不写 preset（会拖垮 profile）；书签只落会话目录 sidecar
+client.js[EW7M]: F:turn-bookmarks 浏览器半边：在 conversation.chat.turnTail 槽放星标按钮、按书签集给轨道刻度/提问行加 data-adg-tb 染色；左键留给 dsh 原生跳转，右键+星标单击切收藏 | R:code:turn-bookmarks/index.mjs,code:turn-bookmarks/lib/bookmarks.mjs | A:__ModuleLoader__.load,toggle,computeRailTurns,turnFromLabel,paint,startPainter | S:只用公开 data-* 属性（data-chat-turn/data-chat-flow-kind/data-index），禁用构建期哈希类名；轨道 index≠轮次，首选 aria-label 抽第一个数字；不监听 click、不 preventDefault（左键原速）；绝对定位星标须门控 [data-actions-reveal]
+cordis.patch.yml[KW6T]: F:turn-bookmarks 的 bundle 装载层：insert 一行 id=name=adg-turn-bookmarks，声明宿主半边 index.mjs 与浏览器半边 client.js | R:code:turn-bookmarks/index.mjs | A:- | S:insert 的 id 必须等于 index.mjs 的 export const name（都=包名 adg-turn-bookmarks）；本插件只挂 webServer 前缀、不注册工具、也不写进 preset/agent.cordis.yml
+design.md[SW8T]: F:turn-bookmarks 设计与不变量 I1–I12：两半分工、书签集/存储形状/HTTP 契约（GET/PUT/DELETE 状态码）/DOM 契约/失败降级，书签落会话目录 sidecar | R:code:turn-bookmarks/AGENTS.md,code:turn-bookmarks/index.mjs | A:核心数据模型,HTTP契约,DOM契约,不变量 I1-I12 | S:书签是轮次号 Set 不是下标/seq、只落会话目录 sidecar（删会话即删）；会话目录不在→409 不造目录；轨道 index 是合并下标≠轮次（首选 aria-label）；绝对定位星标门控 [data-actions-reveal]、不改 flex-direction:row（该槽被交付卡/计划卡共用）
+index.mjs[EW8M]: F:turn-bookmarks 宿主半边：注册同源前缀路由 /api/adg-turn-bookmarks 读写会话目录 sidecar（GET 空列表 / PUT 整份替换且 409 不造目录 / DELETE），含同源栅栏与 64KB 体上限 | R:code:turn-bookmarks/lib/bookmarks.mjs | A:name,ROUTE_PATH,sessionsRoot,locateSessionDir,rejectionFor,apply | S:会话目录不在→409、禁止 mkdir 假会话；写走 .tmp+rename+0600；同源栅栏与 settings/index.js 同规则（connection.admit 优先，否则 Host 回环+非 cross-site+Origin/Referer authority 对齐）；MAX_BODY 64KB
+package.json[KW6T]: F:adg-turn-bookmarks 包声明：type=module、main/exports 指 index.mjs 与 client.js、files 白名单、node>=22，test=node --test test | R:code:turn-bookmarks/index.mjs | A:- | S:exports 同时暴露 . 与 ./client 与 ./lib/bookmarks.mjs 三入口；files 白名单决定打进稳定副本的文件，漏了 client.js/design.md 会让装出来的包缺半边
+testing-guide.md[SW7T]: F:turn-bookmarks 验证指南：用例总表（bookmarks.test 纯规则 / routing.test 假 ctx）、已在真机 DOM 上验证的读数、未观测项与量法 | R:code:turn-bookmarks/design.md,code:turn-bookmarks/AGENTS.md | A:用例总表,已在真机验证,未观测项 | S:单元测试碰不到浏览器，槽注册/书签读写/随滚动重染/右键切换需真机才验；染色 CSS 与右键 preventDefault 已用无头浏览器在 3080 验证但插件本身未装
+
+===D:/dsh/plugins/dsh-adg-ptc/turn-bookmarks/lib/===
+bookmarks.mjs[EW8T]: F:turn-bookmarks 纯规则层（宿主与测试共用）：STORE_FILE/MAX_TURNS 契约、isSafeSessionId 防穿越、normalizeTurns 归一、parseStore/serializeStore 唯一存储形状、sessionDirCandidates 两目录形态 | R:code:turn-bookmarks/index.mjs | A:STORE_FILE,MAX_TURNS,isSafeSessionId,normalizeTurns,parseStore,serializeStore | S:STORE_FILE='adg-turn-bookmarks.json'、MAX_TURNS=1000 只此一处；normalizeTurns 只留非负整数去重升序封顶、丢弃不猜；parseStore 坏输入一律当空列表；两目录形态 session-<uuid> 与裸 uuid
+
+===D:/dsh/plugins/dsh-adg-ptc/turn-bookmarks/test/===
+bookmarks.test.mjs[TW6T]: F:turn-bookmarks 纯规则自测：文件契约（STORE_FILE/MAX_TURNS）、isSafeSessionId、normalizeTurns、parseStore 容错、serializeStore 往返、sessionDirCandidates | R:code:turn-bookmarks/lib/bookmarks.mjs | A:- | S:零依赖零副作用；断言 STORE_FILE==='adg-turn-bookmarks.json' 与 MAX_TURNS===1000，改契约必须同步这份
+routing.test.mjs[TW7M]: F:turn-bookmarks 路由自测（假 ctx/假 req-res）：GET/PUT/DELETE 状态码、409 不造目录、超限 400 不静默截断、同源栅栏、connection 优先、跨半边漂移、右键入口不接管左键、星标布局护栏 | R:code:turn-bookmarks/index.mjs,code:turn-bookmarks/client.js | A:- | S:断言 ROUTE_PATH==='/api/adg-turn-bookmarks'、name==='adg-turn-bookmarks'；源码必须无 addEventListener('click'、有 contextmenu+preventDefault；正则挡 flex-direction:row；改插件须两边文案键一致

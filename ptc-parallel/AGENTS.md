@@ -50,9 +50,9 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 | 改正文 | `lib/guide.mjs` 的 `GUIDE_TEXT`（唯一事实源） | 本文件 R3 |
 | 改装载形状 | `install.ps1` 的第 2b-6 / 4c-12 / 4c-13 步 | （同一种装法：稳定副本 + `dsh plugin add` + 读回断言三格） |
 
-## 版本区
+## 文档（真相与判据）
 
-本模块在版本区里的文档就是 `ptc-parallel/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）三份。完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
+本模块三份文档：`ptc-parallel/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

@@ -40,7 +40,7 @@ last_reviewed: 2026-10-05
 
 **跨模块改动路由**
 
-- 改了 `cli.mjs` 的命令行契约 / 输出键 → 同步根 `AGENTS.md` 的 Project Map 与生效方式表、`README.md` 的「子代理与能力带」一节、`skills/adg-computer-use/SKILL.md`（它们都复述了能力边界），并重跑 `node tools/check-preset.mjs` + 四条 `check-bundle-flavor.mjs`。
+- 改了 `cli.mjs` 的命令行契约 / 输出键 → 同步根 `AGENTS.md` 的「生效方式」表、`README.md` 的「子代理与能力带」一节、`skills/adg-computer-use/SKILL.md`（它们都复述了能力边界），并重跑 `node tools/check-preset.mjs` + 四条 `check-bundle-flavor.mjs`。
 - 改了本模块的**能力边界**（能做什么 / 不能做什么）→ 上面三处必须一起改，否则技能或 README 会承诺工具做不到的事（`preset/AGENTS.md` 红线 17 的同一条道理）。
 - 安装路径改了 → `install.ps1` / `install.sh` 两个都要改，并复核 `install.ps1` 的 UTF-8 BOM（根 `AGENTS.md` 红线 8）。
 
@@ -198,7 +198,7 @@ last_reviewed: 2026-10-05
 
 **改完必须跑的**：`cd desktop && node --test --test-isolation=none test`（受限会话下不加 `--test-isolation=none` 会 EPERM，这是 I11 的直接后果）；改了注入路径再按 [`testing-guide.md`](testing-guide.md) 的「交付前的最小闭环」在**完全权限**会话里跑一次真机闭环 —— **只用 `--dry-run` 证明不了注入可用**（I10b）。动了 UIA 内容读数（`Read-ElementContent` / `Get-ContentSnapshot` / `snapshot`）必须让 `test/content-safety.test.mjs` 全绿；动了 `params` 的键名、`COMMAND_FLAGS` 或注入命令的开关集合，必须让 `test/params-map.test.mjs` 全绿（它把"CLI 到底有没有把参数传下去"变成了静态断言）：它把「不许再调 range 文本方法」和「探针不许再住回 verify」两条都做成了静态守卫（I7e）。
 
-写文档时遵守根 `AGENTS.md` 的诚实原则：未观测的写成 `**未观测**：…；量法：…`，引用别人记载的实测必须写明来源、不得写成自己验证过；本文只描述当前状态，不写变更叙述。
+写文档时遵守根 `AGENTS.md`「能力的边界」里的诚实原则：未观测的写成 `**未观测**：…；量法：…`，引用别人记载的实测必须写明来源、不得写成自己验证过；本文只描述当前状态，不写变更叙述。
 
 ## 测试与验证
 

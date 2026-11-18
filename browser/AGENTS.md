@@ -57,9 +57,9 @@ cd browser && node --test --test-isolation=none test            # 本机沙箱�
 - 禁止把闸门的**判定**留在页面表达式里（页面里一个布尔量可以被一行改掉，文本扫描只能按形状抓），也禁止"闸门过了"就报成功：`select` 的判定必须在 Node 侧纯函数 `decideSelect`（页面探针只读原始数据、不知道请求值），写入之后必须**回读自证** —— `select` 的 `SELECT_APPLIED=` 三样（值在选项表里 / `value` 等于请求值 / `selectedIndex` 指着它的位置）缺一 ⇒ **退出码 1** 报"动作没有落地"（受控组件把选择回滚时得到的就是这个读数）；`type` 的 `TYPE_APPLIED=` 与 `click` 的 `HIT_AFTER=` 是同类自证读数（读不到一律 `unknown`，不许当成功）。来源：第四轮返工 —— 复核方三条别名 / 反射变体曾让单测 100 条全绿，而 CLI 端到端从"拒发（2）"翻成"放行（0）"。载体：[机检]（A85 / A92 / A93 / A94）+ [真机]（A97）。
 - 禁止把"页面主动撒谎"说成"已经封住"：判据的原料全部来自页面读数，所以页面**连回读一起伪造**时外部分辨不了（实测：单测红 5 条而 CLI 退出码 0）、`type` 的回读表达式被改坏时单测仍全绿（真机 fail-closed 成 `TYPE_APPLIED=unknown`）、`click` 的"点没点到目标"没有任何回读能证明（`hover` 同理：「指针移进的是不是目标元素」也没有回读能证明，而且**不改 `innerText` 的纯视觉属性变化**（`opacity` / 配色 / 边框 / 阴影）判据看不见（改 `display` 那类会把子元素文本带进 / 带出 `body.innerText` ⇒ 判据**看得见**），只能自己 `eval` 回读 `getComputedStyle` / `offsetParent`）。这些残余逐条登记在 `design.md` 的「闸门被绕过 / 页面撒谎时，哪条读数还说得上话（残余）」与 `testing-guide.md` 的覆盖边界 ⑤、A98，报回时必须照原样保留。载体：[评] + [机检]（变异 M11 / M12）。
 
-## 版本区
+## 文档（真相与判据）
 
-本模块的最终文档只有三份，都在 `browser/` 下：本文（路由）→ `design.md`（设计与不变量）→ `testing-guide.md`（用例与未观测项）。进 git、互相引用、改了就原地更新，不建「最新稿」。过程件住在被 `.gitignore` 排除的临时工作目录 `docs-work/`，不算版本区，任务交付前清空。完整清单与各文档的职责边界见仓库根 `AGENTS.md` 的「版本区」一节。
+本模块三份文档：`browser/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计与不变量）→ [testing-guide.md](testing-guide.md)（用例与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

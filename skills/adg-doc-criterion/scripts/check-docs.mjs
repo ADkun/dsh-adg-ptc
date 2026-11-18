@@ -10,7 +10,7 @@
  * 覆盖 SKILL.md 质量红线清单里标 [机检] 项的机械部分：
  *   7  行数预算
  *   8  versioned 知识文档 frontmatter 四字段 + status 封闭词表
- *   9  根 AGENTS.md 存在 + 每份最终文档被其登记（无孤儿）
+ *   9  根 AGENTS.md 存在（无孤儿检查已移除，导航/文件覆盖由 aoci 承担）
  *   10 引用真实性（机械部分）：相对链接/图片目标存在（ERROR）。可选 --strict-refs 额外对反引号文件路径做尽力 WARN
  *   11 过程件隔离（changelog/handoff/pending/工作稿只在 git 化的临时目录里）
  *   12 引用形式：无本机绝对路径 / 跨仓库无 ../ / 行号引用 / 跨仓 URL 缺 ref 或裸 main/HEAD / 链接指向被 .gitignore 排除的内容
@@ -38,7 +38,7 @@ for (let i = 0; i < argv.length; i++) {
 const root = resolve(rootArg || process.cwd());
 if (!existsSync(root) || !statSync(root).isDirectory()) { console.error('[FATAL] 根目录不可读: ' + root); process.exit(2); }
 
-const COVERAGE = '机检覆盖：7 行数预算 / 8 frontmatter+status / 9 根AGENTS存在+无孤儿 / 10 相对链接·图片存在（--strict-refs 额外反引号路径 WARN）/ 11 过程件隔离 / 12 引用形式(绝对路径·跨仓../·行号·跨仓URL裸分支·链接指向gitignore) / 15 roadmap机械合规。不覆盖：[评]/[人] 语义项。';
+const COVERAGE = '机检覆盖：7 行数预算 / 8 frontmatter+status / 9 根AGENTS存在（无孤儿已移交 aoci） / 10 相对链接·图片存在（--strict-refs 额外反引号路径 WARN）/ 11 过程件隔离 / 12 引用形式(绝对路径·跨仓../·行号·跨仓URL裸分支·链接指向gitignore) / 15 roadmap机械合规。不覆盖：[评]/[人] 语义项。';
 if (showRule) { console.log(COVERAGE); if (!rootArg) process.exit(0); }
 
 const SKIP_DIR = new Set(['node_modules', '.git', '.hg', '.svn', 'bundle', 'dist', 'build', '.next', 'coverage', 'docs-work']);
@@ -46,7 +46,6 @@ const TEMP_DIR = 'docs-work';
 const STATUS_WORDS = new Set(['draft', 'current', 'deprecated']);
 const FRONTMATTER_DOCS = new Set(['design.md', 'testing-guide.md', 'roadmap.md']);
 const PROCESS_NAMES = new Set(['changelog.md', 'handoff.md', 'pending.md']);
-const FINAL_NAMES = new Set(['AGENTS.md', 'design.md', 'testing-guide.md', 'roadmap.md', '_index.md']);
 const ROADMAP_STATUS = new Set(['approved', 'in-progress', 'needs-decision']);
 const DOCREF_SKIP_PREFIX = ['node_modules/', 'bundle/', 'dist/', 'build/', '.next/', 'coverage/', 'docs-work/', '.git/'];
 const BARE_BRANCH = new Set(['main', 'master', 'HEAD', 'head']);
@@ -58,8 +57,18 @@ function budgetFor(rel) {
   if (name === 'design.md') return 250;
   if (name === 'testing-guide.md') return 300;
   if (name === 'roadmap.md') return 60;
-  if (name === '_index.md') return 80;
   return null;
+}
+function stripAociBlock(text) {
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let inBlock = false;
+  for (const l of lines) {
+    if (!inBlock && l.indexOf('aoci:begin') !== -1) { inBlock = true; continue; }
+    if (inBlock) { if (l.indexOf('aoci:end') !== -1) inBlock = false; continue; }
+    out.push(l);
+  }
+  return out.join('\n');
 }
 function walk(dir, out) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -120,7 +129,8 @@ for (const f of files) {
   const name = basename(f);
 
   const budget = budgetFor(rel);
-  if (budget != null && nLines > budget) add('ERROR', 'BUDGET', rel, null, '行数 ' + nLines + ' 超预算 ' + budget + '（' + name + '）');
+  const budgetLines = name === 'AGENTS.md' ? countLines(stripAociBlock(text)) : nLines;
+  if (budget != null && budgetLines > budget) add('ERROR', 'BUDGET', rel, null, '行数 ' + budgetLines + ' 超预算 ' + budget + '（' + name + '）');
 
   if (FRONTMATTER_DOCS.has(name)) {
     const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -258,23 +268,9 @@ for (const f of procFiles) {
   }
 }
 
-// 根 AGENTS.md 存在性 + 孤儿
+// 根 AGENTS.md 存在性（无孤儿检查已移除：导航与文件覆盖由 aoci 承担，见 SKILL 红线 9 / 14）
 const rootAgents = join(root, 'AGENTS.md');
-if (existsSync(rootAgents)) {
-  const ra = readFileSync(rootAgents, 'utf8');
-  for (const f of files) {
-    const name = basename(f);
-    if (!FINAL_NAMES.has(name)) continue;
-    const rel = relPosix(f);
-    if (rel === 'AGENTS.md') continue;
-    const dir = rel.split('/').slice(0, -1).join('/');
-    const toks = ra.match(/[A-Za-z0-9_.\/-]+/g) || [];
-    const covered = toks.some((x) => x === rel || (dir && (x === dir || x.startsWith(dir + '/'))));
-    if (!covered) add('ERROR', 'ORPHAN', rel, null, '根 AGENTS.md 未指到（相对路径或所在目录都没出现）');
-  }
-} else {
-  add('ERROR', 'ROOT', 'AGENTS.md', null, '根目录缺 AGENTS.md（每个治理域必须有根入口）');
-}
+if (!existsSync(rootAgents)) add('ERROR', 'ROOT', 'AGENTS.md', null, '根目录缺 AGENTS.md（每个治理域必须有根入口）');
 
 // 基线豁免：把存量已知问题（多为历史行号引用）登记为 accepted，不让 CI 因存量失败
 const defBaseline = baselinePath ? resolve(baselinePath) : join(root, TEMP_DIR, 'check-docs.baseline.json');

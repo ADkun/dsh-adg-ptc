@@ -43,9 +43,9 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 - **R11 不许把设置文件当"运行期热重载"通道，也不许要求用户重启才能让设置生效。** 理由：`adg-notify` 每次调用重读一次文件、`adg-skill-inject` 每次组装系统提示词重读一次文件（这就是"保存后立即生效"的全部实现）；本插件写盘后下一次 GET 就反映真相。载体：[评] 读 `notify/index.mjs` 的 `defaults: () => readUserDefaults()` 与 `skill-inject/index.mjs` 的 `sectionTextNow()`。
 - **R12 浏览器半边的 DICT 必须给每条 `labelKey` / `hintKey` 各一份 zh 与 en 文案。** 理由：登记表里写的是键名，页面按 `t(field.labelKey)` 取字；少一份就会出现"页面上显示 `field.x.label`"这种裸键。enum 还要给每个取值一份 `option.<键>.<值>` —— 少一份下拉里就是一串裸键。载体：[机检] 「客户端 DICT 覆盖了登记表里的每一条文案键」用例（对 `client.js` 做文本级计数，含 enum 的选项键）。
 
-## 版本区
+## 文档（真相与判据）
 
-本模块的最终文档只有三份，都在仓库 `settings/`：`settings/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计：对象、不变量、接口）→ [testing-guide.md](testing-guide.md)（验证：用例总表、消费方契约、未观测项）。三份进 git、互相引用，内容一变就写回这三份本身。过程件一律住被 `.gitignore` 排除的 `docs-work/`。完整清单见根 `AGENTS.md` 的「版本区（文档目录入口）」一节。
+本模块三份文档：`settings/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计：对象、不变量、接口）→ [testing-guide.md](testing-guide.md)（验证：用例总表、消费方契约、未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

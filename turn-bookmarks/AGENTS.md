@@ -56,9 +56,9 @@ node --test --test-isolation=none test  # dsh 沙箱（workspace-write）里必�
 | 改路由或同源栅栏 | `index.mjs`（栅栏写法与 `settings/index.js` 同源） | [testing-guide.md](testing-guide.md) 的「用例总表」 |
 | 改装载形状 | `install.ps1` 的 2b-7 / 4c-14 / 4c-15 步 | （同一种装法：稳定副本 + `dsh plugin add` + 读回断言三格） |
 
-## 版本区
+## 文档（真相与判据）
 
-本模块三份：`turn-bookmarks/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计与不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）。完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
+本模块三份文档：`turn-bookmarks/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计与不变量）→ [testing-guide.md](testing-guide.md)（用例全表与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 

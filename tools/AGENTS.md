@@ -48,9 +48,9 @@ node tools/resolve-flavor.mjs --billion-context --save-token                    
 
 **改三个旋钮插件的版本 / 包名 / 键集 → 同步 `FACTORY_DEFAULTS` 与 `EXPECTED_ROWS` 的 `name` / `allowedKeys`，并重跑 `node tools/check-preset.mjs`**。`EXPECTED_ROWS` 里每行的 `name` 是期望包名、`allowedKeys` 是该插件 `config:` 认的全部键，`FACTORY_DEFAULTS` 记的是它该有的出厂值。不同步的后果两边都是缺陷：**合法配置被拦下**，或**整行挂载失败被放过**。来源：`@deepseek-ai/dsh-*` 的包名会随 dsh 升级改名，插件也会加删键。载体：[机检] 改完跑 `node tools/check-preset.mjs` ⇒ **exit 0**（ERROR 必须为 0），且报告里委派行清单非空、旋钮生效值行与插件的出厂默认值一致。
 
-## 版本区
+## 文档（真相与判据）
 
-本模块在版本区里的文档就是这三份，都在仓库 `tools/` 下：`AGENTS.md`（本文，路由与红线）→ [`design.md`](design.md)（设计、不变量与数据模型）→ [`testing-guide.md`](testing-guide.md)（用例全表、迁移矩阵与未观测项）。三份都进 git、互相引用、**改了就原地更新**，不建"最新稿"、不留过程件。完整清单与根入口见根 `AGENTS.md` 的「版本区」一节，此处不另抄。
+本模块三份文档：`tools/AGENTS.md`（本文件，路由）→ [design.md](design.md)（设计、不变量与数据模型）→ [testing-guide.md](testing-guide.md)（用例全表、迁移矩阵与未观测项）。三份都进 git、改了就原地更新，不建「最新稿」；过程件住 `.gitignore` 排除的 `docs-work/`，交付前清空。**文件在哪、各文件讲什么由 `aoci` 索引覆盖（每个文件一条 Entry），本模块不再另抄清单**；给人看的说明在根 `README.md`。
 
 ## 生效方式
 
