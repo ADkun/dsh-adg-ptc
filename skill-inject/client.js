@@ -2,7 +2,7 @@
  * adg-skill-inject — browser half.
  *
  * 只做一件事：在聊天输入框的工具行里放一个「注入」开关（`conversation.input.left`），
- * 控制思考框架是否注入 Adg 调度者的系统提示词。
+ * 控制注入正文（所选技能或自定义正文）是否注入 Adg 调度者的系统提示词。
  *
  * 它读写的是 adg-settings 那一页的同源路由 `/api/adg-settings/settings`（键 `skillInjectEnabled`）
  * —— 两个插件包各自独立，**不 import 对方**：设置文件 + 这条路由就是全部契约。所以开关一按，
@@ -29,11 +29,11 @@ window.__ModuleLoader__.load({
       zh: {
         on: '注入 开',
         off: '注入 关',
-        ariaEnable: '开启框架注入',
-        ariaDisable: '关闭框架注入',
-        ariaLoading: '框架注入（读取中）',
-        titleEnable: '开启中：Adg 调度者的系统提示词里带着所选框架的正文。点击关闭。',
-        titleDisable: '已关闭：不再注入框架正文。点击开启。',
+        ariaEnable: '开启注入',
+        ariaDisable: '关闭注入',
+        ariaLoading: '注入（读取中）',
+        titleEnable: '开启中：Adg 调度者的系统提示词里带着所选技能（或自定义正文）的内容。点击关闭。',
+        titleDisable: '已关闭：不再注入正文。点击开启。',
       },
       en: {
         on: 'Inject on',

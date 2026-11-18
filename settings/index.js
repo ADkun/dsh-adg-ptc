@@ -23,6 +23,7 @@ import {
   refuseMessage,
   validValue,
 } from './lib/schema.mjs';
+import { listSkillNames } from './lib/skills.mjs';
 
 /** 插件名：必须等于 cordis.patch.yml 里 insert 行的 `id`。 */
 export const name = 'adg-settings';
@@ -187,7 +188,7 @@ export function apply(ctx, config = {}) {
       defaults: { ...DEFAULTS },
       unknown,
       dropped,
-      fields: describeFields(),
+      fields: describeFields(listSkillNames()),
       file,
     };
   };

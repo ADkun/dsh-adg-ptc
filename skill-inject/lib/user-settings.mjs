@@ -1,4 +1,4 @@
-// adg-skill-inject 侧的「用户设置」：读 adg-settings 那一页写下的注入开关、注入框架与注入正文。
+// adg-skill-inject 侧的「用户设置」：读 adg-settings 那一页写下的注入开关、注入技能与注入正文。
 //
 // 为什么直接读文件、不 import `adg-settings` 那个包：两者是各自独立的插件包，profile 里
 // 可能只装了其中一个（import 一个解析不到的包会在挂载期把整个插件炸掉）。设置文件是两个
@@ -19,15 +19,18 @@ export const STORE_NAME = 'adg-settings.json';
 /** 「注入正文」的长度上限：与登记表上 `skillInjectText` 的 `maxLength` 一致。 */
 export const MAX_TEXT_LENGTH = 20000;
 
+/** 「注入哪个技能」的技能名上限：与登记表上 `skillInjectSkill` 的 `maxLength` 一致。 */
+export const MAX_SKILL_LENGTH = 100;
+
 /**
  * 四项出厂默认：与登记表（`settings/lib/schema.mjs` 的 `DEFAULTS`）逐项一致。
- * `skillInjectFramework` 取值指明用哪份技能文件（'elegant' / 'thinking' / 'execution'），默认执行框架；
- * `skillInjectText: ''` 指「跟随选中的那份技能文件的正文」（非空时它优先，框架选择让位）；
+ * `skillInjectSkill` 取值就是技能目录名（`<DSH_HOME>/skills/<名字>/SKILL.md`），出厂执行框架；
+ * `skillInjectText: ''` 指「跟随所选技能的正文」（非空时它优先，技能选择让位）；
  * `skillInjectSubagent: false` 指「只注入调度者，子代理不注入」（默认关）。
  */
 export const USER_DEFAULTS = Object.freeze({
   skillInjectEnabled: true,
-  skillInjectFramework: 'execution',
+  skillInjectSkill: 'execution-framework',
   skillInjectSubagent: false,
   skillInjectText: '',
 });
@@ -41,9 +44,6 @@ export function settingsFile() {
   return path.join(base, STORE_NAME);
 }
 
-/** 「注入哪个框架」的三个合法内部值（与登记表 `skillInjectFramework.allowValues` 一致）。 */
-const FRAMEWORKS = Object.freeze(['elegant', 'thinking', 'execution']);
-
 /** `true` / `false` 与它们的字符串写法都算；别的都算「没写这一项」。 */
 function validBoolean(value) {
   if (value === true || value === false) return value;
@@ -52,9 +52,14 @@ function validBoolean(value) {
   return undefined;
 }
 
-/** 框架名只认 `elegant` / `thinking` / `execution` 三个**严格相等**的串；大小写不同、带空白、别的类型都不算。 */
-function validFramework(value) {
-  return typeof value === 'string' && FRAMEWORKS.includes(value) ? value : undefined;
+/** 技能名语法与 DSH 的 `isSkillName` 一致：小写字母/数字，段间单连字符。含路径分隔符即不合法。 */
+const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** 只认合法技能名且不超长的串；别的（含 `../` 这类路径穿越）一律当「没写这一项」，回落出厂技能。 */
+function validSkill(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_SKILL_LENGTH && SKILL_NAME.test(value)
+    ? value
+    : undefined;
 }
 
 /**
@@ -77,7 +82,7 @@ export function readUserDefaults(file = settingsFile()) {
       : USER_DEFAULTS.skillInjectText;
   return {
     skillInjectEnabled: validBoolean(raw.skillInjectEnabled) ?? USER_DEFAULTS.skillInjectEnabled,
-    skillInjectFramework: validFramework(raw.skillInjectFramework) ?? USER_DEFAULTS.skillInjectFramework,
+    skillInjectSkill: validSkill(raw.skillInjectSkill) ?? USER_DEFAULTS.skillInjectSkill,
     skillInjectSubagent: validBoolean(raw.skillInjectSubagent) ?? USER_DEFAULTS.skillInjectSubagent,
     skillInjectText: text,
   };

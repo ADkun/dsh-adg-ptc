@@ -24,6 +24,7 @@ import {
   refuseMessage,
   validValue,
 } from '../lib/schema.mjs';
+import { listSkillNames } from '../lib/skills.mjs';
 import { STORE_NAME, apply, name as pluginName, settingsFile } from '../index.js';
 import {
   MAX_TITLE_LENGTH,
@@ -33,11 +34,13 @@ import {
   resolveRequest,
 } from '../../notify/lib/user-settings.mjs';
 import {
+  MAX_SKILL_LENGTH,
   MAX_TEXT_LENGTH,
   STORE_NAME as INJECT_STORE_NAME,
   USER_DEFAULTS as INJECT_DEFAULTS,
   readUserDefaults as readInjectDefaults,
 } from '../../skill-inject/lib/user-settings.mjs';
+import { listSkills as injectListSkills } from '../../skill-inject/lib/section.mjs';
 
 /** 客户端 half 写死在 client.js 里的那两条常量（这里钉住契约）。 */
 const ROUTE_PREFIX = '/api/adg-settings';
@@ -63,7 +66,7 @@ async function withTempDir(run) {
   };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'adg-settings-'));
   process.env.DSH_PROFILE_DIR = dir;
-  delete process.env.DSH_HOME;
+  process.env.DSH_HOME = dir; // 技能根也指到临时目录，测试不读真机 ~/.dsh/skills
   try {
     return await run(dir);
   } finally {
@@ -153,13 +156,13 @@ function request(route, method, body, headers = {}, path_ = '/settings') {
 // ── 框架不变量 ────────────────────────────────────────────────────────────────
 
 test('I1: 登记表自洽 —— 键唯一、kind 合法、必备字段齐全、界与 kind 配套', () => {
-  assert.deepEqual(KINDS, ['boolean', 'string', 'integer', 'enum']);
+  assert.deepEqual(KINDS, ['boolean', 'string', 'integer', 'enum', 'skill']);
   const keys = FIELDS.map((field) => field.key);
   assert.equal(new Set(keys).size, keys.length, '键不能重名');
   // 键集合就是那七项（注入四项 + 通知三项），顺序即页面顺序（框架注入栏在通知栏上）。
   assert.deepEqual(keys, [
     'skillInjectEnabled',
-    'skillInjectFramework',
+    'skillInjectSkill',
     'skillInjectSubagent',
     'skillInjectText',
     'notifyTitle',
@@ -191,6 +194,12 @@ test('I1: 登记表自洽 —— 键唯一、kind 合法、必备字段齐全、
       assert.equal(new Set(field.allowValues).size, field.allowValues.length, `${field.key}: 选项不能重复`);
       assert.ok(field.allowValues.includes(field.default), `${field.key}: default 要在 allowValues 里`);
     }
+    if (field.kind === 'skill') {
+      // 'skill' 用 maxLength 作长度上限，default 必须是合法技能名（选项在宿主 GET 时实时枚举）。
+      assert.ok(Number.isInteger(field.maxLength) && field.maxLength > 0, `${field.key}: 要给出 maxLength`);
+      assert.equal(typeof field.default, 'string');
+      assert.match(field.default, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `${field.key}: default 要是合法技能名`);
+    }
   }
 });
 
@@ -206,6 +215,19 @@ test('I3: describeFields() 只有数据（客户端拿到的是 JSON 化的登�
   assert.deepEqual(JSON.parse(JSON.stringify(fields)), fields);
   assert.equal(fields.length, FIELDS.length);
   assert.deepEqual(fields[0], { ...FIELDS[0] });
+});
+
+test('I3: describeFields(skillNames) 给 kind=skill 的字段附上 options（value/label 都是技能名）', () => {
+  const fields = describeFields(['execution-framework', 'my-skill']);
+  const skill = fields.find((field) => field.kind === 'skill');
+  assert.deepEqual(skill.options, [
+    { value: 'execution-framework', label: 'execution-framework' },
+    { value: 'my-skill', label: 'my-skill' },
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(fields)), fields, '带 options 也要能 JSON 化');
+  // 别的字段不带 options。
+  const flag = fields.find((field) => field.key === 'skillInjectEnabled');
+  assert.equal('options' in flag, false);
 });
 
 // ── 校验面 ────────────────────────────────────────────────────────────────────
@@ -243,32 +265,39 @@ test('validValue: 整数只收整数字面量（空串/小数/空白串都不算
 });
 
 test('validValue: enum 只收与 allowValues 成员严格相等的字符串（不折叠大小写、不 trim）', () => {
-  const field = fieldFor('skillInjectFramework');
-  assert.deepEqual([...field.allowValues], ['elegant', 'thinking', 'execution']);
+  const field = { key: 'mode', kind: 'enum', allowValues: Object.freeze(['alpha', 'beta']) };
   for (const good of field.allowValues) {
     assert.equal(validValue(field, good), good, `${good} 是合法值`);
   }
-  const bad = [
-    'Thinking', 'THINKING', 'Execution', 'EXECUTION', 'Elegant', 'ELEGANT',
-    ' thinking', 'thinking ', '\tthinking', 'thinking\n',
-    ' elegant', 'elegant ', '\telegant', 'elegant\n',
-    '', '   ', 'elegant-framework', 'thinking-framework', 'execution-framework', 'skill', 'true', 'false',
-    0, 1, true, false, null, undefined, {}, [], ['thinking'],
-  ];
+  const bad = ['Alpha', 'ALPHA', ' alpha', 'alpha ', '\talpha', 'alpha\n', '', '   ', 'gamma', 'true', 'false', 0, 1, true, false, null, undefined, {}, [], ['alpha']];
   for (const value of bad) {
     assert.equal(validValue(field, value), undefined, `${JSON.stringify(value)} 不该被接受`);
   }
 });
 
-test('refuseMessage: 四种 kind 各一句可读的拒绝理由，且都点名是哪个键', () => {
+test('validValue: skill 只收合法技能名（小写字母/数字、单连字符，长度内），含路径分隔符即拒', () => {
+  const field = fieldFor('skillInjectSkill');
+  assert.equal(field.kind, 'skill');
+  for (const good of ['execution-framework', 'thinking-framework', 'my-skill', 'a1', 'x'.repeat(field.maxLength)]) {
+    assert.equal(validValue(field, good), good, `${good} 是合法技能名`);
+  }
+  const bad = ['Elegant', ' elegant', 'elegant ', '', '   ', 'a/b', '../etc', 'a\\b', 'a b', '-x', 'x-', 'x_y', 'x'.repeat(field.maxLength + 1), 0, 1, true, null, undefined, {}, [], ['x']];
+  for (const value of bad) {
+    assert.equal(validValue(field, value), undefined, `${JSON.stringify(value)} 不该被接受`);
+  }
+});
+
+test('refuseMessage: 五种 kind 各一句可读的拒绝理由，且都点名是哪个键', () => {
   const text = { key: 'notifyTitle', kind: 'string', maxLength: 80 };
   const flag = { key: 'notifySound', kind: 'boolean' };
   const count = { key: 'notifyDelay', kind: 'integer', min: 0, max: 600000 };
-  const choice = fieldFor('skillInjectFramework');
+  const choice = { key: 'mode', kind: 'enum', allowValues: Object.freeze(['alpha', 'beta']) };
+  const skill = fieldFor('skillInjectSkill');
   assert.match(refuseMessage(text), /^notifyTitle must be a non-empty string of at most 80 characters$/);
   assert.match(refuseMessage(flag), /^notifySound must be true or false$/);
   assert.match(refuseMessage(count), /^notifyDelay must be an integer between 0 and 600000$/);
-  assert.equal(refuseMessage(choice), 'skillInjectFramework must be one of: elegant, thinking, execution');
+  assert.equal(refuseMessage(choice), 'mode must be one of: alpha, beta');
+  assert.equal(refuseMessage(skill), `skillInjectSkill must be a skill name (lowercase letters, digits and single hyphens), at most ${skill.maxLength} characters`);
 });
 
 test('normalizeSettings: 认不得的键记在 unknown，非法值记在 dropped 并逐条警告', () => {
@@ -354,11 +383,20 @@ test('漂移: 设置页登记的注入四项与 adg-skill-inject 真正读的键
     assert.deepEqual(INJECT_DEFAULTS[field.key], field.default, `${field.key} 的默认值两边不一致`);
   }
   assert.equal(fieldFor('skillInjectText').maxLength, MAX_TEXT_LENGTH);
-  assert.deepEqual(
-    [...fieldFor('skillInjectFramework').allowValues],
-    ['elegant', 'thinking', 'execution'],
-    '注入框架的界的真相在登记表，消费方与客户端都不另立一份',
-  );
+  assert.equal(fieldFor('skillInjectSkill').maxLength, MAX_SKILL_LENGTH);
+  assert.equal(fieldFor('skillInjectSkill').default, 'execution-framework');
+  assert.equal(INJECT_DEFAULTS.skillInjectSkill, 'execution-framework');
+  // 同一个临时技能根，设置页（settings/lib/skills.mjs）与注入侧（section.mjs 的 listSkills）列出的名字要一致。
+  const skillsRootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'adg-skills-root-'));
+  try {
+    for (const name of ['execution-framework', 'thinking-framework', 'zzz']) {
+      fs.mkdirSync(path.join(skillsRootDir, name), { recursive: true });
+      fs.writeFileSync(path.join(skillsRootDir, name, 'SKILL.md'), '---\nname: ' + name + '\n---\n\nbody\n');
+    }
+    assert.deepEqual(listSkillNames(skillsRootDir), injectListSkills(skillsRootDir), '两处列技能同口径');
+  } finally {
+    fs.rmSync(skillsRootDir, { recursive: true, force: true });
+  }
   assert.equal(INJECT_STORE_NAME, STORE_NAME, '设置文件名是两个模块之间的契约');
 });
 
@@ -370,32 +408,32 @@ test('漂移: 注入插件读得懂设置页写的开关与自定义正文，空
     );
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: false,
-      skillInjectFramework: 'execution',
+      skillInjectSkill: 'execution-framework',
       skillInjectSubagent: false,
       skillInjectText: '自定义正文',
     });
     fs.writeFileSync(path.join(dir, STORE_NAME), JSON.stringify({ skillInjectText: '' }));
     assert.deepEqual(readInjectDefaults(), {
       skillInjectEnabled: true,
-      skillInjectFramework: 'execution',
+      skillInjectSkill: 'execution-framework',
       skillInjectSubagent: false,
       skillInjectText: '',
     });
   });
 });
 
-test('漂移: 注入框架的三条路径（elegant / thinking / execution / 键缺失与非法值回落）', () => {
+test('漂移: 注入技能的三条路径（合法技能名 / 键缺失 / 非法值回落）', () => {
   withTempDir((dir) => {
     const file = path.join(dir, STORE_NAME);
-    for (const framework of ['elegant', 'thinking', 'execution']) {
-      fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: framework }));
-      assert.equal(readInjectDefaults().skillInjectFramework, framework, `${framework} 要被如实读出来`);
+    for (const skill of ['execution-framework', 'thinking-framework', 'my-skill']) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectSkill: skill }));
+      assert.equal(readInjectDefaults().skillInjectSkill, skill, `${skill} 要被如实读出来`);
     }
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
-    assert.equal(readInjectDefaults().skillInjectFramework, 'execution', '键缺失要回落出厂默认 execution');
-    for (const bad of ['Elegant', ' Thinking', 'thinking ']) {
-      fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: bad }));
-      assert.equal(readInjectDefaults().skillInjectFramework, 'execution', `非法值 ${JSON.stringify(bad)} 要回落出厂默认 execution`);
+    assert.equal(readInjectDefaults().skillInjectSkill, 'execution-framework', '键缺失要回落出厂默认 execution-framework');
+    for (const bad of ['Elegant', ' a/b', 'a b', '../etc']) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectSkill: bad }));
+      assert.equal(readInjectDefaults().skillInjectSkill, 'execution-framework', `非法值 ${JSON.stringify(bad)} 要回落出厂默认`);
     }
   });
 });

@@ -10,6 +10,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  MAX_SKILL_LENGTH,
   MAX_TEXT_LENGTH,
   STORE_NAME,
   USER_DEFAULTS,
@@ -37,13 +38,14 @@ function withTempDir(run) {
 test('USER_DEFAULTS: 出厂默认是「开着 + 执行框架 + 不注入子代理 + 留空即跟随技能文件」', () => {
   assert.deepEqual(USER_DEFAULTS, {
     skillInjectEnabled: true,
-    skillInjectFramework: 'execution',
+    skillInjectSkill: 'execution-framework',
     skillInjectSubagent: false,
     skillInjectText: '',
   });
   assert.equal(Object.isFrozen(USER_DEFAULTS), true);
   assert.equal(STORE_NAME, 'adg-settings.json');
   assert.equal(MAX_TEXT_LENGTH, 20000);
+  assert.equal(MAX_SKILL_LENGTH, 100);
 });
 
 test('settingsFile(): 与宿主同口径（DSH_PROFILE_DIR 优先，其次 DSH_HOME）', () => {
@@ -80,14 +82,14 @@ test('readUserDefaults: 缺项 / 项坏只影响那一项（含字符串形式�
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: 'false' }));
     assert.deepEqual(readUserDefaults(), {
       skillInjectEnabled: false,
-      skillInjectFramework: 'execution',
+      skillInjectSkill: 'execution-framework',
       skillInjectSubagent: false,
       skillInjectText: '',
     });
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: 'yes', skillInjectText: '正文', extraKey: 1 }));
     assert.deepEqual(readUserDefaults(), {
       skillInjectEnabled: true,
-      skillInjectFramework: 'execution',
+      skillInjectSkill: 'execution-framework',
       skillInjectSubagent: false,
       skillInjectText: '正文',
     });
@@ -96,23 +98,20 @@ test('readUserDefaults: 缺项 / 项坏只影响那一项（含字符串形式�
   });
 });
 
-test('readUserDefaults: skillInjectFramework 的读出 / 非法回落 / 出厂默认', () => {
+test('readUserDefaults: skillInjectSkill 的读出 / 非法回落 / 出厂默认', () => {
   withTempDir((dir) => {
     const file = path.join(dir, STORE_NAME);
-    for (const good of ['elegant', 'thinking', 'execution']) {
-      fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: good }));
-      assert.equal(readUserDefaults().skillInjectFramework, good);
+    for (const good of ['execution-framework', 'thinking-framework', 'my-skill', 'a1']) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectSkill: good }));
+      assert.equal(readUserDefaults().skillInjectSkill, good);
     }
-    // 缺项 / 类型不对 / 大小写不同 / 带空白 / 认不得的名字 —— 一律回落到执行框架（出厂）。
+    // 缺项 / 类型不对 / 大写 / 带空白 / 路径分隔符 / 认不得的写法 —— 一律回落到执行框架（出厂）。
     fs.writeFileSync(file, JSON.stringify({ skillInjectEnabled: true }));
-    assert.equal(readUserDefaults().skillInjectFramework, 'execution');
-    for (const bad of ['Elegant', 'ELEGANT', ' elegant', 'elegant ', 'Thinking', ' thinking', 'thinking ', 'THINKING', '', 'elegant-framework', 'thinking-framework', 'execution-framework', null, true, 1, {}, []]) {
-      fs.writeFileSync(file, JSON.stringify({ skillInjectFramework: bad }));
-      assert.equal(readUserDefaults().skillInjectFramework, 'execution', JSON.stringify(bad));
+    assert.equal(readUserDefaults().skillInjectSkill, 'execution-framework');
+    for (const bad of ['Elegant', ' elegant', 'elegant ', '', 'a/b', '../etc', 'a b', '-x', 'x-', 'x'.repeat(MAX_SKILL_LENGTH + 1), null, true, 1, {}, []]) {
+      fs.writeFileSync(file, JSON.stringify({ skillInjectSkill: bad }));
+      assert.equal(readUserDefaults().skillInjectSkill, 'execution-framework', JSON.stringify(bad));
     }
-    // 文件读不出来（坏 JSON）也回落。
-    fs.writeFileSync(file, '{ not json');
-    assert.equal(readUserDefaults().skillInjectFramework, 'execution');
   });
 });
 

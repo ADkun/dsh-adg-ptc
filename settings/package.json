@@ -10,12 +10,14 @@
     ".": "./index.js",
     "./client": "./client.js",
     "./lib/schema.mjs": "./lib/schema.mjs",
+    "./lib/skills.mjs": "./lib/skills.mjs",
     "./package.json": "./package.json"
   },
   "files": [
     "index.js",
     "client.js",
     "lib/schema.mjs",
+    "lib/skills.mjs",
     "cordis.patch.yml",
     "AGENTS.md",
     "design.md",

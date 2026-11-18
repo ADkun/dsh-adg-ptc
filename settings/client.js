@@ -49,19 +49,16 @@ window.__ModuleLoader__.load({
         'group.skillInject': '框架注入',
         'field.skillInjectEnabled.label': '注入框架',
         'field.skillInjectEnabled.hint':
-          '开启后，Adg 调度智能体的系统提示词里会带上所选框架的正文；子代理是否也带由下面那颗开关决定（默认不带）。输入框左侧那颗「注入」开关改的是同一个值。',
-        'field.skillInjectFramework.label': '注入哪个框架',
-        'field.skillInjectFramework.hint':
-          '三选一：优雅框架（elegant-framework）、思考框架（thinking-framework）或执行框架（execution-framework）；出厂默认执行框架。这里选的是用哪份技能文件；下面的「注入正文」若填了内容，仍以那份自定义正文为准。',
-        'option.skillInjectFramework.elegant': '优雅框架（elegant-framework）',
-        'option.skillInjectFramework.thinking': '思考框架（thinking-framework）',
-        'option.skillInjectFramework.execution': '执行框架（execution-framework）',
+          '开启后，Adg 调度智能体的系统提示词里会带上所选技能的正文；子代理是否也带由下面那颗开关决定（默认不带）。',
+        'field.skillInjectSkill.label': '注入哪个技能',
+        'field.skillInjectSkill.hint':
+          '从当前 DSH 能使用的技能列表里选一个，注入它的 SKILL.md 正文（skills/<技能>/SKILL.md）；出厂默认执行框架（execution-framework）。下面的「注入正文」若填了内容，仍以那份自定义正文为准。',
         'field.skillInjectSubagent.label': '同时注入子代理',
         'field.skillInjectSubagent.hint':
-          '开启后，Adg 调度者派出的子代理也会拿到同一段框架；关闭时只注入调度者自己（出厂默认）。',
+          '开启后，Adg 调度者派出的子代理也会拿到同一段正文；关闭时只注入调度者自己（出厂默认）。',
         'field.skillInjectText.label': '注入正文',
         'field.skillInjectText.hint':
-          '留空就用当前所选框架的技能文件（skills/<所选框架>/SKILL.md）的正文，改技能文件即改注入内容；填了就以这里的文本为准（不再读文件）。保存后下一次请求生效。',
+          '留空就用所选技能（skills/<所选技能>/SKILL.md）的正文，改技能文件即改注入内容；填了就以这里的文本为准（不再读文件）。保存后下一次请求生效。',
         save: '保存',
         saving: '保存中…',
         saved: '已保存，立即生效（通知在下一次 notify_user、框架在下一次请求）',
@@ -82,7 +79,7 @@ window.__ModuleLoader__.load({
         unknown: '设置文件里有 {n} 个认不得的键（可能是旧版本留下的），本页不会动它们。',
         dropped: '设置文件里有 {n} 个不合法的值被忽略，宿主日志里有明细。',
         note: '这些项只影响本仓库第一方子插件的行为，保存后立即生效，不需要重启。',
-        useSkillFile: '留空即使用所选框架的技能文件（skills/<所选框架>/SKILL.md）的正文',
+        useSkillFile: '留空即使用所选技能（skills/<所选技能>/SKILL.md）的正文',
         emptyValue: '（空，跟随默认）',
         errText: '「{label}」不能为空，且最多 {max} 个字符',
         errInt: '「{label}」必须是 {min}–{max} 之间的整数',
@@ -90,6 +87,8 @@ window.__ModuleLoader__.load({
         loading: '正在读取…',
         failed: '读取失败，无法连接插件后端',
         retry: '重试',
+        expand: '放大',
+        collapse: '收起',
       },
       en: {
         'meta.title': 'Adg settings',
@@ -111,19 +110,16 @@ window.__ModuleLoader__.load({
         'group.skillInject': 'Framework injection',
         'field.skillInjectEnabled.label': 'Inject the selected framework',
         'field.skillInjectEnabled.hint':
-          'When on, the Adg scheduler prompt carries the selected framework text; whether subagents also get it is decided by the toggle below (off by default). The “Thinking” chip in the composer flips the same value.',
-        'field.skillInjectFramework.label': 'Which framework to inject',
-        'field.skillInjectFramework.hint':
-          'Pick one of three: the elegance framework (elegant-framework), the thinking framework (thinking-framework) or the execution framework (execution-framework); the execution framework ships as the default. This chooses which skill file is used; if “Injected text” below is filled in, that custom text still wins.',
-        'option.skillInjectFramework.elegant': 'Elegant framework (elegant-framework)',
-        'option.skillInjectFramework.thinking': 'Thinking framework (thinking-framework)',
-        'option.skillInjectFramework.execution': 'Execution framework (execution-framework)',
+          'When on, the Adg scheduler prompt carries the text of the selected skill; whether subagents also get it is decided by the toggle below (off by default).',
+        'field.skillInjectSkill.label': 'Which skill to inject',
+        'field.skillInjectSkill.hint':
+          'Pick one skill from the ones DSH can use right now; its SKILL.md text (skills/<skill>/SKILL.md) is injected. Ships with the execution framework (execution-framework) as the default. If “Injected text” below is filled in, that custom text still wins.',
         'field.skillInjectSubagent.label': 'Also inject into subagents',
         'field.skillInjectSubagent.hint':
-          'When on, subagents spawned by the Adg scheduler get the same framework section; when off, only the scheduler does (the default).',
+          'When on, subagents spawned by the Adg scheduler get the same text; when off, only the scheduler does (the default).',
         'field.skillInjectText.label': 'Injected text',
         'field.skillInjectText.hint':
-          'Leave empty to use the skill file of the selected framework (skills/<selected framework>/SKILL.md); fill it in to inject exactly this text instead (the file is then ignored). Applies from the next request.',
+          'Leave empty to use the selected skill’s file (skills/<selected skill>/SKILL.md); fill it in to inject exactly this text instead (the file is then ignored). Applies from the next request.',
         save: 'Save',
         saving: 'Saving…',
         saved: 'Saved; live immediately (notifications on the next notify_user, the framework on the next request)',
@@ -144,7 +140,7 @@ window.__ModuleLoader__.load({
         unknown: 'The settings file has {n} key(s) this page does not know (an older version may have left them); nothing here touches them.',
         dropped: 'The settings file had {n} invalid value(s) that were ignored; the host log names them.',
         note: 'These options only affect this repository’s first-party plugins; saving takes effect immediately, with no restart.',
-        useSkillFile: 'Leave empty to use the skill file of the selected framework (skills/<selected framework>/SKILL.md)',
+        useSkillFile: 'Leave empty to use the selected skill’s file (skills/<selected skill>/SKILL.md)',
         emptyValue: '(empty — follows the default)',
         errText: '“{label}” cannot be empty and takes at most {max} characters',
         errInt: '“{label}” must be an integer between {min} and {max}',
@@ -152,6 +148,8 @@ window.__ModuleLoader__.load({
         loading: 'Reading…',
         failed: 'Could not reach the plugin backend',
         retry: 'Retry',
+        expand: 'Expand',
+        collapse: 'Collapse',
       },
     };
 
@@ -183,7 +181,10 @@ window.__ModuleLoader__.load({
       '.as_input:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}',
       '.as_input:disabled{opacity:.45}',
       '.as_inputBad{border-color:var(--dsw-alias-state-error-primary)}',
-      '.as_textarea{font:inherit;font-size:12.5px;box-sizing:border-box;width:100%;min-height:150px;padding:8px 10px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);resize:vertical;line-height:1.5}',
+      '.as_textarea{font:inherit;font-size:12.5px;box-sizing:border-box;width:100%;min-height:220px;padding:8px 10px;border-radius:9px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);resize:vertical;line-height:1.5}',
+      '.as_textareaTall{min-height:52vh}',
+      '.as_textBar{display:flex;align-items:center;gap:8px}',
+      '.as_counter{margin-left:auto;font-size:11px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}',
       '.as_textarea:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}',
       '.as_textarea:disabled{opacity:.45}',
       '.as_hint{font-size:11.5px;color:var(--dsw-alias-label-secondary)}',
@@ -277,6 +278,7 @@ window.__ModuleLoader__.load({
       const { t } = props;
       const [state, setState] = useState({ status: 'loading' });
       const [draft, setDraft] = useState({});
+      const [tall, setTall] = useState({});
       const [busy, setBusy] = useState('');
       const [message, setMessage] = useState('');
       const [failure, setFailure] = useState('');
@@ -385,7 +387,7 @@ window.__ModuleLoader__.load({
         const dropped = Array.isArray(payload.dropped) ? payload.dropped : [];
         const locked = busy !== '';
 
-        /** 一个字段的控件：四种 kind 四种画法，界与文案都来自宿主回报的 fields[]。 */
+        /** 一个字段的控件：五种 kind 五种画法，界与文案都来自宿主回报的 fields[]。 */
         const control = field => {
           const error = checkField(t, field, draft[field.key]);
           if (field.kind === 'boolean') {
@@ -402,6 +404,29 @@ window.__ModuleLoader__.load({
               h('label', { className: 'as_optText' },
                 h('span', { className: 'as_optLabel' }, t(field.labelKey)),
                 h('span', { className: 'as_hint' }, t(field.hintKey))));
+          }
+          if (field.kind === 'skill') {
+            // 选项来自宿主 GET 时枚举技能根塞进来的 `options`（R4：客户端不自己定义候选）。
+            // 当前值若已不在候选里（技能被移除），原样补一条，避免下拉静默改值。
+            const options = Array.isArray(field.options) ? field.options : [];
+            const current = String(draft[field.key] ?? '');
+            const list = options.slice();
+            if (current !== '' && !list.some(option => option.value === current)) {
+              list.unshift({ value: current, label: current });
+            }
+            return h('div', { className: 'as_opt', key: field.key },
+              h('select', {
+                className: error === '' ? 'as_select' : 'as_select as_inputBad',
+                value: current,
+                disabled: locked,
+                'aria-label': t(field.labelKey),
+                onChange: event => patch(field.key, event.target.value),
+              }, list.map(option =>
+                h('option', { key: option.value, value: option.value }, option.label))),
+              h('label', { className: 'as_optText' },
+                h('span', { className: 'as_optLabel' }, t(field.labelKey)),
+                h('span', { className: 'as_hint' }, t(field.hintKey)),
+                error === '' ? null : h('span', { className: 'as_fieldErr', role: 'alert' }, error)));
           }
           if (field.kind === 'enum') {
             // 选项来自宿主回报的 `allowValues`（R4：客户端不自己定义界），文案走 option.<键>.<值>。
@@ -433,12 +458,22 @@ window.__ModuleLoader__.load({
             input.max = field.max;
             input.step = 1;
           } else if (field.multiline === true) {
+            const text = String(draft[field.key] ?? '');
+            const isTall = tall[field.key] === true;
             return h('div', { className: 'as_field', key: field.key },
-              h('span', { className: 'as_fieldLabel' }, t(field.labelKey)),
+              h('div', { className: 'as_textBar' },
+                h('span', { className: 'as_fieldLabel' }, t(field.labelKey)),
+                h('button', {
+                  className: 'as_btnGhost as_textToggle',
+                  type: 'button',
+                  disabled: locked,
+                  onClick: () => setTall(current => ({ ...current, [field.key]: !isTall })),
+                }, isTall ? t('collapse') : t('expand')),
+                h('span', { className: 'as_counter' }, `${text.length}/${field.maxLength}`)),
               h('textarea', {
                 ...input,
-                className: error === '' ? 'as_textarea' : 'as_textarea as_inputBad',
-                rows: 8,
+                className: [error === '' ? 'as_textarea' : 'as_textarea as_inputBad', isTall ? 'as_textareaTall' : ''].join(' ').trim(),
+                rows: 12,
                 maxLength: field.maxLength,
                 placeholder: t('useSkillFile'),
                 spellCheck: false,

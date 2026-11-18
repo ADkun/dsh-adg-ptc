@@ -3,7 +3,7 @@
 // 为什么要这个插件：思考框架技能先前的装载方式是"调度 persona 写一段【思考框架闸门】，
 // 要求调度者自己去 read 那份 SKILL.md" —— 那依赖模型的自觉性，实测会漏。
 // 本插件把它换成机制保证：
-//   1. apply() 时按设置页的配置读正文（`skillInjectFramework` 选哪份技能文件 —— 默认执行框架
+//   1. apply() 时按设置页的配置读正文（`skillInjectSkill` 选哪份技能文件 —— 默认执行框架
 //      的 SKILL.md；留空就读它、剥掉 YAML frontmatter），
 //      注册成一段 systemPrompt section（order 100，落在调度 persona prefix 之后）——
 //      框架文本**本身就在系统提示词里**，不需要模型再调任何工具；
@@ -23,34 +23,30 @@
 // 契约与红线见 AGENTS.md / design.md；生效口径见根 AGENTS.md 的「生效方式」。
 
 import {
-  DEFAULT_FRAMEWORK,
+  DEFAULT_SKILL,
   DEFAULT_SKILL_PATH,
-  FRAMEWORK_SKILLS,
   SECTION_NAME,
   SECTION_ORDER,
   fallbackText,
-  frameworkOrDefault,
   isSubagentHeader,
+  listSkills,
   resolveSectionText,
   shouldInjectFor,
-  skillDirFor,
   skillPathFor,
   sectionTextFor,
 } from './lib/section.mjs';
 import { readUserDefaults } from './lib/user-settings.mjs';
 
 export {
-  DEFAULT_FRAMEWORK,
+  DEFAULT_SKILL,
   DEFAULT_SKILL_PATH,
-  FRAMEWORK_SKILLS,
   SECTION_NAME,
   SECTION_ORDER,
   fallbackText,
-  frameworkOrDefault,
   isSubagentHeader,
+  listSkills,
   resolveSectionText,
   shouldInjectFor,
-  skillDirFor,
   skillPathFor,
   sectionTextFor,
 };
@@ -79,7 +75,7 @@ export function sectionTextNow(options = {}) {
   if (options.subagent === true && settings.skillInjectSubagent !== true) return '';
   return resolveSectionText({
     customText: settings.skillInjectText,
-    framework: settings.skillInjectFramework,
+    skill: settings.skillInjectSkill,
   }).text;
 }
 

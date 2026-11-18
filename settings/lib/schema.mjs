@@ -10,14 +10,16 @@
 //      它们的自测里各有一条漂移检查：核对读的键都还在这张表里、默认值与界也一致。
 //   I2 每个字段的 `default` 都必须能通过自己的 `validValue` —— 页面「恢复默认」与宿主的
 //      最后一层回退都指它，一个不合法或不合界的 default 会让设置页一开就是红的。
-//   I3 kind 只有这四种（`boolean` / `string` / `integer` / `enum`）。新增一种要同时改宿主的
+//   I3 kind 只有这五种（`boolean` / `string` / `integer` / `enum` / `skill`）。新增一种要同时改宿主的
 //      `validValue` / `refuseMessage` 与客户端的控件选择，属于「改框架」，不属于「加一项」。
+//      `skill` 是「从当前 DSH 技能列表里选一个」的专用 kind：宿主按技能名语法校验，客户端画下拉，
+//      选项由宿主 GET 时实时枚举技能根（`lib/skills.mjs`）算好塞进该字段的 `options`。
 //
 // 为什么登记表住宿主侧：页面能写哪些键、什么值算合法，必须由宿主说了算（客户端只是画
 // 控件）。一个手改过的设置文件、或一个越界的 POST，都不会把值带进系统。
 
 /** 支持的控件 / 校验类别。 */
-export const KINDS = Object.freeze(['boolean', 'string', 'integer', 'enum']);
+export const KINDS = Object.freeze(['boolean', 'string', 'integer', 'enum', 'skill']);
 
 /**
  * 字段登记表。数组顺序 = 页面顺序；`group` 相同的一组进同一张卡片。
@@ -29,6 +31,10 @@ export const KINDS = Object.freeze(['boolean', 'string', 'integer', 'enum']);
  *   - `multiline: true` —— 客户端把它画成多行文本框（仍是 `kind: 'string'`，不是新 kind）。
  *   - `allowValues: [...]` —— `kind: 'enum'` 的取值集合（冻结数组）。客户端按它画下拉选项，
  *     宿主按它校验；两端都不另立一份界（R4）。
+ *
+ * `kind: 'skill'` 用 `maxLength` 作长度上限（与 string 同），并按 DSH 的技能名语法校验；
+ * 它的下拉选项不写在这里，而是宿主 GET 时用 `lib/skills.mjs` 实时枚举技能根、塞进字段的
+ * `options`（[{value, label}]），客户端照画。
  */
 export const FIELDS = Object.freeze([
   Object.freeze({
@@ -41,14 +47,14 @@ export const FIELDS = Object.freeze([
     hintKey: 'field.skillInjectEnabled.hint',
   }),
   Object.freeze({
-    key: 'skillInjectFramework',
-    kind: 'enum',
+    key: 'skillInjectSkill',
+    kind: 'skill',
     group: 'skillInject',
-    default: 'execution',
-    allowValues: Object.freeze(['elegant', 'thinking', 'execution']),
+    default: 'execution-framework',
+    maxLength: 100,
     consumer: 'adg-skill-inject',
-    labelKey: 'field.skillInjectFramework.label',
-    hintKey: 'field.skillInjectFramework.hint',
+    labelKey: 'field.skillInjectSkill.label',
+    hintKey: 'field.skillInjectSkill.hint',
   }),
   Object.freeze({
     key: 'skillInjectSubagent',
@@ -115,6 +121,9 @@ export function fieldFor(key) {
 export function refuseMessage(field) {
   if (field.kind === 'boolean') return `${field.key} must be true or false`;
   if (field.kind === 'enum') return `${field.key} must be one of: ${field.allowValues.join(', ')}`;
+  if (field.kind === 'skill') {
+    return `${field.key} must be a skill name (lowercase letters, digits and single hyphens), at most ${field.maxLength} characters`;
+  }
   if (field.kind === 'integer') {
     return `${field.key} must be an integer between ${field.min} and ${field.max}`;
   }
@@ -150,6 +159,12 @@ export function validValue(field, raw) {
     // 严格相等：不折叠大小写、不 trim —— 内部值只有 allowValues 里那几个英文串。
     if (typeof raw !== 'string') return undefined;
     return field.allowValues.includes(raw) ? raw : undefined;
+  }
+  if (field.kind === 'skill') {
+    // 技能名语法与 DSH 的 isSkillName 一致：小写字母/数字，段间单连字符；含 / \\ .. 即拒（防路径穿越）。
+    if (typeof raw !== 'string') return undefined;
+    if (raw.length > field.maxLength) return undefined;
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw) ? raw : undefined;
   }
   if (field.kind === 'integer') {
     const value = integerValue(raw);
@@ -223,7 +238,16 @@ export function buildEffective({ stored = {}, configured = {}, defaults = DEFAUL
   return { value, origin };
 }
 
-/** 交给客户端 half 的登记表：只有数据、没有函数，可以原样 JSON 化。 */
-export function describeFields() {
-  return FIELDS.map((field) => ({ ...field }));
+/**
+ * 交给客户端 half 的登记表：只有数据、没有函数，可以原样 JSON 化。
+ * `kind: 'skill'` 的字段附带 `options: [{value, label}]`（由宿主实时枚举技能根得到），
+ * 客户端照它画下拉；其余字段原样。
+ * @param {string[]} [skillNames] 当前可用技能名（缺省空数组）
+ */
+export function describeFields(skillNames = []) {
+  return FIELDS.map((field) =>
+    field.kind === 'skill'
+      ? { ...field, options: skillNames.map((value) => ({ value, label: value })) }
+      : { ...field },
+  );
 }

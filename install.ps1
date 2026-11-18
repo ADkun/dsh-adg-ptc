@@ -214,6 +214,9 @@ foreach ($skillDir in Get-ChildItem -LiteralPath $skillsSrc -Directory -ErrorAct
   Copy-Item -Path (Join-Path $skillDir.FullName '*') -Destination $dest -Recurse -Force
   $skillCopied++
 }
+# 清掉已从仓库移除的旧技能：elegant-framework 不再随包分发（框架注入改由设置页从可用技能里选）。
+$staleElegant = Join-Path $skillsRoot 'elegant-framework'
+if (Test-Path -LiteralPath $staleElegant) { Remove-Item -LiteralPath $staleElegant -Recurse -Force }
 $skillNote = "用户技能 -> $skillsRoot（$skillCopied 个技能目录，整目录拷贝）"
 
 # ── 2. browser/ 工具链 ─────────────────────────────────────────────────────────
@@ -396,7 +399,7 @@ if ($SkipPackages) {
   # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。目录结构是 index.js + client.js +
   # lib/schema.mjs（有子目录，所以要先建出 lib\）。
   New-Item -ItemType Directory -Force -Path (Join-Path $settingsDest 'lib') | Out-Null
-  $settingsFiles = @('index.js', 'client.js', 'lib\schema.mjs', 'cordis.patch.yml',
+  $settingsFiles = @('index.js', 'client.js', 'lib\schema.mjs', 'lib\skills.mjs', 'cordis.patch.yml',
     'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
   $settingsCopied = 0
   $settingsMissing = @()
@@ -423,10 +426,9 @@ if ($SkipPackages) {
 # 与 2b / 2b-1 / 2b-2 / 2b-3 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 agent 的 preset 是不是 adg"（判定只看
 # preset；子代理是否也注入由设置键 skillInjectSubagent 决定，默认关），是就在它自己的
-# agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectFramework 在用户技能根的
-# skills\elegant-framework\SKILL.md、skills\thinking-framework\SKILL.md 与
-# skills\execution-framework\SKILL.md 之间选一份（三份都是本脚本第 1 节拷的 —— 所以此插件的
-# 注入正文与技能文件永远来自同一次安装；出厂默认执行框架）。
+# agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectSkill 取用户技能根下
+# skills\<技能名>\SKILL.md 的一份（技能列表由设置页从当前可用技能里列出；出厂默认
+# execution-framework）。技能文件都是本脚本第 1 节拷的 —— 注入正文与技能文件永远来自同一次安装。
 # 漏装的症状是调度者的系统提示词里没有框架段
 # （退回"靠模型自觉 read"的旧状态），不报错。
 $injectSrc = Join-Path $here 'skill-inject'
@@ -1183,7 +1185,7 @@ Write-Host "  install -> $installNote（安装脚本自己的稳定副本；repo
 Write-Host "  notify  -> $notifyNote（notify_user 工具；每个 profile 的安装结果见下面 profile 行）"
 Write-Host "  delegate -> $delegateNote（delegate 工具 —— 现有的**唯一委派入口**；只有调度智能体拿得到，子代理的永禁名单里有 delegate / ask_user_question / agent。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 Write-Host "  settings -> $settingsNote（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
-Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
+Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，注入哪个技能由设置页的 skillInjectSkill 决定（从当前可用技能里选，默认 execution-framework）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 Write-Host "  turn-bookmarks -> $tbNote（轮次书签：每轮末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线；跳转仍走 dsh 原生轨道按钮；书签存会话目录 sidecar，不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 Write-Host "  harness-identity -> $harnessNote（去除系统提示词固定开场白：给每个 adg-ptc 的 agent 在自己的 scope 上注册同名 harness:identity 空文本 section，覆盖掉平台开头固定那行 'You are an AI agent, powered by DeepSeek Harness.'；不注册工具）"

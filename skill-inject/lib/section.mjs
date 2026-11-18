@@ -1,53 +1,56 @@
 // adg-skill-inject 的可测内核：section 文本构造 + 注入目标判定。
 //
-// 这个文件刻意不 import 任何 cordis API —— 只用 node:fs 与纯函数，
+// 这个文件刻意不 import 任何 cordis API —— 只用 node:fs / node:os / node:path 与纯函数，
 // `node --test test` 能在零依赖下直接测它；index.mjs 只做"把内核接到 cordis 上"。
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * 三份可注入的用户技能：设置键 `skillInjectFramework` 的内部值 → 技能目录名。
- * **唯一事实源** —— 路径拼装、降级文案、index.mjs 的取值都从这里派生。
+ * 出厂注入技能：与登记表（`settings/lib/schema.mjs` 的 `skillInjectSkill.default`）一致。
+ * 值就是该技能在用户技能根下的目录名。
  */
-export const FRAMEWORK_SKILLS = Object.freeze({
-  elegant: 'elegant-framework',
-  thinking: 'thinking-framework',
-  execution: 'execution-framework',
-});
+export const DEFAULT_SKILL = 'execution-framework';
 
-/** 框架 → 中文名（降级文案用；键集与 `FRAMEWORK_SKILLS` 一致）。 */
-const FRAMEWORK_LABELS = Object.freeze({
-  elegant: '优雅框架',
-  thinking: '思考框架',
-  execution: '执行框架',
-});
+/** 技能目录名的合法语法（与 settings/lib/schema.mjs 的 skill 校验同一条正则；防路径穿越的最后一道闸）。 */
+const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** 出厂框架：与登记表（`settings/lib/schema.mjs` 的 `skillInjectFramework.default`）一致。 */
-export const DEFAULT_FRAMEWORK = 'execution';
-
-/** 用户技能根：按 `${DSH_HOME:-~/.dsh}` 逐级拼装（R9：这里不许出现任何本机绝对路径）。 */
-function skillsRoot() {
-  return join(process.env.DSH_HOME ?? join(process.env.HOME ?? process.env.USERPROFILE ?? '', '.dsh'), 'skills');
+/** 用户技能根：按 `${DSH_HOME:-~/.dsh}/skills` 拼装（R10：这里不许出现任何本机绝对路径）。 */
+export function skillsRoot() {
+  return join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'skills');
 }
 
-/** 认不出的框架名一律回落到出厂框架（设置文件的宽容口径与 lib/user-settings.mjs 一致）。 */
-export function frameworkOrDefault(value) {
-  return Object.prototype.hasOwnProperty.call(FRAMEWORK_SKILLS, value) ? value : DEFAULT_FRAMEWORK;
+/**
+ * 列出当前技能根下所有可用技能名（含 SKILL.md 的子目录名，升序）。
+ *
+ * 设置页的下拉「从当前 DSH 能使用的技能列表中选择」靠它列出候选。这里枚举目录、不调
+ * `skills` 服务，是因为系统提示词的 section text 必须**同步**求值
+ * （dsh-system-prompt/lib/index.js:389 不 await），而注入与下拉必须看到同一份磁盘真相。
+ *
+ * @param {string} [root] 技能根（测试可传临时目录；缺省按环境变量拼）
+ * @returns {string[]} 技能目录名数组（升序，空/不存在时为 []）
+ */
+export function listSkills(root = skillsRoot()) {
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, 'SKILL.md')))
+    .map((entry) => entry.name)
+    .sort();
 }
 
-/** 框架 → 技能目录名。 */
-export function skillDirFor(framework) {
-  return FRAMEWORK_SKILLS[frameworkOrDefault(framework)];
+/** 技能目录名 → 它的 SKILL.md 落点（install.ps1 / install.sh 第 1 节把仓库 skills/ 拷到用户技能根）。 */
+export function skillPathFor(skill = DEFAULT_SKILL) {
+  return join(skillsRoot(), skill, 'SKILL.md');
 }
 
-/** 框架 → 那份技能的 SKILL.md 落点（install.ps1 / install.sh 第 1 节把仓库 skills/ 拷到用户技能根）。 */
-export function skillPathFor(framework = DEFAULT_FRAMEWORK) {
-  return join(skillsRoot(), skillDirFor(framework), 'SKILL.md');
-}
-
-/** 出厂框架那份技能的落点（等价于 `skillPathFor(DEFAULT_FRAMEWORK)`）。 */
-export const DEFAULT_SKILL_PATH = skillPathFor(DEFAULT_FRAMEWORK);
+/** 出厂技能那份的落点（等价于 `skillPathFor(DEFAULT_SKILL)`）。 */
+export const DEFAULT_SKILL_PATH = skillPathFor(DEFAULT_SKILL);
 
 /** section 名：每个 agent 的 scope 内唯一；重挂载时报重复注册是配置错误，不静默吞掉。 */
 export const SECTION_NAME = 'adg:thinking-framework';
@@ -72,17 +75,15 @@ export function stripFrontmatter(raw) {
 }
 
 /**
- * 缺文件 / 空文件时注入的降级短指令：框架正文拿不到，至少保住"先读再干活"的次序。
- * 提示的是**这次实际要找的那份**技能文件（elegant / thinking / execution 各说各的），不写死其中一份。
- * @param {string} framework 框架内部值（认不出的按出厂框架处理）
+ * 缺文件 / 空文件时注入的降级短指令：正文拿不到，至少保住"先读再干活"的次序。
+ * 提示的是**这次实际要找的那份**技能文件（按技能名点名），不写死其中一份。
+ * @param {string} skill 技能目录名（缺省 = 出厂技能）
  */
-export function fallbackText(framework = DEFAULT_FRAMEWORK) {
-  const name = skillDirFor(framework);
-  const label = FRAMEWORK_LABELS[frameworkOrDefault(framework)];
+export function fallbackText(skill = DEFAULT_SKILL) {
   return [
-    `## ${label}（正文缺失，降级指令）`,
+    `## ${skill}（正文缺失，降级指令）`,
     '',
-    `本会话的${label}技能文件（skills/${name}/SKILL.md）缺失，路径见下。开工先 \`read\` 它，按它组织你的思考再干活；`,
+    `本会话要注入的技能文件（skills/${skill}/SKILL.md）缺失，路径见下。开工先 \`read\` 它，按它组织你的思考再干活；`,
     '找不到就如实向用户报告缺失，不要假装读过。',
   ].join('\n');
 }
@@ -90,42 +91,40 @@ export function fallbackText(framework = DEFAULT_FRAMEWORK) {
 /**
  * 从文件构造 section 正文：**原样**返回 SKILL.md 的正文（frontmatter 剥掉），不加任何标题或导语。
  * @param {string} skillPath SKILL.md 绝对路径
- * @param {string} [framework] 框架内部值（只用于降级文案点名哪份文件）
+ * @param {string} [skill] 技能目录名（只用于降级文案点名哪份文件）
  * @returns {{text: string, degraded: boolean}} 正文与是否降级
  */
-export function sectionTextFor(skillPath, framework = DEFAULT_FRAMEWORK) {
-  if (!existsSync(skillPath)) return { text: fallbackText(framework), degraded: true };
+export function sectionTextFor(skillPath, skill = DEFAULT_SKILL) {
+  if (!existsSync(skillPath)) return { text: fallbackText(skill), degraded: true };
   try {
     const body = stripFrontmatter(readFileSync(skillPath, 'utf8')).trim();
-    if (body.length === 0) return { text: fallbackText(framework), degraded: true };
+    if (body.length === 0) return { text: fallbackText(skill), degraded: true };
     return { text: body, degraded: false };
   } catch {
-    return { text: fallbackText(framework), degraded: true };
+    return { text: fallbackText(skill), degraded: true };
   }
 }
 
 /**
- * 设置页的自定义正文优先，留空才回落到技能文件。
+ * 设置页的自定义正文优先，留空才回落到所选技能文件。
  *
  * 用户填了正文就**原样注入**（不再读文件，也不再剥 frontmatter —— 那份文本不是技能文件）；
- * 留空 / 全空白算「跟随技能文件」，与设置页的「留空即默认」口径一致。
+ * 留空 / 全空白算「跟随所选技能文件」，与设置页的「留空即默认」口径一致。
  *
- * @param {{customText?: string, framework?: string, skillPath?: string}} [options]
- * @returns {{text: string, degraded: boolean, source: 'custom' | 'skill', framework: string}}
+ * @param {{customText?: string, skill?: string, skillPath?: string}} [options]
+ * @returns {{text: string, degraded: boolean, source: 'custom' | 'skill', skill: string}}
  */
 export function resolveSectionText(options = {}) {
-  const framework = frameworkOrDefault(options.framework);
-  const skillPath = options.skillPath ?? skillPathFor(framework);
+  const skill = typeof options.skill === 'string' && options.skill.trim() !== '' ? options.skill : DEFAULT_SKILL;
+  if (!SKILL_NAME.test(skill)) {
+    return { text: fallbackText(DEFAULT_SKILL), degraded: true, source: 'skill', skill };
+  }
+  const skillPath = options.skillPath ?? skillPathFor(skill);
   const { customText } = options;
   if (typeof customText === 'string' && customText.trim() !== '') {
-    return {
-      text: customText.trim(),
-      degraded: false,
-      source: 'custom',
-      framework,
-    };
+    return { text: customText.trim(), degraded: false, source: 'custom', skill };
   }
-  return { ...sectionTextFor(skillPath, framework), source: 'skill', framework };
+  return { ...sectionTextFor(skillPath, skill), source: 'skill', skill };
 }
 
 /**

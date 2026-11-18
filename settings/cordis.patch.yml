@@ -17,6 +17,6 @@
         notifySound: true
         notifyPersist: true
         skillInjectEnabled: true
-        skillInjectFramework: 'execution'
+        skillInjectSkill: 'execution-framework'
         skillInjectSubagent: false
         skillInjectText: ''

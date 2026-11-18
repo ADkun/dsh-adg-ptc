@@ -270,6 +270,8 @@ for skill_dir in "$here"/skills/*/; do
   cp -R "$skill_dir." "$root/skills/$skill_name/"
   skill_count=$((skill_count + 1))
 done
+# 清掉已从仓库移除的旧技能：elegant-framework 不再随包分发（框架注入改由设置页从可用技能里选）。
+rm -rf "$root/skills/elegant-framework"
 skill_note="用户技能 -> $root/skills（$skill_count 个技能目录，整目录拷贝）"
 
 # ── 2. browser/ 工具链 ─────────────────────────────────────────────────────────
@@ -411,7 +413,7 @@ else
   # （稳定副本要能当包被 `dsh plugin add "file:…"` 解析）。
   mkdir -p "$settings_dest/lib"
   settings_copied=0
-  for settings_rel in index.js client.js lib/schema.mjs cordis.patch.yml \
+  for settings_rel in index.js client.js lib/schema.mjs lib/skills.mjs cordis.patch.yml \
     package.json AGENTS.md design.md testing-guide.md; do
     if [ ! -f "$settings_src/$settings_rel" ]; then
       settings_note="settings/ 部署不完整：源里缺 $settings_rel"
@@ -437,9 +439,9 @@ fi
 # 与 2b / 2b-1 / 2b-2 / 2b-3 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 agent 的 preset 是不是 adg-ptc"（判定只看
 # preset；子代理是否也注入由设置键 skillInjectSubagent 决定，默认关），是就在它自己的
-# agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectFramework 在用户技能根的
-# skills/elegant-framework/SKILL.md、skills/thinking-framework/SKILL.md 与
-# skills/execution-framework/SKILL.md 之间选一份（三份都是本脚本第 1 节拷的；出厂默认执行框架）。
+# agent.ctx 上注册一段系统提示词 section，正文按设置键 skillInjectSkill 取用户技能根下
+# skills/<技能名>/SKILL.md 的一份（技能列表由设置页从当前可用技能里列出；出厂默认
+# execution-framework）。技能文件都是本脚本第 1 节拷的。
 # 漏装的症状是调度者的系统提示词里没有框架段（静默退回"靠模型自觉 read"的旧状态），不报错。
 inject_src="$here/skill-inject"
 inject_dest="$root/plugins/adg-skill-inject"
@@ -836,7 +838,7 @@ echo "  desktop -> $desktop_note"
 echo "  notify  -> $notify_note（notify_user 工具；每个 profile 的安装结果见上面 profile 行）"
 echo "  delegate -> $delegate_note（delegate 工具 —— 唯一的委派入口；只有调度智能体拿得到，子代理拿不到。同一枚插件还提供 ask_user —— 子代理的提问通道，可给子代理）"
 echo "  settings -> $settings_note（设置页「Adg 设置」；通知三项——默认标题 / 响提示音 / 通知常驻——在这里改，改完立即生效）"
-echo "  skill-inject -> $inject_note（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，用哪一份由设置页的 skillInjectFramework 决定（elegant-framework / thinking-framework / execution-framework，默认执行框架）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
+echo "  skill-inject -> $inject_note（框架注入：把技能文件正文注入 Adg 调度者的系统提示词，注入哪个技能由设置页的 skillInjectSkill 决定（从当前可用技能里选，默认 execution-framework）；子代理是否也注入由设置页的 skillInjectSubagent 决定，默认关）"
 echo ""
 echo "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
 echo "（preset 走的是一条独立的 patch 层：dsh --profile <name> --dump-config 能确认它被读到，"

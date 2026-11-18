@@ -29,7 +29,7 @@ last_reviewed: 2026-11-10
 | `text` | **原样正文，不加任何标题或导语**：选中那份 SKILL.md 的正文（frontmatter 剥掉）；或设置页填的正文；或降级指令；总开关关闭时是空串；**子代理且 `skillInjectSubagent` 关时也是空串** | `sectionTextNow()`（`index.mjs`）每次组装时求值：先读设置文件的开关与子代理闸门，再交给 `resolveSectionText()` |
 | 挂载层 | 每个 Adg 调度者 agent 自己的 `agent.ctx`（agent scope）；**子代理也会挂上这一段**（正文层再决定给不给） | `index.mjs` 的 `apply()` |
 
-**正文优先级**：设置页的 `skillInjectText` 非空白 → 用它（**不读文件**，也不剥 frontmatter —— 那不是技能文件）；留空 / 全空白 → 读**下拉选中那份**框架的 SKILL.md（`skillPathFor(framework)`；框架取 `skillInjectFramework`，出厂＝执行框架）；文件缺失 / 空 / 读失败 → `fallbackText(framework)`（提示的是这次**实际要找的那份**框架文件）。开关 `skillInjectEnabled !== true` → 返回空串（空 section 渲染时被丢弃，等价于没有这一段）；**是子代理而 `skillInjectSubagent !== true` → 同样返回空串**（这一条就是「子代理要不要也背这份框架」的唯一判据，默认关 ＝ 与这条键引入前完全一致：只注入调度者）。正文优先级判据都在 `lib/section.mjs` 的 `resolveSectionText()` / `sectionTextFor()` 里，`index.mjs` 只做接线。
+**正文优先级**：设置页的 `skillInjectText` 非空白 → 用它（**不读文件**，也不剥 frontmatter —— 那不是技能文件）；留空 / 全空白 → 读**下拉选中那份**技能文件的 SKILL.md（`skillPathFor(skill)`；技能取 `skillInjectSkill`，出厂＝`execution-framework`）；文件缺失 / 空 / 读失败 → `fallbackText(skill)`（提示的是这次**实际要找的那份**技能文件）。开关 `skillInjectEnabled !== true` → 返回空串（空 section 渲染时被丢弃，等价于没有这一段）；**是子代理而 `skillInjectSubagent !== true` → 同样返回空串**（这一条就是「子代理要不要也背这份框架」的唯一判据，默认关 ＝ 与这条键引入前完全一致：只注入调度者）。正文优先级判据都在 `lib/section.mjs` 的 `resolveSectionText()` / `sectionTextFor()` 里，`index.mjs` 只做接线。
 
 **order 的选取**：调度 persona 的 prefix 在 `DEPLOYMENT_PERSONA_PREFIX = 0`，plan 政策在 `PLAN_POLICY = 500`。`100` 让框架落在 persona 之后、一切 first-party 指引之前 —— 模型读到的次序是"你是谁 → 按什么方式思考 → 派遣规则"。
 
@@ -43,7 +43,7 @@ last_reviewed: 2026-11-10
 
 - chip 在 `client.js`，注册进 `conversation.input.left`（`id: 'adg-skill-inject-toggle'`、`order: 21` —— 紧跟破限模式那颗 `order: 20`，列表槽按 order 升序排，不重叠）。
 - chip **不存任何本地状态**：挂载时 `GET` 读当前值，点一下 `POST {skillInjectEnabled: !current}`，然后 adopt 服务端回的 `value`。所以它和设置页永远同步（R11）。
-- 键名 / 默认值 / 长度上限的真相在 `settings/lib/schema.mjs` 的 `FIELDS`（`consumer === 'adg-skill-inject'` **四条**：`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`）；本模块的 `lib/user-settings.mjs` 只**读**文件，`USER_DEFAULTS` / `MAX_TEXT_LENGTH` 与登记项逐项相等由 `settings/test/settings.test.mjs` 的漂移用例钉住。
+- 键名 / 默认值 / 长度上限的真相在 `settings/lib/schema.mjs` 的 `FIELDS`（`consumer === 'adg-skill-inject'` **四条**：`skillInjectEnabled` / `skillInjectSkill` / `skillInjectSubagent` / `skillInjectText`）；本模块的 `lib/user-settings.mjs` 只**读**文件，`USER_DEFAULTS` / `MAX_TEXT_LENGTH` 与登记项逐项相等由 `settings/test/settings.test.mjs` 的漂移用例钉住。
 
 ### 注入判据（两层闸门）
 
@@ -78,12 +78,12 @@ skill-inject/（仓库源） --install.* 第 2b-4 步--> ~/.dsh/plugins/adg-skil
 ## 不变量
 
 - **I1**：section 注册发生在 `agent/created` 里、挂在 `agent.ctx` 上 —— agent 注销时随 agent scope 自动拆除（`ctx.systemPrompt.section()` 内部就是 `ScopedLayers.effect(this.ctx, ...)`，undo 归调用 ctx 所有）；插件自己的清理只负责拆 `agent/created` 监听器。
-- **I2**：正文事实源有四个候选（用户自定义正文 / `elegant-framework` 的 SKILL.md / `thinking-framework` 的 SKILL.md / `execution-framework` 的 SKILL.md，后三者由 `skillInjectFramework` 三选一），插件里**没有文本副本**（R4）；都在**每次组装系统提示词时**重新求值（不是每次启动读一次）—— 设置页改完下一轮请求就换（**换框架也只换设置值，同样不用重启**），技能**文件内容**改完要重启 dsh（路径在模块加载时解析）。
-- **I3**：文件缺失 / 空 / 读失败 → `fallbackText(framework)`（降级指令，提示实际要找的那份框架文件），插件不挂载失败、不注册空 section。**但开关关闭时返回空串是刻意的**：那不是降级，是用户关掉了这一段；**子代理且 `skillInjectSubagent` 关时返回空串同样是刻意的**（那一段照挂，只是不给正文）。
+- **I2**：正文事实源有两个：用户自定义正文（`skillInjectText`）/ `skillInjectSkill` 指向的那份技能文件的 SKILL.md（技能名由设置页从当前可用技能里选，出厂 `execution-framework`），插件里**没有文本副本**（R4）；都在**每次组装系统提示词时**重新求值（不是每次启动读一次）—— 设置页改完下一轮请求就换（**换技能也只换设置值，同样不用重启**），技能**文件内容**改完要重启 dsh（路径在模块加载时解析）。
+- **I3**：文件缺失 / 空 / 读失败 → `fallbackText(skill)`（降级指令，提示实际要找的那份技能文件），插件不挂载失败、不注册空 section。**但开关关闭时返回空串是刻意的**：那不是降级，是用户关掉了这一段；**子代理且 `skillInjectSubagent` 关时返回空串同样是刻意的**（那一段照挂，只是不给正文）。
 - **I4**：frontmatter 永不出现在注入正文里（R6，`stripFrontmatter`）。
 - **I5**：本插件不注册任何工具，不进 `KNOWN_TOOLS`，不出现在任何 `delegate` 的 `tools` 名单 —— 它不是能力面的一部分，是提示词的一部分。
 - **I6**：运行中的旧 agent 不补挂 —— section 在 agent 创建那一刻注册；改插件代码后要新会话才看得到（skill-inject/AGENTS.md 的「生效方式」）。**但改设置值不需要新会话**：`text` 是每次组装都求值的 provider —— 翻 `skillInjectSubagent` 后，**下一次组装**时子代理是否拿到正文就变了（不必重启 dsh、不必新建 agent）。
-- **I7**：开关与正文的键名 / 默认值 / 界的真相只在 `settings/lib/schema.mjs` 的 `FIELDS`（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText` 四条）；本模块**只读文件、不 import `adg-settings` 包**（profile 里可能只装一半）。守卫：`settings/test/settings.test.mjs` 的注入漂移用例。
+- **I7**：开关与正文的键名 / 默认值 / 界的真相只在 `settings/lib/schema.mjs` 的 `FIELDS`（`skillInjectEnabled` / `skillInjectSkill` / `skillInjectSubagent` / `skillInjectText` 四条）；本模块**只读文件、不 import `adg-settings` 包**（profile 里可能只装一半）。守卫：`settings/test/settings.test.mjs` 的注入漂移用例。
 
 ## 非功能约束
 

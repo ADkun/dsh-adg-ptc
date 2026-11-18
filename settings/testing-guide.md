@@ -30,22 +30,24 @@ node tools/check-preset.mjs                            # 仓库根：preset 静�
 | 4 | validValue: 布尔 | I2 | `true/false/'true'/'false'` 收；`'yes'/1/0/null/undefined/{}/[]` 拒 |
 | 5 | validValue: 字符串 | I2 | 非空白、长度内收（**不 trim**、原样返回）；空串 / 全空白 / 超长 / 非字符串拒 |
 | 6 | validValue: 整数 | I3 | 合成字段（`FIELDS` 里还没有 integer 项）：`0`/`8000`/`'8000'`/上界收；`''`/`' 8000 '`/`'8000.0'`/`1.5`/越界/`null`/`true`/`'abc'` 拒 |
-| 7 | refuseMessage | — | 四种 kind 各一句可读理由，且都点名是哪个键（客户端按它出红字） |
+| 6b | validValue: skill | I3 | 真实字段 `skillInjectSkill`：`execution-framework`/`my-skill`/`a1` 收；大写 / 带空白 / `''` / `a/b` / `../etc` / `a b` / `-x` / `x-` / `x_y` / 超长 / 非字符串 拒 |
+| 6c | validValue: enum | I3 | 合成字段（`FIELDS` 里当前无 enum 项）：成员严格相等收；大小写/空白/非成员/非字符串 拒 |
+| 7 | refuseMessage | — | 五种 kind 各一句可读理由，且都点名是哪个键（客户端按它出红字） |
 | 8 | normalizeSettings: unknown / dropped | I5 / I8 | 认不得的键进 `unknown`、非法值进 `dropped` 并**逐条** `logger.warn`（含键名、原值、拒绝理由、来源描述） |
 | 9 | normalizeSettings: 非对象输入 | I8 | `null`/数字/字符串/数组 → `{settings:{}, unknown:[], dropped:[]}`，不抛错 |
 | 10 | buildEffective: 三层优先级 | §2.2 | `stored > configured > default`，逐格 `origin` |
 | 11 | `settingsFile()` 的 env 口径 | R10 | `DSH_PROFILE_DIR` > `DSH_HOME` > `~/.dsh`，都拼 `${STORE_NAME}` |
 | 12 | 插件名与路由前缀是契约 | I12 | `name === 'adg-settings'`、`STORE_NAME === 'adg-settings.json'` |
 | 13 | 漂移: notify 三项的键 / 默认值 / 界 | I1 | 登记表里 `consumer === 'adg-notify'` 的键逐项等于 `USER_DEFAULTS` 的键且默认值相等；`maxLength` 等于消费方的 `MAX_TITLE_LENGTH`；两边 `STORE_NAME` 同名 |
-| 13b | 漂移: 注入四项的键 / 默认值 / 界 | I1 | 登记表里 `consumer === 'adg-skill-inject'` 的键逐项等于 `skill-inject/lib/user-settings.mjs` 的 `USER_DEFAULTS`（`skillInjectEnabled` / `skillInjectFramework` / `skillInjectSubagent` / `skillInjectText`；`skillInjectFramework` 两边默认都是 `'execution'`，`skillInjectSubagent` 两边默认都是 `false`）；`skillInjectText.maxLength === MAX_TEXT_LENGTH`；两边 `skillInjectFramework.allowValues` 的成员一致；三份 `STORE_NAME` 同名 |
+| 13b | 漂移: 注入四项的键 / 默认值 / 界 | I1 | 登记表里 `consumer === 'adg-skill-inject'` 的键逐项等于 `skill-inject/lib/user-settings.mjs` 的 `USER_DEFAULTS`（`skillInjectEnabled` / `skillInjectSkill` / `skillInjectSubagent` / `skillInjectText`；`skillInjectSkill` 两边默认都是 `'execution-framework'`，`skillInjectSubagent` 两边默认都是 `false`）；`skillInjectText.maxLength === MAX_TEXT_LENGTH`、`skillInjectSkill.maxLength === MAX_SKILL_LENGTH`；两处 `listSkills()` 对同一临时技能根列出的名字一致；三份 `STORE_NAME` 同名 |
 | 13c | 漂移: 注入插件读得懂设置页写的文件 | I1 / I14 | 写一份文件 → `skill-inject` 的 `readUserDefaults()` 读出两个开关（含 `skillInjectSubagent`）与自定义正文；空正文仍是空串（＝跟随技能文件） |
 | 13d | 漂移: 子代理开关的两条路径 | I1 / I14 | 写一份文件且 `skillInjectSubagent: false` → `skill-inject` 的 `readUserDefaults()` 读出 `false`；同一份文件改成 `true` → 读出 `true`；键缺失 → 回落出厂默认 `false`（＝ 与这条键引入前一致：只注入调度者） |
-| 13d2 | 漂移: 注入框架的三条路径 | I1 / I14 | 写一份文件且 `skillInjectFramework: 'thinking'` → `skill-inject` 的 `readUserDefaults()` 读出 `'thinking'`，`resolveSectionText()` 读的技能文件是 `skills/thinking-framework/SKILL.md`、正文首行是 `# 思维规范框架`；改成 `'execution'` → 文件变 `skills/execution-framework/SKILL.md`、正文首行 `### 执行框架 BEGIN`；改成 `'elegant'` → 文件变 `skills/elegant-framework/SKILL.md`、正文首行 `# 优雅`；键缺失 / 非法值（`'Thinking'`、`'Elegant'`、`' thinking'`、`''`、`null`）→ 回落出厂默认 `'execution'` |
+| 13d2 | 漂移: 注入技能的三条路径 | I1 / I14 | 写一份文件且 `skillInjectSkill: 'thinking-framework'` → `skill-inject` 的 `readUserDefaults()` 如实读出，`resolveSectionText()` 读的技能文件是 `skills/thinking-framework/SKILL.md`、正文首行是 `# 思维规范框架`；换成 `'execution-framework'` 同理；键缺失 / 非法值（`'Elegant'`、`' a/b'`、`'a b'`、`'../etc'`）→ 回落出厂默认 `'execution-framework'` |
 | 13e | 漂移: patch config 出厂值与登记表 default 一致 | I1 | 行级读 `settings/cordis.patch.yml` 的 `config:` 块，逐键断言它在 `FIELDS` 里且值深等于 `field.default`（`'…'` 去引号、`true`/`false` 布尔、`''` 空串），锁住「改一处必须同时改另一处」 |
 | 14 | 漂移: 消费方能读设置页写的文件 | I1 / I14 | 写一份文件 → `readUserDefaults()` 读出三项 → `resolveRequest` 用上标题、静音、存活毫秒 |
 | 15 | 漂移: 没保存过时回落出厂默认 | I14 | `readUserDefaults()` 深等于 `USER_DEFAULTS`；请求形状里**不多写** `silent`/`disappearAfterMs` |
 | 16 | R12/I13: 客户端 DICT | I13 | 对 `client.js` 做文本级计数：每条 `labelKey`/`hintKey`/`group.<组>`/`option.<键>.<值>`（enum 的每个取值）至少有 zh 与 en 两份定义 |
-| 17 | GET 默认态 | I11 / §4.1 | `200`；`content-type`/`cache-control`；`value` = 内置默认、`origin` 全 `default`；`stored`/`unknown`/`dropped` 空；`fields` = `describeFields()`；`file` 指到临时目录 |
+| 17 | GET 默认态 | I11 / §4.1 | `200`；`content-type`/`cache-control`；`value` = 内置默认、`origin` 全 `default`；`stored`/`unknown`/`dropped` 空；`fields` = `describeFields(listSkillNames())`（临时 DSH_HOME 下技能根为空 ⇒ skill 字段 `options: []`）；`file` 指到临时目录 |
 | 18 | POST 写盘 + GET 读回 | I7 / I14 | `200`；文件内容 = 提交的三项；`origin` 转 `stored`；`.tmp` 已改名；非 Windows 上 `mode & 0o777 === 0o600` |
 | 19 | POST 逐键合并 | I6 | 先存标题、再存声音，两次之后三项都在，`origin` 逐格正确 |
 | 20 | POST 空体 / 非 JSON / 未知键 | I5 | 三条都 `400`（`no settings provided` / `unknown setting "legacyFlag" (not in lib/schema.mjs)`），且**文件不存在** |
@@ -82,7 +84,7 @@ pwsh -File install.ps1            # 或 bash install.sh
 
 三层判据，缺一层就不算生效（与 [AGENTS.md](AGENTS.md) 的「生效方式」同一口径）：
 
-1. **包在不在**：`<DSH_HOME>/plugins/adg-settings/`（稳定副本，8 个文件）与 `<profile>/node_modules/adg-settings/package.json`（真目录）。
+1. **包在不在**：`<DSH_HOME>/plugins/adg-settings/`（稳定副本，9 个文件）与 `<profile>/node_modules/adg-settings/package.json`（真目录）。
 2. **被选没被选**：该 profile 的 `dependencies` 与 `dsh.profile.bundles` 里都有 `adg-settings`。
 3. **运行期**：重启 dsh → 左侧边栏「扩展」区出现「Adg 设置」入口 → 点开这一页能读出「当前生效」七项、能保存、能恢复默认，且设置弹窗里不再有这一页。
 
@@ -94,7 +96,7 @@ pwsh -File install.ps1            # 或 bash install.sh
 4. 让一个子代理弹一条**不带标题**的通知 → 标题就是你在页面上写的那句；关掉「响提示音」再弹一条 → 静音。
 5. 点「恢复默认」→ 文件消失 → 页面回到默认。
 6. 手工把文件改成 `{"notifySound":"nope","legacy":1}` → 刷新页面 → 不崩，值回落，页面提示"有认不得的键 / 有不合法的值被忽略"。
-7. 在「自定义注入正文」里填一段可辨认的文本 → 保存 → **不重启**、在同一会话里发下一条消息 → 调度者的系统提示词里就是那段文本（前后没有任何标题或导语）；清空保存 → 下一轮回到下拉里选中那份技能文件的正文（出厂＝执行框架正文首行「### 执行框架 BEGIN」）。再顺手验一次下拉：把「注入哪个框架」切到思考框架 → 下一轮正文换成 thinking-framework 那份（首行「# 思维规范框架」、不再有「执行框架 BEGIN」，不用重启）。
+7. 在「自定义注入正文」里填一段可辨认的文本 → 保存 → **不重启**、在同一会话里发下一条消息 → 调度者的系统提示词里就是那段文本（前后没有任何标题或导语）；清空保存 → 下一轮回到下拉里选中那份技能文件的正文（出厂＝执行框架正文首行「### 执行框架 BEGIN」）。再顺手验一次下拉：把「注入哪个技能」切到 thinking-framework → 下一轮正文换成 thinking-framework 那份（首行「# 思维规范框架」、不再有「执行框架 BEGIN」，不用重启）。
 8. 关掉「注入框架」→ 下一轮系统提示词里**没有**框架段；同时看聊天输入框那颗「注入」chip 是否也变成关闭态（两处是同一个值）。反向再点一次 chip，回设置页刷新看开关是否同步。
 9. 打开「同时注入子代理」→ 保存 → **不重启**、在同一会话里再派一个子代理 → 它的系统提示词里出现框架段；关掉该开关 → 下一次派出的子代理又没有这一段（调度者那侧始终有）。判据细则见 `skill-inject/testing-guide.md` 的 M 系列。
 
