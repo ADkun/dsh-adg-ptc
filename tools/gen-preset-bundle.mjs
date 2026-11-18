@@ -142,9 +142,7 @@ function addContextToolsNote(source, specs) {
     fail(`preset/agent.cordis.yml 里已经出现 "${NOTE_MARKER}" —— 这一段只允许由本脚本在 ${specs.map((spec) => spec.flag).join(' ')} 时注入，不要手写进源文件（没装该插件的 profile 会因此收到不存在的工具名）`)
   }
   const flags = specs.map((spec) => spec.flag).join(' ')
-  const packages = specs.map((spec) => spec.package).join(' 与 ')
   const names = specs.flatMap((spec) => spec.tools)
-  const pronoun = specs.length > 1 ? '它们' : '它'
   const personaAt = lines.findIndex((line) => /^- id: persona\s*$/.test(line))
   if (personaAt < 0) {
     fail(`找不到 \`- id: persona\` 行：${flags} 要往调度 persona 里加一段委派说明，检查 preset/agent.cordis.yml 的 identity 段是否被改动`)
@@ -171,7 +169,7 @@ function addContextToolsNote(source, specs) {
   if (anchorAt < 0) {
     fail(`调度 persona 的 prefix 里找不到 \`      ## 约束\` 行：${flags} 的注入锚点必须是它（检查那段是否被改写）`)
   }
-  const note = `      ${NOTE_MARKER}（${flags} 生成）**：这次会话装了 ${packages}，${pronoun}注册在全局层的 ${names.join(' / ')} 已经在你的工具目录里（PTC 下你在 \`run_code\` 里用 ${names.map((name) => `\`tools.${name}({...})\``).join(' / ')} 调它们）—— **每一次委派都要把这几个名字一并写进 \`tools\`**。`
+  const note = `      ${NOTE_MARKER}**：用 delegate 派子代理时，必须把这几个名字一并写进该次委派的 \`tools\`：${names.join(' / ')}。`
   lines.splice(anchorAt, 0, note, '')
   return `${lines.join('\n')}\n`
 }
