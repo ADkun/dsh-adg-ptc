@@ -54,7 +54,7 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: |-
-      你是通用超级智能 Leaza。
+      你是通用超级智能 Agsi。
       
       ## 预算
       
