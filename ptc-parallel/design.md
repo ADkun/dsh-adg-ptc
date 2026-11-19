@@ -2,7 +2,7 @@
 title: ptc-parallel 模块设计
 owner: Adg preset 维护者
 status: current
-last_reviewed: 2026-11-10
+last_reviewed: 2026-11-19
 ---
 
 # design.md — ptc-parallel（`adg-ptc-parallel` 并行执行提示插件）
@@ -33,19 +33,22 @@ last_reviewed: 2026-11-10
 ### 3.1 判定（`isPtcAgent(ctx, agent)`，在 [lib/guide.mjs](lib/guide.mjs)）
 
 ```
-ctx.get('tools').get('run_code', agent) !== undefined
+tools.selectExecutor(agent).describe(tools.definitions(agent))
+  → knownNames / schemas 里含 'run_code'
 ```
 
-**为什么这条判据等价于「这个 scope 是 PTC 呈现」**（平台契约，升级 dsh 后重核第 5 节）：
+**为什么这条判据等价于「这个 scope 是 PTC 呈现」**（rc.5 平台契约，升级 dsh 后重核第 5 节）：
 
-- `run_code` 是平台**保留名**的呈现传输层 —— 注册时就拒绝这个名字，所以它不是一个普通的全局工具。
-- dsh-tools 解析某个 scope 的**可见工具集合**时，先解析能力层（全局层 + scope 链上的祖先层 + scope 自己的层），**最后**才按 scope 的呈现模式补上它：呈现模式不是 `native` 的 scope 才有 `run_code`，native scope 的调度表里没有它 —— 哪怕同一进程里别的 agent 正在呈现它。
-- 呈现模式本身沿 scope 链解析（最近的 scope 优先，preset 的声明覆盖其下所有 agent），所以"离得最近的声明"说了算。
-- ⇒ `tools.get('run_code', agent)` 不为 `undefined` ⟺ 这个 scope 的呈现模式不是 native ⟺ **这个 scope 是 PTC 呈现**。
+- **旧契约已失效**：曾经的口径是「`view()` 按 scope 呈现模式补上 `run_code`」，于是 `tools.get('run_code', agent)` 不为 `undefined` 就算 PTC。rc.5 起不再如此 —— `run_code` 是保留名（注册即拒），**从不进任何 layer**，所以 `view().visible` 里**永远没有**它，旧的 `get('run_code')` 判据恒为 `undefined`、插件因此从不注入（这就是本模块曾经的失效点）。
+- **呈现由每个 scope 的「执行器」决定**：平台在挂载 scope 上 `setExecutor` 唯一执行器 —— PTC 执行器（`@deepseek-ai/dsh-tool-executor-ptc`）或 native 执行器（`@deepseek-ai/dsh-tool-executor-native`）。`tools.selectExecutor(scope)` 沿 scope 链解析出这个执行器（最近优先，preset 的声明覆盖其下所有 agent）。
+- **平台组装系统提示词时对执行器的唯一调用就是 `describe`**（dsh-tools 构造器的 `ctx.systemPrompt.tools(({scope,toolSet}) => executor.describe(this.definitions(scope,toolSet)))`）。PTC 执行器的 `describe` 返回 `{ schemas:[run_code 的 schema], knownNames:['run_code'] }`；native 执行器的 `describe` 只把可见工具投影成 schemas、**不返回 `knownNames`**。
+- ⇒ 「`describe(...)` 的结果里声明了 `run_code`」⟺ 这个 scope 的执行器是 PTC 执行器 ⟺ **这个 scope 是 PTC 呈现** —— 这正是模型能看见/调用 `run_code` 的那个口径。
 
-**scope 传什么**：传 **agent 对象本身** —— agent 的 scope key 就是这个实例（`tools.get(name, scope)` 的 `scope` 形参类型是 `ScopeKey`）。
+**scope 传什么**：传 **agent 对象本身** —— `selectExecutor(scope)` / `definitions(scope)` 的 scope 形参类型是 `ScopeKey`，agent 的 scope key 就是这个实例。
 
-**异常口径**（fail-closed）：`get` 内部要现造 PTC 传输层（要取 PTC runtime、workingDirectory 等服务），这些服务缺失时**会抛错**。异常一律当"不是 PTC"—— 判据拿不到时宁可不注入，也不要把一段讲 PTC 并行的正文塞进一个根本不是 PTC 的会话。
+**字段口径**：先查 `knownNames`（PTC 执行器显式声明 `['run_code']`），再兜底查 `schemas` 里有没有 `name === 'run_code'` —— 兼容只给 schemas 的版本。
+
+**异常口径**（fail-closed）：`selectExecutor` 在没有执行器时抛 `ToolExecutorUnavailableError`；PTC 执行器的 `describe` 要现造传输层（取 PTC runtime 等），缺服务会抛错。异常一律当"不是 PTC"—— 判据拿不到时宁可不注入，也不要把一段讲 PTC 并行的正文塞进一个根本不是 PTC 的会话。
 
 ### 3.2 注入（`index.mjs`）
 
@@ -97,8 +100,8 @@ ctx.get('tools').get('run_code', agent) !== undefined
 
 | # | 不变量 | 载体 |
 |---|---|---|
-| I1 | 判定只用公开 API `ctx.get('tools').get('run_code', agent)`，且 scope 传 agent 自己 | `test/ptc-parallel.test.mjs` 的 G4 |
-| I2 | 判据抛错 ⇒ 当"不是 PTC"（不注入），异常不外抛 | G2 / G6 |
+| I1 | 判定只用公开 API `tools.selectExecutor(agent).describe(tools.definitions(agent))`，且 scope 传 agent 自己；结果含 `run_code` 才算 PTC | `test/ptc-parallel.test.mjs` 的 G4 / G6 |
+| I2 | 判据抛错 ⇒ 当"不是 PTC"（不注入），异常不外抛 | G2 / G7 |
 | I3 | 指引正文只有一份（`lib/guide.mjs` 的 `GUIDE_TEXT`），插件里无副本 | S1 / S2 + [评] 读 `index.mjs` |
 | I4 | 本插件不注册任何工具，只有一个 `agent/created` 监听器 | [评] 读 `index.mjs` 的 `inject` / `apply` |
 | I5 | 监听器体整个被 try/catch 包住，单个 agent 的失败不拖垮其它 agent | G5 / G6 |
@@ -116,12 +119,13 @@ ctx.get('tools').get('run_code', agent) !== undefined
 
 全部来自 `@deepseek-ai/dsh-tools`（本机解析见根 `AGENTS.md` 的「外部依赖与 ref 解析」）：
 
-- `tools.get(name, scope)` —— public 方法，`scope` 形参类型 `ScopeKey`；按**一个 scope 的视角**解析工具，缺省（不传 scope）是全局视角。
-- `run_code` 是**保留名**（注册即拒），它是 PTC 模式的**呈现传输层**；它**不进全局层**，可见性在解析完能力层之后按 scope 追加。
-- 可见性追加的条件：**该 scope 的呈现模式不是 `native`**（native scope 的调度表里没有 `run_code`）。
-- 呈现模式沿 scope 链解析：最近的 scope 优先，preset 的声明覆盖其下的 agent。
-- 取 `run_code` 定义时可能要现造传输层（要取 PTC runtime、workingDirectory、approval、sandboxPolicy 等服务）—— **缺服务时会抛错**，所以判据必须 try/catch。
-- `tools.view(scope)` —— 返回该 scope 的可见集合（`{visible: Map<name, definition>}`）。**类型声明里标的是 `private`，但运行时确实存在** —— 所以本模块只在 try/catch 里防御性使用，用坏了也只是退回 `GUIDE_TEXT`。
+- **呈现由执行器决定，不再由 `view` 补 run_code**（rc.5 起）。`tools.setExecutor(executor)` 在挂载 scope 注册唯一执行器；`tools.selectExecutor(scope)` 沿 scope 链解析（最近优先，preset 声明覆盖其下 agent），**无执行器时抛 `ToolExecutorUnavailableError`**。
+- `run_code` 是**保留名**（`register()` 直接抛 `tool name "run_code" is reserved …`），它**从不进任何 layer**，所以 `tools.view(scope).visible` / `tools.get('run_code', scope)` **永远拿不到它** —— 旧的 `get('run_code')` 判据在 rc.5 恒为 `undefined`。
+- 平台组装系统提示词时对执行器的唯一调用：`ctx.systemPrompt.tools(({scope,toolSet}) => executor.describe(this.definitions(scope,toolSet)))`（dsh-tools 构造器）。
+- PTC 执行器 `describe(_tools)` ⇒ `{ schemas:[projectToolSchema(run_code,false)], knownNames:['run_code'] }`；native 执行器 `describe(tools)` ⇒ `{ schemas: tools.map(projectToolSchema) }`（无 `knownNames`）。
+- `tools.definitions(scope, toolSet?)` —— 取该 scope 可见的工具定义数组（不传 toolSet 时取已注册的可见定义）。
+- `run_code` 的定义由 PTC 执行器 `requirePtcTransport()` 现造（取 PTC runtime 等服务）—— **缺服务时会抛错**，所以判据必须 try/catch。
+- `tools.view(scope)` —— 返回该 scope 的可见集合（`{visible: Map<name, definition>}`），**只含注册的能力、不含 run_code**。类型声明里标 `private`，运行时可用，本模块只在 try/catch 里防御性用它现算清单。
 - 并发分类：调度器 `executionMode(exec)` 的口径是"没有 `isConcurrencySafe` ⇒ 独占；有则按实参问它，答 true ⇒ 并行，抛错 ⇒ 独占"。
 - 用户自定义的并发安全声明会被平台包一层：**先校验参数**，不合法直接返回 false —— 所以**不能**拿无参调用去探测。
 - `ctx.systemPrompt.section({name, order, text})` —— 注册一段系统提示词；`text` 是 `string | ((context) => string)`，每次组装时求值，`context` 里带当前组装的 `scope`。
@@ -129,7 +133,7 @@ ctx.get('tools').get('run_code', agent) !== undefined
 
 ## 6. 未观测项
 
-- **未观测**：`agent/created` 触发时该 agent 的 scope 是否已经能解析出呈现模式（契约上 setup 完成先于 `agent/created`，依据同形但未在本仓库实测）；量法：装好后在新 Adg 会话里看系统提示词有没有这一段，没有就查 dsh 日志里 `agent/created` 的时序。
+- **未观测**：`agent/created` 触发时，`tools.selectExecutor(agent)` 是否已经能解析出这个 agent 的（PTC）执行器（契约上 setup 完成先于 `agent/created`，依据同形但未在本仓库实测）；量法：装好后在新 Adg 会话里看系统提示词有没有这一段，没有就查 dsh 日志里 `agent/created` 的时序。
 - **未观测**：子代理的 scope 是不是同样被判成 PTC 呈现（子代理由 `delegate` 现给工具面，呈现模式沿 scope 链继承）；量法：装好后派一个子代理，看它的系统提示词里**有没有**「## PTC 并行执行（一次 run_code 里多做）」段。
 - **未观测**：现算清单里的"可并发 / 独占"两列与平台**当前**版本的并发安全声明是否逐项一致；量法：在会话里让模型读一次自己的系统提示词，对照 dsh-tools 里各工具的 `isConcurrencySafe` 声明逐项核。
 - **未观测**：`tools.view(scope)` 在 dsh 升级后是否还留在同一个位置（类型声明里它是 `private`，只是运行时可用）；量法：升级 dsh 后跑本模块的单测（L 系列覆盖了这条链路），并在真会话里确认清单非空。

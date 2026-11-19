@@ -5,12 +5,13 @@
 // `node --test test` 能在零依赖下直接测它；index.mjs 只做"把内核接到 cordis 上"。
 //
 // ── 判定：是不是 PTC 呈现 ───────────────────────────────────────────────
-// 判定只用**公开 API**：`ctx.get('tools').get('run_code', agent)`。
-// 为什么这等于「这个 scope 是 PTC 呈现」：平台把 `run_code` 这个保留名的呈现
-// 传输层按 scope 解析 —— dsh-tools 的 `view(scope)` 在解析完能力层之后，
-// 只给"呈现模式不是 native"的 scope 补上 `run_code`（native scope 的调度表里
-// 没有它，哪怕同一进程里别的 agent 正在呈现它）。所以"这个 scope 的可见工具
-// 集合里有没有 run_code"就是"这个 scope 的呈现模式是不是 ptc"的公开判据。
+// 判定只用**公开 API**：`ctx.get('tools').selectExecutor(agent).describe(...)`。
+// rc.5 起，工具呈现由每个 scope 的**执行器**决定（PTC 执行器 vs native 执行器）：
+// `run_code` 是保留名、从不进任何 layer，所以 `view().visible` / `get('run_code')`
+// 永远拿不到它 —— 旧判据在 rc.5 恒失效。真正的口径是"这个 scope 的执行器
+// `describe(...)` 出来的结果里声明了 `run_code`"：PTC 执行器声明
+// `knownNames: ['run_code']` 且 schemas 里就是 run_code；native 执行器不声明。
+// 平台组装系统提示词时对执行器的那次调用正是 `describe(definitions(scope))`。
 // 传 scope 时传**agent 对象本身** —— agent 的 scope key 就是这个实例。
 //
 // ── 清单：哪些工具能并发 ───────────────────────────────────────────────
@@ -58,15 +59,22 @@ export const CLASSIFICATION_NOTE = `下面这份清单是这次组装提示词�
 /**
  * 判定一个 scope 是不是 PTC 呈现。
  *
- * 判据只有一条：`ctx.get('tools').get('run_code', agent)` 不为 `undefined`。
- * 理由（为什么它等价于「这个 scope 是 PTC 呈现」）：平台的 `run_code` 是保留名的
- * 呈现传输层 —— dsh-tools 解析某个 scope 的可见工具集合时，只给呈现模式不是
- * native 的 scope 补上它（native scope 的调度表里没有它）。于是"这个 scope 能不能
- * 看见 run_code"就是公开的、可判定的呈现口径。
+ * 判据（公开 API，与平台组装提示词时对执行器的调用同源）：
+ *   `ctx.get('tools').selectExecutor(agent).describe(tools.definitions(agent))`
+ *   的结果里 `knownNames`（或兜底 `schemas`）含 `run_code`。
  *
- * 为什么必须 try/catch：`get` 内部要现造 PTC 传输层（取 PTC runtime），
- * runtime 缺失时**会抛错**。异常一律当作"不是 PTC"（不注入）—— 判据拿不到时
- * 宁可不注入，也不要把一段讲 PTC 并行的正文塞进一个根本不是 PTC 的会话。
+ * 为什么等价于「这个 scope 是 PTC 呈现」（rc.5 契约，升级后重核 design.md 第 5 节）：
+ *   - 呈现由每个 scope 的执行器决定：PTC 执行器 / native 执行器各注册一个，
+ *     `selectExecutor(scope)` 沿 scope 链解析（最近优先，preset 覆盖其下 agent）。
+ *   - `run_code` 是保留名、从不进任何 layer ⇒ `view().visible` 里永远没有它，
+ *     旧的 `get('run_code')` 判据恒为 undefined，已失效。
+ *   - PTC 执行器的 `describe` 返回 `knownNames:['run_code']`；native 的执行器
+ *     只把可见工具投影成 schemas、不带 knownNames。所以"describe 结果里声明了
+ *     run_code"就是"这个 scope 用 PTC 执行器"的公开判据。
+ *
+ * 为什么必须 try/catch：`selectExecutor` 在没有执行器时抛
+ * `ToolExecutorUnavailableError`；PTC 执行器的 `describe` 要现造传输层（取 PTC
+ * runtime 等），缺服务时会抛错。异常一律当作"不是 PTC"（不注入）。
  *
  * @param {{get?: (name: string) => unknown}} ctx 插件挂载上下文
  * @param {unknown} agent 目标 agent（scope key 就是它自己）
@@ -79,12 +87,28 @@ export function isPtcAgent(ctx, agent) {
     if (agent === null || agent === undefined) return false;
     const tools = ctx.get('tools');
     if (tools === null || typeof tools !== 'object') return false;
-    if (typeof tools.get !== 'function') return false;
-    // scope 传 agent 对象本身：agent 的 scope key 就是这个实例。
-    const definition = tools.get(RUN_CODE_NAME, agent);
-    return definition !== undefined;
+    if (typeof tools.selectExecutor !== 'function') return false;
+    // 取这个 scope 的执行器：PTC 与 native 各注册一个，selectExecutor 沿 scope 链解析。
+    const executor = tools.selectExecutor(agent);
+    if (executor === null || typeof executor !== 'object') return false;
+    if (typeof executor.describe !== 'function') return false;
+    // describe 就是平台组装提示词时对执行器的那次调用
+    // （dsh-tools 构造器：executor.describe(definitions(scope, toolSet))）。
+    const definitions = typeof tools.definitions === 'function' ? tools.definitions(agent) : [];
+    const description = executor.describe(definitions);
+    if (description === null || typeof description !== 'object') return false;
+    // 先查 knownNames（PTC 执行器显式声明 ['run_code']）；
+    // 再兜底查 schemas 里有没有 name === 'run_code'（兼容只给 schemas 的版本）。
+    if (Array.isArray(description.knownNames) && description.knownNames.includes(RUN_CODE_NAME)) {
+      return true;
+    }
+    if (Array.isArray(description.schemas)
+      && description.schemas.some((schema) => schema !== null && typeof schema === 'object' && schema.name === RUN_CODE_NAME)) {
+      return true;
+    }
+    return false;
   } catch {
-    // 判据本身抛错（PTC runtime 缺失等）—— 一律按"不是 PTC"处理。
+    // 判据本身抛错（无执行器 / PTC runtime 缺失等）—— 一律按"不是 PTC"处理。
     return false;
   }
 }

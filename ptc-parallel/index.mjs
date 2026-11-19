@@ -39,9 +39,9 @@ export const inject = ['systemPrompt'];
  * 插件入口：监听 agent/created，给每个**确认为 PTC 呈现**的 agent（调度者与子代理都算）
  * 在它自己的 agent.ctx 上注册一段"PTC 并行执行"section。
  *
- * 判定用公开 API：`ctx.get('tools').get('run_code', agent)` —— 它不为 undefined
- * 就说明**这个 scope 的呈现模式不是 native**，即这个 agent 是 PTC 呈现的
- * （理由见 lib/guide.mjs 的 isPtcAgent）。
+ * 判定用公开 API：`ctx.get('tools').selectExecutor(agent).describe(...)` 返回的
+ * knownNames/schemas 里含 `run_code` —— 说明这个 scope 的执行器是 PTC 执行器，
+ * 即这个 agent 是 PTC 呈现的（理由见 lib/guide.mjs 的 isPtcAgent）。
  *
  * @param {import('@deepseek-ai/cordis').Context} ctx 插件挂载上下文
  */

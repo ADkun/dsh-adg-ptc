@@ -30,8 +30,8 @@ node --test --test-isolation=none test  # DSH 沙箱（workspace-write）里必�
 
 每条一行结论 + 就地理由 + 来源与载体（`[机检]` 给命令与期望判据，`[评]` 给评审判据）。**违反即返工。**
 
-- **R1 判定只准用公开 API，且只准这一条判据。** 必须走 `ctx.get('tools').get('run_code', agent)`，scope 传 **agent 对象本身**（agent 的 scope key 就是它自己）。理由：`run_code` 是平台保留名的呈现传输层，dsh-tools 解析某个 scope 的可见工具集合时只给"呈现模式不是 native"的 scope 补上它（native scope 的调度表里没有它）—— 所以"这个 scope 能不能看见 `run_code`"就是公开的呈现口径。禁止改用内部实现、内部字段或猜测。来源：design.md 第 3 节 + I1。载体：[机检] G4（断言调用的正是 `tools.get('run_code', agent)`）。
-- **R2 判据抛错一律当"不是 PTC"，不注入。** `get` 内部要现造 PTC 传输层（取 PTC runtime），runtime 缺失时**会抛错**。理由：判据拿不到时宁可不注入，也不要把一段讲 PTC 并行的正文塞进一个根本不是 PTC 的会话。来源：design.md 的 I2。载体：[机检] G2 / G6。
+- **R1 判定只准用公开 API，且只准这一条判据。** 必须走 `ctx.get('tools').selectExecutor(agent).describe(tools.definitions(agent))`，看结果 `knownNames` / `schemas` 里是否含 `run_code`（先查 `knownNames`，兜底查 `schemas`）；scope 一律传 **agent 对象本身**（agent 的 scope key 就是它自己）。理由（rc.5 起）：呈现由每个 scope 的执行器决定，`run_code` 是保留名、从不进 `view().visible`，所以旧的 `get('run_code', agent)` 判据恒为 `undefined`（本模块曾经的失效点）；只有 PTC 执行器的 `describe` 才声明 `run_code`。禁止改用内部实现、内部字段或猜测。来源：design.md 第 3 节 + I1。载体：[机检] G4 / G6。
+- **R2 判据抛错一律当"不是 PTC"，不注入。** `selectExecutor` 无执行器时抛 `ToolExecutorUnavailableError`，PTC 执行器 `describe` 要现造传输层（取 PTC runtime），缺服务时**会抛错**。理由：判据拿不到时宁可不注入，也不要把一段讲 PTC 并行的正文塞进一个根本不是 PTC 的会话。来源：design.md 的 I2。载体：[机检] G2 / G7。
 - **R3 正文只写在 `lib/guide.mjs` 的 `GUIDE_TEXT` 一处。** 理由：正文是操作指引（平台并发语义不随会话变化），另抄一份就是漂移源。来源：design.md 的 I3。载体：[机检] S1 / S2。
 - **R3b 禁止把工具名清单（或并发上限数字）写死进正文或文档。** 理由：写死即过期 —— dsh 升级新增工具、agent 的工具面变化，那份清单立刻作废，模型会拿过期清单下结论（「这个能并发」其实早变了）。要清单就现算：每次组装提示词时从 `tools.view(scope).visible` 算出来。来源：design.md 的 I3 / I6。载体：[机检] S3（`GUIDE_TEXT` 与 `CLASSIFICATION_NOTE` 不得出现任何工具名）、S2（不得出现写死的上限数字）。
 - **R4 禁止在本插件里注册任何工具。** 理由：它只是提示词的一部分，不是能力面的一部分 —— 不进 `KNOWN_TOOLS`、不进任何 `allow`、不进 `delegate` 的 `tools` 名单。来源：design.md 的 I4。载体：[评] 读 `index.mjs` 的 `inject` 与 `apply`（只有 `systemPrompt` 与一个 `agent/created` 监听器）。

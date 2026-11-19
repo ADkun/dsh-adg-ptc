@@ -31,6 +31,17 @@ const BT = String.fromCharCode(96);
  */
 const TOOL_NAME_PATTERN = /\b(pwsh|write|edit|glob|grep|read|web_search|web_fetch|delegate|notify_user|ask_user)\b/;
 
+// ── 假执行器：判定用（PTC 执行器声明 run_code，native 执行器不声明）──────────────
+
+/** 假 PTC 执行器：describe 声明 run_code（knownNames + schemas）。 */
+const ptcExecutor = () => ({
+  describe: () => ({ schemas: [{ name: 'run_code' }], knownNames: ['run_code'] }),
+});
+/** 假 native 执行器：describe 只把可见工具投影成 schema，不含 run_code。 */
+const nativeExecutor = () => ({
+  describe: (defs) => ({ schemas: (Array.isArray(defs) ? defs : []).map((d) => ({ name: d.name })) }),
+});
+
 // ── G 系列：isPtcAgent 的判定 ────────────────────────────────────────────────
 
 test('G1 判定：tools 服务不存在 ⇒ false', () => {
@@ -38,48 +49,68 @@ test('G1 判定：tools 服务不存在 ⇒ false', () => {
   assert.equal(isPtcAgent(ctx, { id: 'a1' }), false);
 });
 
-test('G2 判定：tools.get 抛错（PTC runtime 缺失等）⇒ false，不外抛', () => {
+test('G2 判定：selectExecutor 抛错（无执行器 / runtime 缺失等）⇒ false，不外抛', () => {
   const ctx = {
     get: () => ({
-      get: () => {
-        throw new Error('dsh-tools: run_code with an Agent requires workingDirectory');
+      selectExecutor: () => {
+        throw new Error('dsh-tools: no tool executor selected for this scope');
       },
+      definitions: () => [],
     }),
   };
   assert.equal(isPtcAgent(ctx, { id: 'a1' }), false);
 });
 
-test('G3 判定：get 返回 undefined（native scope）⇒ false', () => {
-  const ctx = { get: () => ({ get: () => undefined }) };
-  assert.equal(isPtcAgent(ctx, { id: 'a1' }), false);
+test('G3 判定：native 执行器 describe 不含 run_code ⇒ false', () => {
+  const tools = { selectExecutor: () => nativeExecutor(), definitions: () => [{ name: 'read' }] };
+  assert.equal(isPtcAgent({ get: () => tools }, { id: 'a1' }), false);
 });
 
-test('G4 判定：get 返回 run_code 的定义 ⇒ true，且 scope 传的就是 agent 自己', () => {
+test('G4 判定：PTC 执行器 describe 声明 run_code ⇒ true，且 selectExecutor/definitions 传的就是 agent 自己', () => {
   const calls = [];
-  const definition = { name: 'run_code', description: 'program-driven tool calls' };
-  const ctx = {
-    get: (service) => {
-      calls.push(service);
-      return {
-        get: (toolName, scope) => {
-          calls.push(toolName);
-          calls.push(scope);
-          return definition;
-        },
-      };
+  const executor = {
+    describe: (defs) => {
+      calls.push({ describe: defs });
+      return { schemas: [{ name: 'run_code' }], knownNames: ['run_code'] };
     },
   };
+  const tools = {
+    selectExecutor: (scope) => {
+      calls.push({ selectExecutor: scope });
+      return executor;
+    },
+    definitions: (scope) => {
+      calls.push({ definitions: scope });
+      return [];
+    },
+  };
+  const ctx = { get: (service) => { calls.push({ get: service }); return tools; } };
   const agent = { id: 'a1' };
   assert.equal(isPtcAgent(ctx, agent), true);
-  // 判据只用公开 API：ctx.get('tools') + tools.get('run_code', agent)
-  assert.deepEqual(calls, ['tools', 'run_code', agent]);
+  // 判据只用公开 API：ctx.get('tools') + tools.selectExecutor(agent) + tools.definitions(agent) + executor.describe(defs)
+  assert.deepEqual(calls, [{ get: 'tools' }, { selectExecutor: agent }, { definitions: agent }, { describe: [] }]);
 });
 
 test('G5 判定：缺 ctx / 缺 agent / ctx.get 不是函数 ⇒ false（判据缺失不注入）', () => {
   assert.equal(isPtcAgent(undefined, { id: 'a1' }), false);
   assert.equal(isPtcAgent({}, { id: 'a1' }), false);
-  assert.equal(isPtcAgent({ get: () => ({ get: () => ({}) }) }, undefined), false);
-  assert.equal(isPtcAgent({ get: () => ({ get: () => ({}) }) }, null), false);
+  assert.equal(isPtcAgent({ get: () => ({ selectExecutor: () => ptcExecutor() }) }, undefined), false);
+  assert.equal(isPtcAgent({ get: () => ({ selectExecutor: () => ptcExecutor() }) }, null), false);
+});
+
+test('G6 判定：执行器只给 schemas（无 knownNames）但 schema 里有 run_code ⇒ true（兼容只给 schemas 的版本）', () => {
+  const executor = { describe: () => ({ schemas: [{ name: 'run_code' }] }) };
+  const tools = { selectExecutor: () => executor, definitions: () => [] };
+  assert.equal(isPtcAgent({ get: () => tools }, { id: 'a1' }), true);
+});
+
+test('G7 判定：selectExecutor 返回非对象 / 执行器缺 describe ⇒ false（形状不对不注入）', () => {
+  const tools1 = { selectExecutor: () => ({}), definitions: () => [] };
+  assert.equal(isPtcAgent({ get: () => tools1 }, { id: 'a1' }), false);
+  const tools2 = { selectExecutor: () => ({ describe: 42 }), definitions: () => [] };
+  assert.equal(isPtcAgent({ get: () => tools2 }, { id: 'a1' }), false);
+  const tools3 = { selectExecutor: () => null, definitions: () => [] };
+  assert.equal(isPtcAgent({ get: () => tools3 }, { id: 'a1' }), false);
 });
 
 // ── S 系列：正文常量 ──────────────────────────────────────────────────────────
@@ -287,7 +318,7 @@ test('W2 挂载：恰好注册一个 agent/created 监听器，effect 标签在�
 });
 
 test('W3 调用：PTC 呈现的 agent 在自己的 scope 上注册了 section（name / order / 正文）', () => {
-  const ctx = fakeCtx({ get: () => ({ name: 'run_code' }) });
+  const ctx = fakeCtx({ selectExecutor: () => ptcExecutor(), definitions: () => [] });
   apply(ctx);
   const agent = fakeAgent();
   ctx.listeners[0].handler({ agent });
@@ -299,7 +330,7 @@ test('W3 调用：PTC 呈现的 agent 在自己的 scope 上注册了 section（
 });
 
 test('W4 调用：非 PTC 呈现的 agent 不注册任何 section', () => {
-  const ctx = fakeCtx({ get: () => undefined });
+  const ctx = fakeCtx({ selectExecutor: () => nativeExecutor(), definitions: () => [] });
   apply(ctx);
   const agent = fakeAgent();
   ctx.listeners[0].handler({ agent });
@@ -307,7 +338,7 @@ test('W4 调用：非 PTC 呈现的 agent 不注册任何 section', () => {
 });
 
 test('W5 调用：payload 里没有 agent 时不注册、也不抛错', () => {
-  const ctx = fakeCtx({ get: () => ({ name: 'run_code' }) });
+  const ctx = fakeCtx({ selectExecutor: () => ptcExecutor(), definitions: () => [] });
   apply(ctx);
   const { handler } = ctx.listeners[0];
   assert.doesNotThrow(() => handler(undefined));
@@ -316,9 +347,10 @@ test('W5 调用：payload 里没有 agent 时不注册、也不抛错', () => {
 
 test('W6 调用：判定抛错时不外抛（异常一律当作"不是 PTC"）', () => {
   const ctx = fakeCtx({
-    get: () => {
+    selectExecutor: () => {
       throw new Error('boom');
     },
+    definitions: () => [],
   });
   apply(ctx);
   const agent = fakeAgent();
@@ -341,8 +373,10 @@ test('W8 调用：section 的 text 是 provider（吃 context），清单随组�
     ['read', { isConcurrencySafe: () => true }],
     ['pwsh', {}],
   ]);
+  // 判定走 PTC（selectExecutor/definitions），清单现算走 view —— 两者都要给。
   const ctx = fakeCtx({
-    get: (name_, scope) => (name_ === 'run_code' ? { name: 'run_code' } : undefined),
+    selectExecutor: () => ptcExecutor(),
+    definitions: () => [],
     view: tools.view,
   });
   apply(ctx);

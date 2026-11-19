@@ -472,8 +472,9 @@ if ($SkipPackages) {
 # ── 2b-6. ptc-parallel/ 插件（PTC 并行执行提示）────────────────────────────
 # 与 2b / 2b-1 / 2b-2 / 2b-3 / 2b-4 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
 # 它不注册任何工具：在 agent/created 时判定"这个 scope 是不是 PTC 呈现"（判据是
-# ctx.get('tools').get('run_code', agent) 不为 undefined），是就在那个 agent 自己的
-# agent.ctx 上注册一段系统提示词 section（调度者与子代理都算）。
+# ctx.get('tools').selectExecutor(agent).describe(tools.definitions(agent)) 的
+# knownNames/schemas 里含 run_code），是就在那个 agent 自己的 agent.ctx 上注册一段
+# 系统提示词 section（调度者与子代理都算）。
 # 正文里**不写死任何工具名**：末尾那份"可并发 / 独占"清单是每次组装提示词时从
 # tools.view(scope).visible 现算的（写死即过期，模型会拿过期清单下结论）。
 # 漏装的症状是 PTC 会话的系统提示词里没有「## PTC 并行执行（一次 run_code 里多做）」段

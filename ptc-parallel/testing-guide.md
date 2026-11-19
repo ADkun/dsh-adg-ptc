@@ -2,7 +2,7 @@
 title: ptc-parallel 模块测试指南
 owner: Adg preset 维护者
 status: current
-last_reviewed: 2026-11-10
+last_reviewed: 2026-11-19
 ---
 
 # testing-guide.md — ptc-parallel（`adg-ptc-parallel` 并行执行提示插件）
@@ -16,10 +16,12 @@ last_reviewed: 2026-11-10
 | ID | 测什么 | 怎么测 | 对应不变量 | 类型 |
 |---|---|---|---|---|
 | G1 | 判定：`tools` 服务不存在 ⇒ false | `node --test test`（G1 用例） | I1 / I2 | `[机检]` |
-| G2 | 判定：`tools.get` 抛错（PTC runtime 缺失等）⇒ false 且不外抛 | 同上 | I2 | `[机检]` |
-| G3 | 判定：`get` 返回 undefined（native scope）⇒ false | 同上 | I1 | `[机检]` |
-| G4 | 判定：返回 run_code 定义 ⇒ true，且调用的正是 `tools.get('run_code', agent)`（scope 就是 agent 自己） | 同上 | I1 | `[机检]` |
+| G2 | 判定：`selectExecutor` 抛错（无执行器 / runtime 缺失等）⇒ false 且不外抛 | 同上 | I2 | `[机检]` |
+| G3 | 判定：native 执行器 `describe` 不含 `run_code` ⇒ false | 同上 | I1 / I6 | `[机检]` |
+| G4 | 判定：PTC 执行器 `describe` 声明 `run_code`（`knownNames`）⇒ true，且 `selectExecutor` / `definitions` 传的就是 agent 自己 | 同上 | I1 | `[机检]` |
 | G5 | 判定：缺 ctx / 缺 agent / `ctx.get` 不是函数 ⇒ false（判据缺失不注入） | 同上 | I2 | `[机检]` |
+| G6 | 判定：执行器只给 `schemas`（无 `knownNames`）但 schema 里有 `run_code` ⇒ true（兼容只给 schemas 的版本） | 同上 | I1 | `[机检]` |
+| G7 | 判定：`selectExecutor` 返回非对象 / 执行器缺 `describe` ⇒ false（形状不对不注入） | 同上 | I2 | `[机检]` |
 | S1 | 正文：非空、含关键锚点（`Promise.all` / `run_code`） | 同上 | I3 | `[机检]` |
 | S2 | 正文：讲的是**判据与机制**（并发 / 独占 / 上限），不写死上限数字 | 同上 | I3 / I10 | `[机检]` |
 | S3 | **防回归（硬断言）**：`GUIDE_TEXT` 与 `CLASSIFICATION_NOTE` 里**不得出现任何工具名**（判定用的名字集合写在测试文件的 `TOOL_NAME_PATTERN` 里，本文档不抄一份 —— 抄一份就成第二份漂移源） | 同上 | I10 | `[机检]` |
@@ -55,13 +57,13 @@ last_reviewed: 2026-11-10
 
 ## 沙箱注意
 
-仓库工作区里跑：`cd ptc-parallel && node --test --test-isolation=none test`（本机普通沙箱下 `node --test test` 也全绿，32 个用例）。本模块测试零副作用：不写盘、不起进程、不碰真会话、不联网。假 ctx 只实现 `apply()` 真正用到的 `effect` / `on` / `get`，不 import cordis。
+仓库工作区里跑：`cd ptc-parallel && node --test --test-isolation=none test`（本机普通沙箱下 `node --test test` 也全绿，34 个用例）。本模块测试零副作用：不写盘、不起进程、不碰真会话、不联网。假 ctx 只实现 `apply()` 真正用到的 `effect` / `on` / `get`，不 import cordis。
 
 ## 漂移检测
 
 - 插件名 ↔ insert 行 id：`ptc-parallel/index.mjs` 的 `export const name` 与 `ptc-parallel/cordis.patch.yml` 的 `- id:` 逐字一致（R6）。判据：`node -e "const a=await import('./index.mjs');const y=require('fs').readFileSync('cordis.patch.yml','utf8');const m=y.match(/- id: (\S+)/);console.log(a.name===m[1])"` 打印 `true`（C1 已把它钉住）。
 - section 名 / order：`index.mjs` 里 `name: 'adg:ptc-parallel'` 与 `order: 810` 一字不差（C3 钉住）。改 order 时**同时**核对平台自己的 PTC-only 段（800）与文件引用段（900）还在原位，否则这段话会插到不该插的位置。
-- 判定口径：`lib/guide.mjs` 的 `isPtcAgent()` 与 `RUN_CODE_NAME = 'run_code'` 是唯一判定处；改判据必须同步 G 系列（G1–G5）。
+- 判定口径：`lib/guide.mjs` 的 `isPtcAgent()` 与 `RUN_CODE_NAME = 'run_code'` 是唯一判定处；改判据必须同步 G 系列（G1–G7）。
 - **正文里的工具名**：S3 钉住"正文与过渡句不得出现任何工具名"。加任何工具名进 `GUIDE_TEXT` / `CLASSIFICATION_NOTE` 都会让 S3 变红 —— 这正是要的效果（工具清单必须现算，不许写死）。
 - 分类口径：`classifyVisibleTools()` 与平台调度器同源（"有 `isConcurrencySafe` ⇒ 可并发"）。升级 dsh 后若平台改了分类规则（例如改成看别的字段），要同步 `classifyVisibleTools` 与 L 系列。
 - 本模块不 import 任何 `@deepseek-ai/*` 包（I8）：判据是 `grep -c "@deepseek-ai" index.mjs lib/guide.mjs` 为 0。
