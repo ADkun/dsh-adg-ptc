@@ -85,6 +85,12 @@ const KNOWN_TOOLS = new Set([
   'job_list',
   'job_output',
   'job_kill',
+  // scheduled tasks（tool-schedule；只有调度者能用 —— 子代理调用返回 `subagent_session`，
+  // 所以永远不要写进某次委派的 `tools`）
+  'schedule_create',
+  'schedule_list',
+  'schedule_view',
+  'schedule_edit',
   // skills（goals 的 `create_goal` / `get_goal` / `update_goal` 已随 preset 的两行一起摘掉，
   // 不再是合法取值 —— 写进去会让那一次委派抛 `names unknown global tool`）
   'skill',

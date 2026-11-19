@@ -32,6 +32,7 @@ last_reviewed: 2026-10-15
 | EV6 | `maxDepth` | 交付前检索 `maxDepth`：委派行里出现即违规（当前唯一命中应是两条 disabled 行的 `maxDepth: provider-managed`）；`delegate` 也不给子代理传 `maxDepth` | I12 | `[机检]` + `[评]` |
 | EV7 | jobs 三件套 | 给了 `pwsh` 的每一次委派必须同时给 `job_list` / `job_output` / `job_kill`（落在 `delegate` 的 `tools` 上） | I14 | `[机检]` + `[评]` |
 | EV8 | 工具面不写 `skill` | 委派行 `allow` 或 `delegate` 的 `tools` 里出现 `skill` ⇒ WARN；需要技能时由调度者给技能文件的绝对路径 +「先 read 该文件再动手」，不内联技能正文 | I15 | `[机检]` + `[评]` |
+| EV9 | 调度者专用工具 | `schedule_create` / `schedule_list` / `schedule_view` / `schedule_edit` 在 `KNOWN_TOOLS` 里（合法名，写进 `allow` 不会报 ERROR），但运行期对子代理一律返回 `subagent_session`（`runForCaller` 的 `delegationDepthOf > 0`）—— 静态检查抓不到这层语义，只能评审「有没有把它们写进某次委派的 `tools`」；期望是**从不出现**在 `tools` 里 | I9 | `[评]` |
 | SV1 | 名册 ↔ 委派行 | 委派行加了但名册没同步报 `调度名册里没有 agent_x…`；名册提到但没有委派行报 `调度名册提到 agent_x，但没有对应的委派行…`；找不到 prefix 块报 `没找到顶部 persona 的 prefix: \|- block` | I20 / `mounted → live` | `[机检]` |
 | SV2 | 名册语义 | 名册那句"只有一个通用子代理 `agent`，它干什么、能用哪些工具全看你这次委派写什么"与 `delegate` 的契约对得上：**没有固定岗位、没有专家 persona 可对照**，所以这条不再逐个岗位核对，只核"名册没有把能力面写成固定名册" | I20 | `[评]` |
 | SV3 | 两个锚段在位 | `## 约束` 的 12 个顶级 `【…】` 段（全文 21 个 `【…】` 标记里，【目标】/【要干什么】/【不要干什么】/【验收标准】是「【拆解立目标】」段的子项，不是顶级段；【思考框架闸门】曾短暂在位，已由插件 `adg-skill-inject` 取代——persona 里**不该**再出现它）、`## 验收标准` 的验收判据那一段与 `## 回复内容` 的交付纪律段都还在。**没有脚本查这三个锚段**（`tools/check-preset.mjs` 是逐行文本扫描器，只扫委派行与 persona 段名），所以本用例靠对抗评审：逐段对照 `preset/agent.cordis.yml` 调度 persona 的原文，判有没有段被删、被合并或被改写 | I22 | `[评]` |

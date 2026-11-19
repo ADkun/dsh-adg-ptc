@@ -128,6 +128,8 @@ powershell -ExecutionPolicy Bypass -File $HOME\dsh-adg-ptc\install.ps1   # Windo
 
 **能复用的能力不靠名册、靠技能**：某个领域有现成技能时，调度者把技能文件的**绝对路径**写进委派 prompt、要子代理先 `read` 再动手（渐进式披露：技能正文不占调度者每次请求的固定前缀）。
 
+**调度者自己还带四件自动化任务工具**：`schedule_create` / `schedule_list` / `schedule_view` / `schedule_edit`（`@deepseek-ai/dsh-tool-schedule`，背后的 `schedule` 服务由 host 组合提供，与 dsh 内置的 standard / ptc preset 同形）。它们**只给调度者**：子代理调用会被 `subagent_session` 拒掉，所以永远不要写进任何一次委派的 `tools`。
+
 ## 浏览器能力需要完全权限
 
 **结论先说：** 拿到浏览器工具链的那一次委派要做真正的浏览器自动化，**必须**让本会话处于 `danger-full-access`（界面 Permissions 选择器里 id 为 `danger-full-access` 的那一项，或 `/permission danger-full-access`）。在 `workspace-write` / `read-only` 下，本机的 Chrome、Edge 与 Brave **三家都起不来**，而且**无头不改变这个结论** —— 有头与无头在受限令牌下同形失败。

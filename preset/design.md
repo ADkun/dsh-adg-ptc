@@ -118,6 +118,7 @@ stateDiagram-v2
 - **模式显示元数据**：`preset/preset.yml` 的顶层标量 `name` / `description` / `order`（`order: 20`）；生成器缺了它们会 exit 1。
 - **bundle 生成入口与形状**：`node tools/gen-preset-bundle.mjs [旗标] [<outDir>]` 读那三份源文件，写 `<outDir>/{cordis.patch.yml,package.json}`；patch 内容是一行 `insert:` 内含 Loader 声明行（见「依赖关系」的挂载方式）。味道键、稳定目录名与注入清单的唯一来源是 `tools/flavors.mjs`。
 - **委派入口与工具面**：全局工具 `delegate`（由第一方子插件 `adg-delegate` 注册，**只有调度智能体拿得到**）+ `delegation` 组那条唯一委派行 `agent`（`@deepseek-ai/dsh-tool-subagent`）。调度者能派谁**不是一个固定名单**：它每次现给 `tools` 与可选 `persona`，不另建契约副本；`delegate` 的参数与 deny 名单以 `delegate/design.md` 为准。
+- **自动化任务（scheduled tasks）**：`preset/agent.cordis.yml` 挂 `- id: tool-schedule`（`@deepseek-ai/dsh-tool-schedule`），它在 preset scope 注册四个模型面工具 `schedule_create` / `schedule_list` / `schedule_view` / `schedule_edit`；`schedule` 服务由 host 组合（`dsh-web-app/cordis.patch.yml`）在 root scope 提供（与 standard / cordis / ptc 内置 preset 的挂法同形）。**这四个工具是调度者专用**：`runForCaller` 对 `delegationDepthOf(agent) > 0` 的子代理返回 `subagent_session`（"A delegated subagent cannot use scheduled tasks."）—— 所以永远不要把它们写进任何一次委派的 `tools`。host 未提供 `schedule` 服务时该行经 `ctx.inject(['schedule'], …)` 保持惰性（不注册、不报错）。
 
 ## 非功能红线
 

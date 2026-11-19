@@ -187,6 +187,17 @@
 - id: tool-jobs
   name: '@deepseek-ai/dsh-tool-jobs'
 
+# ── scheduled tasks ────────────────────────────────────────────────────────
+
+# The four model-facing scheduled-task tools (schedule_create / schedule_list /
+# schedule_view / schedule_edit). The `schedule` service lives on the host plane
+# (dsh-web-app/cordis.patch.yml); this row only registers into THIS preset's
+# scope. `ctx.inject(['schedule'], …)` keeps the row inert when that service is
+# absent (no crash). Delegated subagents are refused at runtime (`subagent_session`
+# when delegation depth > 0), so their names never belong in a delegation's tools.
+- id: tool-schedule
+  name: '@deepseek-ai/dsh-tool-schedule'
+
 # ── skills ──────────────────────────────────────────────────────────────────
 
 # The skill REGISTRY lives in the host composition and is layered per scope:
