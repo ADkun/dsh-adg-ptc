@@ -32,8 +32,8 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 | D5 | 同上 | 五个内置名被点名也不进 `allow`（且仍在 `deny` 里）；`notify_user` **不在**名单里、可以进 `allow`；`tools: []`（瘦 profile，无 `send_message`）⇒ `allow: []` + 「空清单」 | I1 / I17 | D5 |
 | D6 | 同上 | `run_code` ⇒ 抛错（消息含 `run_code` 与「PTC 传输保留名」），且发生在调用任何服务之前（`startActivation` 零调用、`restrict` 零调用） | I5 | D6 |
 | D7 | `assertCallerAgent` / `delegate` | 没有 `exec.agent` ⇒ 抛错；缺 `subagents` 服务 ⇒ 报清楚是哪个服务 | — | D7 |
-| D8 | `buildRequest` | request 键恰为 `['prompt','parent']`；`label` / `signal` 不进 request（它们在 `SubagentActivationSpec` 上）；persona / toolFilter / maxDepth 都**不进** request | I7 / I8 / I16 | D8 |
-| D9 | `delegate` + 假 `subagents` / 假子代理 | 缺省与显式 `background: true` 都走 `startActivation`，spec 键恰为 `provider,label,childId,request,signal,delivery`、`provider === 'spawn'`、`delivery === 'parent'`、`signal` 同源、`request.parent` 就是调用方、`spec.childId` 就是回报的那个 id；能力面贴到假子代理的 `restrict`（deny 恰为内置名单）；**没给 persona 也注册一个空 persona 段**（空段＝遮蔽继承来的调度者 persona）；`childId` 取不到 ⇒ 抛错；`view` 的实参就是那个 Agent 对象 | I4 / I7 / I8 / I10 / I16 / I7b | D9 |
+| D8 | `buildRequest` | 产出的 `{prompt,parent}` 恰为这两个键（`delegate()` 用 `...request` 摊进 spec 顶层）；`label` / `signal` 不在其中（归 spec）；persona / toolFilter / maxDepth 都**不进** | I7 / I8 / I16 | D8 |
+| D9 | `delegate` + 假 `subagents` / 假子代理 | 缺省与显式 `background: true` 都走 `startActivation`，spec 键恰为 `provider,label,childId,prompt,parent,signal,delivery`（`prompt`/`parent` 是**顶层**字段，**无嵌套 `request`**——DSH 0.2.2 起引擎直接读 `spec.parent.id`）、`provider === 'spawn'`、`delivery === 'parent'`、`signal` 同源、`spec.parent` 就是调用方、`spec.childId` 就是回报的那个 id；能力面贴到假子代理的 `restrict`（deny 恰为内置名单）；**没给 persona 也注册一个空 persona 段**（空段＝遮蔽继承来的调度者 persona）；`childId` 取不到 ⇒ 抛错；`view` 的实参就是那个 Agent 对象 | I4 / I7 / I8 / I10 / I16 / I7b | D9 |
 | D10 | `delegate` + 假 `subagents` | `background: false` ⇒ 抛错（消息说明"当前 dsh 版本不可用"），且 `startActivation` 零调用、`restrict` 零调用 | I4 | D10 |
 | D11 | `readRestrictableNames` | `view` 不是函数 / 返回 `{}` / 返回空 `Set` ⇒ 三种都抛错且零服务调用；形状对了返回 `Set` | I6 | D11 |
 | D12 | 三个源文件 + `package.json` | 入口三件套在位；`name` = patch 的 `id` = 包名；`type` / `main` / `dsh.bundle.patch` 正确；**没有** `dependencies`；纯逻辑层零 `import`；两个源文件里没有盘符绝对路径与用户根 | I11 | D12 |
@@ -79,11 +79,11 @@ cd delegate && node --test --test-isolation=none test  # DSH 沙箱（workspace-
 
 | 契约面 | 用例 |
 |---|---|
-| `SubagentRuntime.startActivation(spec)` 的 spec 键（`provider` / `label` / `childId` / `request` / `signal` / `delivery:'parent'`）与 `SubagentActivation.childId`（预留 id 必须原样回来） | D9 / D31 |
+| `SubagentRuntime.startActivation(spec)` 的 spec 键（`provider` / `label` / `childId` / `prompt` / `parent` / `signal` / `delivery:'parent'`；`prompt`/`parent` 顶层、**无嵌套 `request`**）与 `SubagentActivation.childId`（预留 id 必须原样回来） | D9 / D31 |
 | 能力面窗口：`agent/created` 活实例上的 `tools.restrict(filter)` / `systemPrompt.section('deployment:persona-prefix')`，兜底走 `AgentRegistry.get(childId)` | D22 / D23 / D28–D31 |
 | 窗口里的第三件事：`child.ctx.tools.get('send_message', child)` / `register({ ...definition })`（读不到 ⇒ 跳过；形状不符 ⇒ 抛；同 scope 重复注册 ⇒ 吞成 `'shadowed'`；前两者由 `applyFor` 吞成 `failed`） | D35–D41 |
 | `ToolRestriction{allow?, deny?}` 的两侧下发与"只减不增"的用法 | D2 / D3 / D5 |
-| `SubagentStartRequest` 的键集（只有 `prompt` / `parent`；**永不出现** `maxDepth`，也没有 persona / toolFilter 的位置） | D8 / D9 |
+| 摊进 spec 的 `SubagentStartRequest` 字段（只有 `prompt` / `parent`；**永不出现** `maxDepth`，也没有 persona / toolFilter 的位置） | D8 / D9 |
 | `tools.view(agent).restrictableNames`（含读不出时的 fail-closed 分支） | D11 |
 | `UserQuestionService.ask({questions, agent, signal})` 的请求形状与 `{answers}` 结果 | D15 / D16 / D18 |
 | `AgentRegistry.get(id)` 的活实例同一性（取不到 ⇒ 抛错，且不问） | D17 |

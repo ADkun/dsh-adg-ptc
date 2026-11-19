@@ -74,8 +74,8 @@ last_reviewed: 2026-10-23
 理由：`tools_note` 是模型唯一能看见"我点名的名字没生效"的地方；静默丢弃会让它以为工具已经给下去了。
 载体：D4。
 
-**I4 派发只有一条路：`subagents.startActivation({provider:'spawn', label, request, signal, delivery:'parent'})`，取 `childId`；没有"前台一次性"，`background:false` 当场报错。**
-本机平台（0.2.1-rc.2）的 `SubagentRuntime` 没有 `start` / `startContinuable`，唯一入口是 `startActivation`；spawn provider 声明了 `prepareContinuable`，对它一律走可续的 `startLocal`。与其静默把「前台」建成可续，不如当场说清 —— 让调用方拿到一条能改行为的报错，而不是一个假装符合预期的结果。`kind` 的 enum 因此只剩 `continuable`（`SUBAGENT_KINDS`）。
+**I4 派发只有一条路：`subagents.startActivation({provider:'spawn', label, childId, ...request, signal, delivery:'parent'})`（`request` 是 `buildRequest` 产出的 `{prompt, parent}`，摊进 spec），取 `childId`；没有"前台一次性"，`background:false` 当场报错。**
+平台契约（DSH 0.2.2-rc.5）：`SubagentActivationSpec` 直接**继承** `SubagentStartRequest`（只去掉 `label` / `signal`），`prompt` 与 `parent` 是 spec 的**顶层字段** —— 所以要把 `request` 摊成 `...request`；0.2.1 及更早是嵌套的 `request` 字段，0.2.2 起改扁平，引擎 `startActivation` 直接读 `spec.parent.id` 校验活父，读不到就当场崩（本模块升级适配的就是这处破坏性变化）。本机平台（0.2.2-rc.5）的 `SubagentRuntime` 没有 `start` / `startContinuable`，唯一入口是 `startActivation`；spawn provider 声明了 `prepareContinuable`，对它一律走可续的 `startLocal`。与其静默把「前台」建成可续，不如当场说清 —— 让调用方拿到一条能改行为的报错，而不是一个假装符合预期的结果。`kind` 的 enum 因此只剩 `continuable`（`SUBAGENT_KINDS`）。
 理由：可续子代理是活的、能接续、能 steer，本仓库全部消费方（调度 persona、`ask_user` 配对表）都按这个语义工作；平台那条一次性路径要经 `jobs.start` 与 `settleStart`，本插件用不到，也就不解析 `jobs` 服务。
 载体：D9 / D10；`delegate/index.mjs` 的 `apply`。
 
@@ -91,8 +91,8 @@ last_reviewed: 2026-10-23
 **未观测**：`view` 在 `@deepseek-ai/dsh-tools` 的类型面是 `private`（本机解析到的实现里它是原型上的普通方法，运行期可调用）；哪天它变成 `#private` 或改名，本插件会以自诊断错拒绝委派，而不是静默放过；量法：升级 dsh 后跑 `cd delegate && node --test test`，再做一次真实委派看是否抛 I6 的自诊断错。
 
 **I7 persona 恒被"钉住"：给了就遮蔽成它，没给就遮蔽成空段；载体是子代理的**建立窗口**。**
-`request` 里没有 `persona` 键（平台契约没有这个字段）。子代理经 `composeFrom` 继承整份 preset，**包括调度者的 `deployment:persona-prefix` 段**；给了 `persona` ⇒ 在该子代理 scoped ctx 上注册同名的 `deployment:persona-prefix` 段（`systemPrompt.section({name, order: getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text})`，与平台 `applyChildOverrides` 同形），**遮蔽**部署 persona；没给 ⇒ 照样注册一段**空串**（空段渲染时被丢弃，净效果＝"没有 persona 段"）。**"没给就不注册"是错的**：不注册等于不遮蔽，子代理会带着调度者的 persona 开工。
-载体：D8（request 里没有）/ D22（空段也注册）/ D32（`buildFace` 恒为字符串）。
+`SubagentStartRequest`（spec 继承它）里没有 `persona` 字段。子代理经 `composeFrom` 继承整份 preset，**包括调度者的 `deployment:persona-prefix` 段**；给了 `persona` ⇒ 在该子代理 scoped ctx 上注册同名的 `deployment:persona-prefix` 段（`systemPrompt.section({name, order: getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'), text})`，与平台 `applyChildOverrides` 同形），**遮蔽**部署 persona；没给 ⇒ 照样注册一段**空串**（空段渲染时被丢弃，净效果＝"没有 persona 段"）。**"没给就不注册"是错的**：不注册等于不遮蔽，子代理会带着调度者的 persona 开工。
+载体：D8（buildRequest 只产 prompt / parent，spec 里没有 persona）/ D22（空段也注册）/ D32（`buildFace` 恒为字符串）。
 **未观测**：遮蔽的净效果（部署 persona 是否真的整段落下去）；量法：真派一次不给 persona 的子代理，读它会话日志里的 `deployment:persona-prefix` 段，确认调度者 persona 没有残留。
 
 **I7b 时点：persona 必须在子代理**第一轮装配之前**贴上，不能等 `startActivation` 返回。**
@@ -143,7 +143,7 @@ last_reviewed: 2026-10-23
 **I16 能力面（persona / toolFilter）经**建立窗口**下发（兜底落到创建后窗口），且 fail-closed。**
 平台 0.2.x 把 per-child 组合从委派缝隙里拿掉了：`SubagentStartRequest` 没有 persona / toolFilter 字段，`startLocal` 组装子代理 composition 时只带 `agentPreset`，子代理经 `composeFrom` 继承整份 preset。平台参考实现（tool-subagent）把这件事挪进了 Agent Preset（点名这两个字段直接抛 "no longer supported"）；本插件要保住「每一次委派现给工具面与 persona」，载体是**子代理建立窗口**（`agent/created` + 预留 `childId`，见 I7b）：在它的 scoped ctx 上 `tools.restrict(filter)` + `systemPrompt.section('deployment:persona-prefix')` —— 两者都活生效，且抢在首轮装配之前。
 形状与平台 `applyChildOverrides` 一致（`delegate/lib/delegate.mjs` 的 `applyChildFace`）；取不回活实例、`restrict` / `section` 形状不符 ⇒ 抛错（先回收，见 I9）。漏过建立窗口（`settlement.status === 'pending'`）时退回创建后窗口贴一次，绝不静默跳过。
-载体：D8（request 里没有这两个字段）/ D22（窗口形状与 fail-closed）/ D23（失败回收）/ D28–D31（建立窗口的时点、兜底、失败与 id 一致性）。
+载体：D8（buildRequest / 平台 spec 里没有这两个字段）/ D22（窗口形状与 fail-closed）/ D23（失败回收）/ D28–D31（建立窗口的时点、兜底、失败与 id 一致性）。
 **未观测**：竞态 —— 建立窗口与子代理 loop claim inbox 的先后（I7b 那条未观测项是同一个问题，量法见那里）。
 
 **I17 `send_message` 是平台续接通道、不是任务能力：只要它在本次可用名里就必须留在 `allow` 里。**

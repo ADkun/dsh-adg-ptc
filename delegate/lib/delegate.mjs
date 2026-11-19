@@ -248,14 +248,17 @@ export function toolsNote(plan) {
  * 装配子代理委派请求。**永远不设 `maxDepth`**：平台默认 1，一跳可达由「内置 deny `delegate`」
  * 与这个默认值共同保证（preset 侧红线 6 是同一口径）。
  *
- * 平台契约（0.2.x `SubagentStartRequest`）：`request` 里只有 `prompt` 与 `parent` ——
- * `label` 与 `signal` 都在 `SubagentActivationSpec` 上、不进 request；**没有**
- * persona / toolFilter 字段（`startLocal` 组装子代理 composition 时只带 agentPreset），
- * 所以这次的能力面走创建后窗口（`applyChildFace`），不塞进 request。
+ * 平台契约（DSH 0.2.2-rc.5）： `SubagentActivationSpec` 直接**继承** `SubagentStartRequest`
+ * （只去掉 `label` / `signal`），再自补 `provider` / `label` / `name?` / `childId?` / `signal` / `delivery`。
+ * 也就是说 `prompt` 与 `parent` 是 spec 的**顶层字段**（引擎 `startActivation` 直接读
+ * `spec.parent.id` 校验活父、`startLocal` 读 `spec.prompt` 投递首条消息）；**没有**嵌套的 `request` 字段。
+ * 本函数只产出 `{ prompt, parent }` 这一段，由 `delegate()` 用 `...request` 摊进 startActivation 的 spec。
+ * 平台契约里**没有** persona / toolFilter 字段（`startLocal` 组装 composition 时只带 agentPreset），
+ * 所以这次的能力面走创建后窗口（`applyChildFace`），不塞进 spec。
  *
  * @param {{description: string, prompt: string}} args
  * @param {object} parent 调用方 Agent
- * @returns {object} `Omit<SubagentStartRequest, 'label' | 'signal'>` 形状
+ * @returns {{prompt: object[], parent: object}} 摊进 `SubagentActivationSpec` 的 `prompt` / `parent` 顶层字段
  */
 export function buildRequest(args, parent) {
   return {
@@ -518,7 +521,7 @@ export async function delegate(args, exec, deps = {}) {
     provider: SUBAGENT_PROVIDER,
     label: args.description,
     childId,
-    request,
+    ...request,
     signal,
     delivery: 'parent',
   });

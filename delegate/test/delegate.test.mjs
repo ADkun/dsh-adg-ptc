@@ -419,7 +419,7 @@ test('D9 走 startActivation（平台唯一入口），spec 键恰为平台要�
 
   assert.equal(fx.subagents.calls.startActivation.length, 1);
   const spec = fx.subagents.calls.startActivation[0];
-  assert.deepEqual(Object.keys(spec), ['provider', 'label', 'childId', 'request', 'signal', 'delivery']);
+  assert.deepEqual(Object.keys(spec), ['provider', 'label', 'childId', 'prompt', 'parent', 'signal', 'delivery']);
   assert.equal(spec.provider, SUBAGENT_PROVIDER);
   assert.equal(SUBAGENT_PROVIDER, 'spawn');
   assert.equal(spec.label, BASE_ARGS.description);
@@ -427,12 +427,14 @@ test('D9 走 startActivation（平台唯一入口），spec 键恰为平台要�
   assert.equal(spec.delivery, 'parent');
   // 预留 childId（I18）：能力面靠它才能在建立窗口里被认出来
   assert.equal(spec.childId, out.subagent_id);
-  assert.deepEqual(Object.keys(spec.request), ['prompt', 'parent']);
-  assert.equal(spec.request.parent, parent);
-  assert.deepEqual(spec.request.prompt, [{ type: 'text', text: BASE_ARGS.prompt }]);
-  assert.equal('maxDepth' in spec.request, false);
-  assert.equal('persona' in spec.request, false);
-  assert.equal('toolFilter' in spec.request, false);
+  // 平台契约（DSH 0.2.2-rc.5）：prompt / parent 是 spec 的**顶层**字段（没有嵌套 request）；
+  // 引擎 startActivation 直接读 spec.parent.id 校验活父、startLocal 读 spec.prompt 投递首条消息。
+  // 改回嵌套 request 会让 spec.parent 变成 undefined，读 .id 当场崩（这次 DSH 升级踩的就是它）。
+  assert.equal(spec.parent, parent);
+  assert.deepEqual(spec.prompt, [{ type: 'text', text: BASE_ARGS.prompt }]);
+  assert.equal('maxDepth' in spec, false);
+  assert.equal('persona' in spec, false);
+  assert.equal('toolFilter' in spec, false);
 
   // 能力面在**建立窗口**下发：内置 deny 进 restrict；没给 persona ⇒ 仍注册一个**空**段
   // （空段 = 遮蔽掉继承来的调度者 persona；不注册就等于让子代理带着它开工，I7）
