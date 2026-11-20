@@ -1,6 +1,6 @@
 # AGENTS.md — dsh-adg-ptc
 
-Adg PTC 模式：一份 DSH agent preset（一个调度智能体 + 它按需派出的通用子代理；子代理的目标、边界、验收标准与工具面都在委派那一刻由调度者经 `delegate` 现给，没有固定专家名册），外加两条本机操作工具链（`browser/`：无头 Chromium 系浏览器驱动；`desktop/`：零依赖 Windows 桌面操控 CLI）、七个仓库内部第一方子插件（`notify/`→`notify_user`、`delegate/`→`delegate`+`ask_user`、`settings/`、`skill-inject/`、`ptc-parallel/`、`turn-bookmarks/`、`harness-identity/`；后五个不注册工具）、八份用户技能（`skills/`，其中 `thinking-framework` / `execution-framework` 的正文由 `adg-skill-inject` 注入调度者）、一个静态自检脚本与一个 bundle 生成脚本、两个安装脚本。每个模块的职责、包名、注册的工具与红线见其 `AGENTS.md`；文件在哪、改一块读哪份用 `aoci` 定位（见文末「认知与导航」）。
+Adg PTC 模式：一份 DSH agent preset（一个调度智能体 + 它按需派出的通用子代理；子代理的目标、边界、验收标准与工具面都在委派那一刻由调度者经 `delegate` 现给，没有固定专家名册），外加两条本机操作工具链（`browser/`：无头 Chromium 系浏览器驱动；`desktop/`：零依赖 Windows 桌面操控 CLI）、八个仓库内部第一方子插件（`notify/`→`notify_user`、`delegate/`→`delegate`+`ask_user`、`settings/`、`skill-inject/`、`ptc-parallel/`、`turn-bookmarks/`、`harness-identity/`、`sandbox-notice/`；后六个不注册工具）、八份用户技能（`skills/`，其中 `thinking-framework` / `execution-framework` 的正文由 `adg-skill-inject` 注入调度者）、一个静态自检脚本与一个 bundle 生成脚本、两个安装脚本。每个模块的职责、包名、注册的工具与红线见其 `AGENTS.md`；文件在哪、改一块读哪份用 `aoci` 定位（见文末「认知与导航」）。
 
 本文件是**给改这个仓库的人/agent 看的常驻约束**：只写命令、红线、生效方式、外部依赖 ref 规则、质量门与能力边界；模块在哪、改一块读哪份文件这类导航交给 `aoci` 索引（见文末「认知与导航」）。**给人看的项目总览与安装/使用说明在 `README.md`**（改任何东西之前先读它对应的小节）。
 
@@ -50,6 +50,7 @@ node tools/gen-preset-bundle.mjs
 | `ptc-parallel/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-6 / 4c-12 / 4c-13；运行中的旧 agent 不补挂 —— section 在 agent 创建那一刻注册；子代理的 scope 同样会被判定） | `cd ptc-parallel && node --test test`；再在新 PTC 会话里核对系统提示词出现「## PTC 并行执行（一次 run_code 里多做）」段、派出的子代理系统提示词里**也有**这一段（判据见 `ptc-parallel/testing-guide.md` 的 M 系列） |
 | `turn-bookmarks/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-7 / 4c-14 / 4c-15；`install.sh` 不管本模块） | `cd turn-bookmarks && node --test test`；再在重启后的新会话里聊过 3 轮、收藏一轮，核对右侧轨道条变粉、左键点它跳到该轮、右键点它切换收藏、正文提问行左侧出现粉线（判据见 `turn-bookmarks/testing-guide.md` 的「未观测项」） |
 | `harness-identity/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-8 / 4c-16 / 4c-17；运行中的旧 agent 不补挂 —— section 在 agent 创建那一刻注册；`install.sh` 不管本模块） | `cd harness-identity && node --test test`；再在新 Adg 会话里读系统提示词，确认开头没有 `You are an AI agent, powered by DeepSeek Harness.` 一行（子代理也无，判据见 `harness-identity/testing-guide.md` 的 M1 / M2） |
+| `sandbox-notice/` 任何文件 | 重装子插件 + **重启 dsh** + **新会话**（步骤号见 `install.ps1` 的 2b-9 / 4c-18 / 4c-19；运行中的旧会话不补挂 —— `tools/post-execute` 监听在插件加载时挂上；`install.sh` 不管本模块） | `cd sandbox-notice && node --test test`；再在重启后的新 Adg 会话里跑一次 `run_code`，确认结果末尾不再有 `File sandbox enforcement is partial on this host.` 一行（判据见 `sandbox-notice/testing-guide.md` 的 M1 / M2） |
 | `delegate/` 任何文件 | 重装子插件 + **重启 dsh** + 新会话（装进 profile 的步骤号见 `install.ps1` / `install.sh` 的 2b-2 / 4c-4 / 4c-5 步） | `cd delegate && node --test test`；再在新会话里让调度者用一次 `delegate`（给 `description` / `prompt` 与要拿的工具名），核对返回的 `tools` / `tools_note` 与子代理实际拿到的工具面 |
 | composition 里写的 `@deepseek-ai/*` 包名 | 包名会随 dsh 升级**改名**，改完必须真实挂载 | `agentPresets.resolve('adg-ptc')` 的 `.broken` 为空；用旧名会报 `… never started` |
 | `browser/` 任何文件 | **重新跑一次 `install.*` 即生效，不用重启** —— 它是用户根下的普通文件，不是 preset 也不是插件 | `node "${DSH_HOME:-~/.dsh}/browser/cli.mjs" profile` |
@@ -83,6 +84,7 @@ node tools/gen-preset-bundle.mjs
 | PTC 并行提示插件 | 机检：`cd ptc-parallel && node --test test`（沙箱里加 `--test-isolation=none`）；改了判据、section 或正文再在**新 PTC 会话**里核对系统提示词出现「## PTC 并行执行（一次 run_code 里多做）」段（子代理那侧也应有） | 单元测试全绿；动态工具清单随各 agent 当前可见的工具变化（清单不写死在正文里） |
 | 轮次书签插件 | 机检：`cd turn-bookmarks && node --test test`（沙箱里加 `--test-isolation=none`）；改了选择器或映射再在**重启后的新会话**里按 `turn-bookmarks/testing-guide.md` 的「未观测项」逐条核（轨道变粉 / 点击跳转 / 正文粉线 / 星标出现与取消 / 刷新后仍在） | 单元测试全绿；未观测项逐条与期望一致 |
 | 去除开场白插件 | 机检：`cd harness-identity && node --test test`（沙箱里加 `--test-isolation=none`）；改了覆盖机制、section 名或判定再在**重启后的新 Adg 会话**里核对系统提示词开头没有 `You are an AI agent, powered by DeepSeek Harness.` 一行（调度者与子代理两侧都看） | 单元测试全绿；调度者与子代理都没有该行、且无多余空行 |
+| 沙箱噪声去除插件 | 机检：`cd sandbox-notice && node --test test`（沙箱里加 `--test-isolation=none`）；改了剥除判据或末尾判定再在**重启后的新会话**里跑一次 `run_code`，看结果末尾不再有那句、正文其它字符不变 | 单元测试全绿；正常成功与被拒绝（denied）两种情形都只少该删的那句 |
 | 设置页框架 | 机检：`cd settings && node --test test`（沙箱里加 `--test-isolation=none`）与 `cd notify && node --test test`（消费方契约在两边各钉一份，改任一侧都要两边都绿）；再在**重启后的 dsh** 里点左侧边栏「扩展」区的「Adg 设置」入口看该页 | 两边单元测试全绿；页面能读当前生效值（含来源）/ 改一项保存 / 恢复默认，刷新后仍然生效 |
 | 桌面工具链 | 机检：`cd desktop && node --test test`（沙箱里加 `--test-isolation=none`）；改了注入路径再按 `desktop/testing-guide.md` 的「交付前的最小闭环」在**完全权限**会话里跑一次真机闭环 | 单元测试全绿；真机闭环每步的 `CHANGED=` / `CURSOR_LANDED=` 与期望一致（只用 `--dry-run` 证明不了注入） |
 | 文档合规 | 机检/评：`node skills/adg-doc-criterion/scripts/check-docs.mjs .` + `aoci check`；再按 `adg-doc-criterion` 技能的质量红线清单逐条自检 | 两套机检都 exit 0；行数在技能给的预算内（aoci 托管块不计）；判据与 why 齐全、不与 aoci 导航重复 |

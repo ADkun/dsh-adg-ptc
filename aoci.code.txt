@@ -5,7 +5,7 @@
 .gitignore[FG6T]: F:声明 git 忽略项：OS/临时日志、仓库根 node_modules 解析桥、bundle 生成物、docs-work 过程目录 | R:code:.gitattributes | A:- | S:node_modules/ 是仓库根解析桥（把 @deepseek-ai/* 链到本机 dsh），不入库；缺了它 notify 自测会 import 失败
 AGENTS.md[SG9M]: F:仓库常驻约束：命令、关键红线、生效口径、外部依赖 ref 规则、质量门与能力边界 | R:code:README.md,code:preset/design.md | A:命令,关键红线,生效方式,Quality Gates,认知与导航 | S:aoci 托管块（begin/end 注释之间）不计入 200 行预算、不要手改；导航由 aoci 索引负责，本文不自建 Project Map
 README.md[SG8M]: F:给人看的安装/使用/排错总览：安装脚本参数、四种味道、子代理能力带、调度者自动化任务、真实挂载验证 | R:code:AGENTS.md,code:install.ps1,code:install.sh | A:安装,味道,真实挂载验证,子代理与能力带,调度者自动化任务 | S:静态自检 check-preset 不能证明挂载；验收必须真实挂载读 agentPresets.resolve('adg-ptc').broken 为空；调度者自带 schedule_create/list/view/edit 四件自动化任务工具，子代理调用返回 subagent_session，永远不要写进任何委派的 tools
-install.ps1[OV8L]: F:Windows 安装脚本：探测 profile 与味道、生成 bundle 落到 $DSH_HOME/bundles、逐 profile 装 preset 与六个子插件并读回断言三格 | R:code:install.sh | A:Get-BundleMounts,Resolve-GroupWanted | S:必须保留 UTF-8 BOM（否则 PS5.1 按 ANSI 解码中文乱码并解析失败）；装 bundle 与装 adg-notify 必须同一次运行、同 profile（缺 notify 会让每次委派抛 names unknown global tool notify_user）；装了≠被选中，必须写进 dsh.profile.bundles
+install.ps1[OV8L]: F:Windows 安装脚本：探测 profile 与味道、生成 bundle 落到 $DSH_HOME/bundles、逐 profile 装 preset 与八个子插件并读回断言三格 | R:code:install.sh | A:Get-BundleMounts,Resolve-GroupWanted | S:必须保留 UTF-8 BOM（否则 PS5.1 按 ANSI 解码中文乱码并解析失败）；装 bundle 与装 adg-notify 必须同一次运行、同 profile（缺 notify 会让每次委派抛 names unknown global tool notify_user）；装了≠被选中，必须写进 dsh.profile.bundles
 install.sh[OV8L]: F:POSIX sh 安装脚本：探测 profile 与味道、生成 bundle、逐 profile 装 preset 与 adg-notify/delegate/settings/skill-inject 并读回断言 | R:code:install.ps1 | A:flavor_of,bundle_dir_of,want_bili_of,want_save_token_of | S:不管 ptc-parallel/turn-bookmarks/harness-identity（这三个只由 install.ps1 装）；两个注入开关默认 auto，也可用 ADG_BILLION_CONTEXT/ADG_SAVE_TOKEN 环境变量给默认值
 
 ===D:/dsh/plugins/dsh-adg-ptc/browser/===
@@ -123,10 +123,10 @@ package.json[FH4T]: F:adg-ptc-parallel 包声明：私有零依赖 ESM，main/ex
 testing-guide.md[SH6T]: F:ptc-parallel 测试指南：用例总表（G/S/L/W/C/M 六族）、沙箱注意、漂移检测与覆盖边界 | R:code:ptc-parallel/AGENTS.md,code:ptc-parallel/design.md | A:用例总表,漂移检测,覆盖边界 | S:单元测试证明不了监听器接到运行期，M 系列要重启 dsh 在新会话读系统提示词（子代理那侧尤其要验）；这段是提示词不是机制闸门
 
 ===D:/dsh/plugins/dsh-adg-ptc/ptc-parallel/lib/===
-guide.mjs[LH7S]: F:ptc-parallel 可测内核（不 import cordis）：GUIDE_TEXT 正文唯一真相源、isPtcAgent 判定、classifyVisibleTools/renderToolLists 现算工具清单、guideTextFor 组装 | R:code:ptc-parallel/index.mjs | A:GUIDE_TEXT,isPtcAgent,guideTextFor,classifyVisibleTools,renderToolLists,RUN_CODE_NAME | S:正文与 CLASSIFICATION_NOTE 不得出现任何工具名（S3 硬断言），工具清单每次现算、不写死；分类只看有没有 isConcurrencySafe 属性，绝不无参调用它去探测
+guide.mjs[LH7M]: F:ptc-parallel 可测内核（不 import cordis）：GUIDE_TEXT 正文唯一真相源、isPtcAgent 判定、classifyVisibleTools/renderToolLists 现算工具清单、guideTextFor 组装 | R:code:ptc-parallel/index.mjs | A:GUIDE_TEXT,isPtcAgent,guideTextFor,classifyVisibleTools,renderToolLists,RUN_CODE_NAME | S:正文与 CLASSIFICATION_NOTE 不得出现任何工具名（S3 硬断言），工具清单每次现算、不写死；分类只看有没有 isConcurrencySafe 属性，绝不无参调用它去探测
 
 ===D:/dsh/plugins/dsh-adg-ptc/ptc-parallel/test/===
-ptc-parallel.test.mjs[TH6M]: F:ptc-parallel 单元测试：G 判定、S 正文常量、L 动态清单分类/渲染/组装、W 假 ctx 接线、C 文件契约（约 32 用例，零依赖零副作用） | R:code:ptc-parallel/lib/guide.mjs,code:ptc-parallel/index.mjs | A:- | S:沙箱里必须加 --test-isolation=none；S3 用 TOOL_NAME_PATTERN 断言正文不含任何工具名
+ptc-parallel.test.mjs[TH6L]: F:ptc-parallel 单元测试：G 判定、S 正文常量、L 动态清单分类/渲染/组装、W 假 ctx 接线、C 文件契约（约 32 用例，零依赖零副作用） | R:code:ptc-parallel/lib/guide.mjs,code:ptc-parallel/index.mjs | A:- | S:沙箱里必须加 --test-isolation=none；S3 用 TOOL_NAME_PATTERN 断言正文不含任何工具名
 
 ===D:/dsh/plugins/dsh-adg-ptc/settings/===
 AGENTS.md[SS8T]: F:settings 模块路由与红线：Adg 设置页框架（宿主路由 + 浏览器面板 + 设置文件），五名字对照、R1–R12 红线与生效方式 | R:code:settings/design.md,code:settings/lib/schema.mjs | A:命令,红线,生效方式 | S:设置页只放用户要拍板的项、技术类键不许进页面；键名/默认值/界的真相只在 lib/schema.mjs；消费方只读文件不许 import 本包；认不得的键与非法值 400 且不落盘
@@ -224,3 +224,17 @@ bookmarks.mjs[EW8T]: F:turn-bookmarks 纯规则层（宿主与测试共用）：
 ===D:/dsh/plugins/dsh-adg-ptc/turn-bookmarks/test/===
 bookmarks.test.mjs[TW6T]: F:turn-bookmarks 纯规则自测：文件契约（STORE_FILE/MAX_TURNS）、isSafeSessionId、normalizeTurns、parseStore 容错、serializeStore 往返、sessionDirCandidates | R:code:turn-bookmarks/lib/bookmarks.mjs | A:- | S:零依赖零副作用；断言 STORE_FILE==='adg-turn-bookmarks.json' 与 MAX_TURNS===1000，改契约必须同步这份
 routing.test.mjs[TW7M]: F:turn-bookmarks 路由自测（假 ctx/假 req-res）：GET/PUT/DELETE 状态码、409 不造目录、超限 400 不静默截断、同源栅栏、connection 优先、跨半边漂移、右键入口不接管左键、星标布局护栏 | R:code:turn-bookmarks/index.mjs,code:turn-bookmarks/client.js | A:- | S:断言 ROUTE_PATH==='/api/adg-turn-bookmarks'、name==='adg-turn-bookmarks'；源码必须无 addEventListener('click'、有 contextmenu+preventDefault；正则挡 flex-direction:row；改插件须两边文案键一致
+
+===D:/dsh/plugins/dsh-adg-ptc/sandbox-notice/===
+AGENTS.md[SS7T]: F:sandbox-notice 模块路由与红线：命令、剥除对象、全局层注册与生效方式 | R:code:sandbox-notice/design.md,code:sandbox-notice/index.mjs | A:命令,红线,跨模块路由,生效方式 | S:只剥 run_code 结果末尾整行固定提示，内联/中间出现与 denied 拒绝句不动；不注册工具、只挂全局 tools/post-execute；装后必须重启 dsh 新会话才生效；仓库源与稳定副本跨盘不能硬链接，改源码必须重跑 install.ps1
+cordis.patch.yml[FS7T]: F:sandbox-notice 的 bundle 装载层：顶层 insert 一行 id=name=adg-sandbox-notice，声明宿主半边 index.mjs，只挂全局 tools/post-execute、不注册工具 | R:code:sandbox-notice/index.mjs | A:- | S:insert 的 id 必须等于 index.mjs 的 export const name（都=包名 adg-sandbox-notice）；只挂全局层不注册工具、不写进 preset/agent.cordis.yml
+design.md[SS8T]: F:sandbox-notice 设计：两纯函数 stripNoticeLine/stripSandboxNotice 的边界、tools/post-execute 挂载与 prepend 取最终发言权、I1–I12 不变量与平台契约速查 | R:code:sandbox-notice/AGENTS.md,code:sandbox-notice/lib/strip.mjs | A:核心数据模型,挂载点,不变量,平台契约 | S:只剥末尾整行 NOTICE，denied 拒绝句与中间/内联出现一律不动；无变化返回原对象(===)以便判生效；剥空回退 EMPTY_OUTPUT；常量只在 lib/strip.mjs 一处；prepend:true 且先 await next() 才拿得到下游最终文本
+index.mjs[ES7T]: F:adg-sandbox-notice 插件入口：export name=adg-sandbox-notice、inject ['tools']、ctx.effect 注册全局 tools/post-execute，对 run_code 的 accept 结果剥末尾沙箱噪声 | R:code:sandbox-notice/lib/strip.mjs | A:name,inject,apply | S:只处理 exec.name==='run_code' 的 accept 且无 value 的结果；整体 try/catch 退回原 decision（fail-open）；prepend:true 先 await next() 再改写；无变化返回原对象
+package.json[FE6T]: F:adg-sandbox-notice 包清单：name/main/exports/dsh.bundle.patch/files 与 engines node>=22、零 dependencies、test 脚本 | R:code:sandbox-notice/index.mjs,code:sandbox-notice/cordis.patch.yml | A:name,main,exports,dsh,scripts | S:name 必须=adg-sandbox-notice 且与 cordis insert id、export const name 三处一致；files 清单必须与 install.ps1 的 $sandboxFiles 同步；main 指 ./index.mjs、无构建步骤
+testing-guide.md[SS6T]: F:sandbox-notice 测试指南：用例全表（N/A/W/C/M 五族）、沙箱注意、漂移检测与覆盖边界 | R:code:sandbox-notice/AGENTS.md,code:sandbox-notice/design.md | A:用例总表,漂移检测,覆盖边界 | S:单测只证明纯函数与假 ctx，证明不了运行期接线（M1/M2 要重启 dsh 手工验）；文件清单对齐 installer 与 package.files 单测管不到
+
+===D:/dsh/plugins/dsh-adg-ptc/sandbox-notice/lib/===
+strip.mjs[LS8T]: F:两个纯函数（不 import cordis）：stripNoticeLine 剥末尾整行 NOTICE、stripSandboxNotice 逐 text 块处理并判变化/回退，NOTICE/EMPTY_OUTPUT 常量唯一来源 | R:code:sandbox-notice/index.mjs,code:sandbox-notice/test/strip.test.mjs | A:NOTICE,EMPTY_OUTPUT,stripNoticeLine,stripSandboxNotice | S:只剥末尾整行 NOTICE，内联/中间出现一律不动；无变化返回原引用(===)供上层判变化；剥空回退 EMPTY_OUTPUT；常量唯一来源；NOTICE 必须与 PTC 渲染层逐字一致（升级 dsh 先跑 C5）
+
+===D:/dsh/plugins/dsh-adg-ptc/sandbox-notice/test/===
+strip.test.mjs[TS6M]: F:sandbox-notice 单元测试：N 单行剥除、A 数组级、W 假 ctx 接线、C 文件契约/防漂移，共 27 条（零依赖零副作用） | R:code:sandbox-notice/lib/strip.mjs,code:sandbox-notice/index.mjs | A:- | S:沙箱里必须加 --test-isolation=none；C5 钉 NOTICE/EMPTY_OUTPUT 字面量防平台漂移；C1/C3 钉 name/patch id/package 三处一致

@@ -1,0 +1,40 @@
+{
+  "name": "adg-sandbox-notice",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Adg 沙箱提示噪声去除插件：在全局层监听 tools/post-execute，把 run_code 结果末尾由 PTC 渲染层追加的 'File sandbox enforcement is partial on this host.' 一行剥掉（不注册任何工具，不改其它内容）",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./lib/strip.mjs": "./lib/strip.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "lib/strip.mjs",
+    "cordis.patch.yml",
+    "AGENTS.md",
+    "design.md",
+    "testing-guide.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "tool-output"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# adg-sandbox-notice 的 bundle 层（dsh-adg-ptc 仓库内部的第一方插件）。
+#
+# 一行 `insert` 落在**顶层**（＝ global 层）：它不注册任何工具，只挂一个全局的
+# `tools/post-execute` 监听器 —— 在 run_code 的结果里，把 PTC 渲染层追加在末尾的那一行
+# `File sandbox enforcement is partial on this host.` 剥掉，其它一概不动。
+# 之所以做成插件而不是改 node_modules：那句由 @deepseek-ai/dsh-tool-executor-ptc 的 render()
+# 无条件拼上（本机 Windows 走 windows-acl 沙箱档、enforcement 恒为 partial），没有开关；只在后处理层剥。
+#
+# 行 `id` 必须等于 index.mjs 的 `export const name`；`name` 是包名（无版本）。
+- insert:
+    - id: adg-sandbox-notice
+      name: adg-sandbox-notice

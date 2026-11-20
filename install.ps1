@@ -607,6 +607,49 @@ if ($SkipPackages) {
   }
 }
 
+# ── 2b-9. sandbox-notice/ 插件（去除 run_code 沙箱提示噪声）──────────────────────────
+# 与 2b / 2b-1..2b-8 同形（普通插件包、file: 依赖、用户根下的稳定副本）。
+# 它不注册任何工具：在全局层监听 tools/post-execute，把 run_code 结果末尾由 PTC 渲染层追加的
+# 'File sandbox enforcement is partial on this host.' 一行剥掉（只剥末尾整行、其它一概不动）。
+# 漏装的症状是：run_code 结果末尾仍有那句状态声明（退回平台默认），不报错。
+$sandboxSrc = Join-Path $here 'sandbox-notice'
+$sandboxDest = Join-Path $root 'plugins\adg-sandbox-notice'
+$sandboxNote = ''
+$sandboxSkipped = $false
+# 4c-19 的断言要用它；在这里初始化，免得某个分支没赋值就被读。
+$sandboxInProfile = ''
+if ($SkipPackages) {
+  $sandboxNote = '跳过（-SkipPackages）'
+  $sandboxSkipped = $true
+} elseif (-not (Test-Path -LiteralPath (Join-Path $sandboxSrc 'package.json'))) {
+  $sandboxNote = "未找到 $sandboxSrc，跳过 sandbox-notice/ 插件部署"
+  $sandboxSkipped = $true
+} else {
+  # 本清单与 sandbox-notice/package.json 的 files 字段故意不同：多一个 package.json
+  # （稳定副本要能被 dsh plugin add 以 file: 解析）。有子目录 lib，先建出来。
+  New-Item -ItemType Directory -Force -Path (Join-Path $sandboxDest 'lib') | Out-Null
+  $sandboxFiles = @('index.mjs', 'lib\strip.mjs', 'cordis.patch.yml', 'package.json', 'AGENTS.md', 'design.md', 'testing-guide.md')
+  $sandboxCopied = 0
+  $sandboxMissing = @()
+  foreach ($rel in $sandboxFiles) {
+    $from = Join-Path $sandboxSrc $rel
+    if (-not (Test-Path -LiteralPath $from)) { $sandboxMissing += $rel; continue }
+    $to = Join-Path $sandboxDest $rel
+    $same = (Test-Path -LiteralPath $to) -and ((Get-FileHash -LiteralPath $from -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash)
+    if ($same) { continue }
+    Copy-Item -Force -LiteralPath $from -Destination $to
+    $sandboxCopied += 1
+  }
+  if ($sandboxMissing.Count -gt 0) {
+    $sandboxNote = "sandbox-notice/ 部署不完整：源里缺 $($sandboxMissing -join ', ')"
+    $sandboxSkipped = $true
+  } elseif ($sandboxCopied -gt 0) {
+    $sandboxNote = "sandbox-notice/ 插件 -> $sandboxDest（本次更新 $sandboxCopied 个文件）"
+  } else {
+    $sandboxNote = "sandbox-notice/ 插件 -> $sandboxDest（已是最新，无需拷贝）"
+  }
+}
+
 # ── 3. preset bundle：四种味道全部生成 → 各自落到自己的稳定位置（每 profile 只 link 一份）──
 # preset 是一个 **bundle**：仓库里的 preset\ 是唯一文本真相源，本脚本每次安装都重跑生成器
 # 把它编译成 bundle\adg-*\cordis.patch.yml，再拷进 $DSH_HOME\bundles\ 下的四个稳定目录。
@@ -1130,6 +1173,56 @@ foreach ($name in $Profiles) {
       $installNotes += "$name : adg-harness-identity **没装进 node_modules**（dependencies=$harnessDepLine / dsh.profile.bundles=$harnessListedLine）—— 系统提示词开头那一行不会被去掉"
     }
   }
+
+  # 4c-18. adg-sandbox-notice 插件（去除 run_code 沙箱提示噪声）也装进这个 profile。
+  # 与 4c-8 / 4c-12 / 4c-14 / 4c-16 同形（file: 依赖 + reconcile）。漏装的后果：run_code 结果末尾
+  # 仍有那句 'File sandbox enforcement is partial on this host.'（退回平台默认），不报错 ——
+  # 所以同样要如实报告。装了之后还要**重启 dsh**（插件在 tools/post-execute 时才起作用）。
+  if ($sandboxSkipped) {
+    $installNotes += "$name : adg-sandbox-notice 未部署（$sandboxNote）—— run_code 结果末尾仍会有那句沙箱噪声"
+  } else {
+    $sandboxInProfile = Join-Path $profileDir "node_modules\adg-sandbox-notice\package.json"
+    $sandboxNeedInstall = -not (Test-Path -LiteralPath $sandboxInProfile)
+    if (-not $sandboxNeedInstall) {
+      $installNotes += "$name : adg-sandbox-notice 已经在 node_modules 里"
+    } elseif (-not $dshInvoke) {
+      $installNotes += "$name : 未找到 dsh 命令，跳过 adg-sandbox-notice 安装 —— 请在该 profile 里执行 dsh plugin --profile $name add `"file:$sandboxDest`""
+    } else {
+      Push-Location $profileDir
+      try {
+        # 同 4a / 4c / 4c-2 / 4c-4 / 4c-6 / 4c-8 / 4c-12 / 4c-14 / 4c-16：走 cmd /c 收流，否则 PS 5.1 下 pnpm 的 stderr 会变成终止错误。
+        $sandboxLog = Join-Path $profileDir 'pnpm-adg-sandbox-notice.log'
+        cmd /c "$dshInvoke plugin --profile $name add `"file:$sandboxDest`" > `"$sandboxLog`" 2>&1"
+        $sandboxExit = $LASTEXITCODE
+      } finally { Pop-Location }
+      if (Test-Path -LiteralPath $sandboxInProfile) {
+        Remove-Item -LiteralPath $sandboxLog -Force -ErrorAction SilentlyContinue
+        $installNotes += "$name : 已装 adg-sandbox-notice（dsh plugin add exit $sandboxExit）"
+      } else {
+        $installNotes += "$name : adg-sandbox-notice 没装进 $profileDir（dsh plugin add exit $sandboxExit）—— 关掉 dsh 后重跑本脚本（日志 $sandboxLog）"
+        if (Test-Path -LiteralPath $sandboxLog) { Write-Host (Get-Content -LiteralPath $sandboxLog -Raw -Encoding UTF8) }
+      }
+    }
+  }
+
+  # 4c-19. 读回来断言 adg-sandbox-notice 的三格（判据与 4c-1 / 4c-3 / 4c-5 / 4c-7 / 4c-9 / 4c-13 / 4c-15 / 4c-17 一样）。
+  if (-not $sandboxSkipped) {
+    $sandboxReread = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    $sandboxDepLine = @($sandboxReread.dependencies.PSObject.Properties | Where-Object { $_.Name -eq 'adg-sandbox-notice' }).Count -gt 0
+    $sandboxListedLine = @($sandboxReread.dsh.profile.bundles) -contains 'adg-sandbox-notice'
+    $sandboxPkgName = ''
+    if (Test-Path -LiteralPath $sandboxInProfile) {
+      $sandboxPkgName = (Get-Content -LiteralPath $sandboxInProfile -Raw -Encoding UTF8 | ConvertFrom-Json).name
+    }
+    if ($sandboxPkgName -ne 'adg-sandbox-notice') { $sandboxNeedInstall = $true }
+    if ($sandboxDepLine -and $sandboxListedLine -and ($sandboxPkgName -eq 'adg-sandbox-notice')) {
+      $installNotes += "$name : adg-sandbox-notice 三格齐（node_modules 真目录 + dependencies + dsh.profile.bundles）"
+    } elseif ($sandboxPkgName -eq 'adg-sandbox-notice') {
+      $installNotes += "$name : adg-sandbox-notice 包在位，但 manifest 缺一格（dependencies=$sandboxDepLine / dsh.profile.bundles=$sandboxListedLine）—— 手工补上再重启"
+    } else {
+      $installNotes += "$name : adg-sandbox-notice **没装进 node_modules**（dependencies=$sandboxDepLine / dsh.profile.bundles=$sandboxListedLine）—— run_code 结果末尾那句不会被剥掉"
+    }
+  }
 }
 
 # 第 6 步：把脚本拷到用户根下的稳定副本。
@@ -1158,7 +1251,8 @@ foreach ($spec in @(
     @{ Pkg = 'adg-skill-inject'; Dest = $injectDest },
     @{ Pkg = 'adg-ptc-parallel'; Dest = $parallelDest },
     @{ Pkg = 'adg-turn-bookmarks'; Dest = $tbDest },
-    @{ Pkg = 'adg-harness-identity'; Dest = $harnessDest })) {
+    @{ Pkg = 'adg-harness-identity'; Dest = $harnessDest },
+    @{ Pkg = 'adg-sandbox-notice'; Dest = $sandboxDest })) {
   if (-not (Test-Path -LiteralPath $spec.Dest)) { continue }
   $expected = @()
   foreach ($f in Get-ChildItem -LiteralPath $spec.Dest -Recurse -File) {
@@ -1190,6 +1284,7 @@ Write-Host "  skill-inject -> $injectNote（框架注入：把技能文件正文
 Write-Host "  turn-bookmarks -> $tbNote（轮次书签：每轮末尾一颗星标，收藏的轮次在右侧目录栏轨道条上染成粉色、正文提问行左侧加粉线；跳转仍走 dsh 原生轨道按钮；书签存会话目录 sidecar，不注册工具）"
 Write-Host "  ptc-parallel -> $parallelNote（PTC 并行执行提示：给 PTC 呈现的 agent（调度者与子代理）在自己的 scope 上注册一段系统提示词，说清无依赖的调用该一次全发；末尾那份可并发/独占清单每次组装时现算，不写死工具名；不注册工具）"
 Write-Host "  harness-identity -> $harnessNote（去除系统提示词固定开场白：给每个 adg-ptc 的 agent 在自己的 scope 上注册同名 harness:identity 空文本 section，覆盖掉平台开头固定那行 'You are an AI agent, powered by DeepSeek Harness.'；不注册工具）"
+Write-Host "  sandbox-notice -> $sandboxNote（去除 run_code 沙箱提示噪声：在全局层监听 tools/post-execute，把 run_code 结果末尾由 PTC 渲染层追加的 'File sandbox enforcement is partial on this host.' 一行剥掉；只剥末尾整行、其它不动；不注册工具）"
 foreach ($note in $installNotes) { Write-Host "  profile -> $note" }
 Write-Host ""
 Write-Host "下一步：重启 dsh，然后在新建对话里选择「Adg PTC 模式」。"
@@ -1203,6 +1298,7 @@ Write-Host "（adg-skill-inject 插件：同样要重启 dsh 才注册 —— �
 Write-Host "（adg-ptc-parallel 插件：同样要重启 dsh 才注册 —— 而且 section 是在 agent 创建那一刻挂上的，所以运行中的旧会话不补挂：重启 dsh + 新建对话才看得到。子代理的 scope 同样会被判定，工具清单按每个 agent 当前可见的工具现算。）"
 Write-Host "（adg-turn-bookmarks 插件：同样要重启 dsh 才注册；浏览器那半随 web 客户端加载，重启后新建会话才看得到星标。收藏状态存在会话自己目录下的 adg-turn-bookmarks.json，删会话即一起删。）"
 Write-Host "（adg-harness-identity 插件：同样要重启 dsh 才注册 —— section 是在 agent 创建那一刻挂上的，运行中的旧会话不补挂：重启 dsh + 新建对话后系统提示词最开头才没有 'You are an AI agent, powered by DeepSeek Harness.' 一行。子代理的 scope 同样会被判定。）"
+Write-Host "（adg-sandbox-notice 插件：同样要重启 dsh 才注册 —— 它监听 tools/post-execute，重启 dsh + 新建对话后跑 run_code 才看得到结果末尾那句被剥掉；运行中的旧会话不补挂。）"
 if ($packageFailed) {
   Write-Host ""
   Write-Host "注意：至少有一步 pnpm 没成功，$bundleName 可能还没装进 profile（上面的 profile 行里写明了）。" -ForegroundColor Yellow
